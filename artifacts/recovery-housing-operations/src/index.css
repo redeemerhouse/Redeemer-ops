@@ -1,0 +1,96 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap');
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-card-border: hsl(var(--card-border));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-popover-border: hsl(var(--popover-border));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --font-sans: var(--app-font-sans);
+  --font-mono: var(--app-font-mono);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  --background: 42 37% 96%;
+  --foreground: 201 29% 19%;
+  --border: 37 24% 86%;
+  --input: 37 24% 82%;
+  --ring: 169 42% 33%;
+  --card: 42 45% 99%;
+  --card-foreground: 201 29% 19%;
+  --card-border: 38 25% 88%;
+  --popover: 42 45% 99%;
+  --popover-foreground: 201 29% 19%;
+  --popover-border: 38 25% 88%;
+  --primary: 169 42% 33%;
+  --primary-foreground: 42 45% 98%;
+  --secondary: 35 31% 91%;
+  --secondary-foreground: 201 29% 19%;
+  --muted: 40 25% 92%;
+  --muted-foreground: 199 13% 48%;
+  --accent: 14 72% 63%;
+  --accent-foreground: 201 29% 19%;
+  --destructive: 7 58% 50%;
+  --destructive-foreground: 42 45% 98%;
+  --sidebar: 195 32% 23%;
+  --sidebar-foreground: 41 37% 92%;
+  --sidebar-border: 195 26% 31%;
+  --sidebar-primary: 165 48% 67%;
+  --sidebar-primary-foreground: 195 32% 18%;
+  --sidebar-accent: 195 26% 29%;
+  --sidebar-accent-foreground: 41 37% 95%;
+  --sidebar-ring: 165 48% 67%;
+  --app-font-sans: 'Manrope', sans-serif;
+  --app-font-mono: 'DM Mono', monospace;
+  --app-font-serif: 'Newsreader', serif;
+  --radius: 0.85rem;
+}
+
+* { box-sizing: border-box; }
+html { background: hsl(var(--background)); }
+body {
+  margin: 0;
+  min-width: 320px;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: var(--app-font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+button, input, select, textarea { font: inherit; }
+button { cursor: pointer; }
+a { color: inherit; text-decoration: none; }
+
+.app-shell { min-height: 100dvh; background: linear-gradient(120deg, hsl(42 37% 96%), hsl(39 44% 94%)); }
+.sidebar { background: hsl(var(--sidebar)); color: hsl(var(--sidebar-foreground)); }
+.display-serif { font-family: var(--app-font-serif); }
+.mono { font-family: var(--app-font-mono); }
+.paper-card { border: 1px solid hsl(var(--card-border)); background: hsl(var(--card)); border-radius: 1rem; box-shadow: 0 8px 30px hsl(195 25% 20% / .045); }
+.section-kicker { color: hsl(var(--muted-foreground)); font-size: .68rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+.animate-enter { animation: enter .45s ease both; }
+.animate-enter-delay { animation: enter .45s .08s ease both; }
+.animate-enter-delay-2 { animation: enter .45s .16s ease both; }
+@keyframes enter { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }

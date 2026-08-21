@@ -1,0 +1,228 @@
+# Recovery Home Management Application Research & Replit Product Blueprint: Prepared for ONEsource’s Redeemer House
+
+## Executive Summary
+
+The operation of structured recovery housing requires a delicate balance of compassionate peer support, rigorous accountability, and strict administrative compliance. For organizations like **ONEsource** in San Antonio, Texas—specifically operating the **Redeemer House** program dedicated to women in recovery and their children—managing multiple residences involves tracking resident milestones, drug testing compliance, financial contributions, and family reunification goals [1] [4]. Currently, many operators utilize platforms such as **One Step Software**, while others explore custom-built digital solutions to overcome platform limitations in user experience, cost, or specialized workflows [2] [11].
+
+This research report provides a deep dive into the recovery home software landscape, analyzes operational and compliance requirements under Texas standards (**TROHN/NARR**), and outlines a comprehensive product blueprint for building a custom, tailored management application using **Replit**. Additionally, a structured dataset comparing major recovery software solutions has been compiled and provided as a downloadable companion CSV file (`recovery_app_comparison.csv`).
+
+---
+
+## 1. Background on ONEsource and Redeemer House
+
+Founded in San Antonio, Texas, **ONEsource** operates supportive recovery programs designed to foster community, personal character training, and sustainable sobriety [1]. Among its flagship initiatives is **Redeemer House**, a specialized women's recovery housing program established to address a critical gap in the addiction treatment ecosystem: allowing mothers to reunite with and rebuild their families after addiction [2] [5].
+
+In mid-2026, all four ONEsource Redeemer House locations officially achieved **TROHN/NARR** (Texas Recovery-Oriented Housing Network / National Alliance for Recovery Residences) certification [4]. This milestone signifies adherence to high standards of operational safety, ethical practices, peer leadership, and environmental quality. Managing multiple certified properties requires robust tracking systems that can handle:
+
+- **Family-Centric Recovery:** Accommodating mothers alongside their children, requiring tracking for childcare, school attendance, and custody milestones.
+
+- **Multi-Location Bed Management:** Coordinating occupancy across four distinct residential properties in San Antonio.
+
+- **Compliance Documentation:** Maintaining verifiable records for drug screening (UA), house meetings, chore completion, and curfew compliance as mandated by NARR standards.
+
+---
+
+## 2. Competitive Landscape of Recovery Home Management Apps
+
+To evaluate how to construct a custom application, an examination of existing industry tools—including **One Step Software**, which Redeemer House currently utilizes—reveals key strengths and operational pain points.
+
+| Software / Platform | Target Audience | Key Features | Pricing Model | Pros | Cons / Limitations |
+| --- | --- | --- | --- | --- | --- |
+| **One Step Software** | Sober living & recovery homes | Resident tracking, UA logs, curfew, rent collection, meeting attendance, GPS tracking [3] [10] | Subscription / SaaS | Purpose-built for sober living; mobile app for resident accountability [3] | User feedback notes interface can be slow and tedious [2] |
+| **Behave Health** | Behavioral health, sober living, residential treatment | EHR, bed management, billing via Stripe, clinical notes, CRM [8] [9] | Subscription / SaaS | All-in-one comprehensive platform with robust billing [9] | Steeper learning curve and higher cost structure for small nonprofits |
+| **SobrietyHub** | Sober homes & transitional housing | Resident management, financial tracking, drug testing logs, resident mobile portal [12] | Subscription / SaaS | Clean interface, easy resident communication and scheduling | Limited advanced clinical EHR features |
+| **Sober Living App** | Recovery residences & transitional housing | Admissions, billing, UA recordkeeping, occupancy, forms [6] | Subscription / SaaS | Modular and tailored specifically to recovery housing workflows [6] | Relatively newer ecosystem with evolving feature sets |
+| **PlanStreet** | Supportive, transitional, & sober living housing | Case management, scheduling, financial management, progress tracking [13] | Subscription / SaaS | Robust case management and client workflows [13] | Not exclusively tailored to addiction recovery nuance |
+| **Custom Replit App (Proposed)** | Redeemer House (ONEsource - Women & Children) | Bed tracking, child/family reunification milestones, UA/compliance logs, sliding-scale rent, chores, PostgreSQL | Custom Development | 100% tailored to women & children recovery; zero recurring per-user licensing fees | Requires initial development effort and ongoing maintenance |
+
+As detailed in the comparison above, while commercial options like One Step provide out-of-the-box utility, they often lack specific customization for family-centric recovery (such as tracking dependent children, pediatric care coordination, and specialized visitation schedules) and can suffer from rigid UI designs [2] [3].
+
+---
+
+## 3. Operational, Compliance, and Privacy Requirements
+
+Running a certified recovery residence in Texas under TROHN/NARR guidelines mandates strict recordkeeping and operational transparency. A custom application must incorporate the following core functional domains:
+
+### 3.1 Resident Lifecycle and Bed Management
+
+- **Intake & Admissions:** Digital intake forms, background check documentation, emergency contacts, and admission agreements.
+
+- **Bed & Room Allocation:** Multi-property mapping (managing bed availability across Redeemer House’s four locations), tracking room assignments for mothers and their specific number of dependent children.
+
+- **Milestone & Discharge Tracking:** Recording length of stay, phase progression, successful graduation, or structured exit summaries.
+
+### 3.2 Accountability and Compliance (TROHN/NARR Standards)
+
+- **Drug Testing (UA) Logs:** Secure logging of random and scheduled drug screenings, chain-of-custody notes, and positive/negative result tracking with automated alerts for house managers.
+
+- **House Rules & Chores:** Daily and weekly chore assignments, rotating schedules, and inspection sign-offs.
+
+- **Curfew & Attendance:** Tracking curfews, 12-step meeting attendance verification, and house meeting participation.
+
+### 3.3 Financial Transparency & Rent Management
+
+- **Sliding-Scale Rent & Fees:** Tracking weekly or monthly program fees, charitable subsidies, donations, and payment receipts.
+
+- **Ledger Maintenance:** Individual resident financial ledgers to teach financial literacy and responsibility during reintegration.
+
+### 3.4 Family & Child Support Workflows (Unique to Redeemer House)
+
+- **Child Tracking:** Registering accompanying children, age/school data, pediatric appointments, and daycare schedules.
+
+- **Reunification Milestones:** Documenting court-ordered visitations, social worker meetings, and legal compliance checkpoints.
+
+---
+
+## 4. Technical Blueprint & Replit Implementation Guide
+
+Building a custom application on **Replit** provides an ideal environment for rapid prototyping, collaborative coding, and instant cloud deployment. Below is a recommended technical architecture and database schema designed for Redeemer House.
+
+### 4.1 Recommended Tech Stack
+
+- **Frontend:** React with TypeScript and Tailwind CSS (or Next.js for server-side rendering and routing).
+
+- **Backend:** Node.js with Express (or Python with FastAPI) providing RESTful API endpoints.
+
+- **Database:** PostgreSQL (via Replit Database / Neon integration) for relational data integrity (linking residents to houses, beds, and drug test logs).
+
+- **Authentication:** Role-Based Access Control (RBAC) with three tiers: **Super Admin** (ONEsource leadership), **House Manager** (staff operating individual Redeemer House locations), and **Resident** (mothers accessing their schedules, chores, and rent status).
+
+### 4.2 Core Database Schema (PostgreSQL)
+
+```sql
+-- Houses Table
+CREATE TABLE houses (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    address TEXT NOT NULL,
+    total_beds INT NOT NULL,
+    manager_id INT
+);
+
+-- Users / Staff Table
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    role VARCHAR(50) CHECK (role IN ('super_admin', 'house_manager', 'resident')),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Residents Table
+CREATE TABLE residents (
+    id SERIAL PRIMARY KEY,
+    user_id INT REFERENCES users(id),
+    house_id INT REFERENCES houses(id),
+    bed_number INT NOT NULL,
+    admission_date DATE NOT NULL,
+    expected_discharge_date DATE,
+    status VARCHAR(50) DEFAULT 'active',
+    emergency_contact_name VARCHAR(100),
+    emergency_contact_phone VARCHAR(50)
+);
+
+-- Children Table (Specific to Redeemer House family support)
+CREATE TABLE children (
+    id SERIAL PRIMARY KEY,
+    resident_id INT REFERENCES residents(id) ON DELETE CASCADE,
+    name VARCHAR(100) NOT NULL,
+    age INT NOT NULL,
+    school_or_daycare VARCHAR(150),
+    notes TEXT
+);
+
+-- Drug Testing (UA) Logs
+CREATE TABLE drug_tests (
+    id SERIAL PRIMARY KEY,
+    resident_id INT REFERENCES residents(id) ON DELETE CASCADE,
+    administered_by INT REFERENCES users(id),
+    test_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    result VARCHAR(20) CHECK (result IN ('negative', 'positive', 'diluted', 'refused')),
+    notes TEXT
+);
+
+-- Financial Ledger (Rent & Fees)
+CREATE TABLE transactions (
+    id SERIAL PRIMARY KEY,
+    resident_id INT REFERENCES residents(id) ON DELETE CASCADE,
+    amount DECIMAL(10,2) NOT NULL,
+    transaction_type VARCHAR(50) CHECK (transaction_type IN ('rent', 'fee', 'donation', 'subsidy')),
+    status VARCHAR(50) CHECK (status IN ('paid', 'pending', 'overdue')),
+    due_date DATE NOT NULL,
+    paid_date DATE
+);
+
+-- Chores & House Tasks
+CREATE TABLE chores (
+    id SERIAL PRIMARY KEY,
+    house_id INT REFERENCES houses(id),
+    assigned_to INT REFERENCES residents(id),
+    task_description TEXT NOT NULL,
+    due_date DATE NOT NULL,
+    completed BOOLEAN DEFAULT FALSE
+);
+```
+
+### 4.3 Step-by-Step Replit Development Milestones
+
+1. **Milestone 1: Project Initialization on Replit**
+  - Create a new Replit project using a Fullstack React + Node template.
+  - Configure environment variables for database connection (`DATABASE_URL`) and authentication secrets (`JWT_SECRET`).
+
+1. **Milestone 2: Database Migration & Models**
+  - Set up PostgreSQL tables using Drizzle ORM or raw SQL scripts.
+  - Seed initial mock data for houses (representing the 4 Redeemer House locations in San Antonio) and test user accounts.
+
+1. **Milestone 3: Core API Endpoints & Authentication**
+  - Implement JWT-based authentication with role redirection.
+  - Build CRUD endpoints for residents, houses, bed assignments, and children records.
+
+1. **Milestone 4: Dashboard & Staff Workflows**
+  - Build the **House Manager Dashboard** displaying real-time occupancy rates, pending drug tests, overdue rent payments, and chore completion stats.
+  - Build the **Resident Portal** allowing mothers to view their assigned chores, upcoming meetings, rent balance, and child care schedules.
+
+1. **Milestone 5: Testing & Compliance Reporting**
+  - Add export features (CSV/PDF) for audit readiness to ensure seamless TROHN/NARR recertification reviews.
+
+---
+
+## 5. Actionable Next Steps for Redeemer House
+
+1. **Requirements Audit:** Collaborate with Redeemer House house managers to review the proposed database schema and confirm specific workflows for child custody and visitation tracking.
+
+1. **Prototype in Replit:** Spin up a Replit workspace to build the MVP (Minimum Viable Product) focusing on bed management and resident accountability logs.
+
+1. **Pilot Testing:** Deploy the MVP in a single Redeemer House location for 30 days of testing before rolling it out across all four San Antonio properties.
+
+1. **Compliance Alignment:** Ensure data storage practices align with Texas health information privacy standards and NARR operational requirements.
+
+---
+
+## References
+
+- [1] ONEsource San Antonio. *Program Overview and Recovery Community*. Available online: [https://onesourcesa.org/](https://onesourcesa.org/)
+
+- [2] KSAT News (2026). *San Antonio nonprofit aims to help mothers overcome addiction, reunite with their children*. Available online: [https://www.ksat.com/news/local/2026/05/12/san-antonio-nonprofit-aims-to-help-mothers-overcome-addiction-reunite-with-their-children/](https://www.ksat.com/news/local/2026/05/12/san-antonio-nonprofit-aims-to-help-mothers-overcome-addiction-reunite-with-their-children/)
+
+- [3] One Step Software. *Sober Living Management Features and Must-Haves in a Recovery App*. Available online: [https://www.onestepsoftware.com/](https://www.onestepsoftware.com/)
+
+- [4] ONEsource Facebook Official Announcement (2026). *All four OneSource Redeemer House locations are now officially TROHN/NARR certified*. Available online: [https://www.facebook.com/61560361897852/](https://www.facebook.com/61560361897852/)
+
+- [5] Redeemer House Program Page. *Supporting Women in Recovery and Their Children*. Available online: [https://onesourcesa.org/redeemer-house.html](https://onesourcesa.org/redeemer-house.html)
+
+- [6] Sober Living App. *Sober Living Management Software Guide and Features*. Available online: [https://soberlivingapp.com/](https://soberlivingapp.com/)
+
+- [7] Texas Recovery-Oriented Housing Network (TROHN). *Recovery Residence Certification Standards and FAQ*. Available online: [https://trohn.org/](https://trohn.org/)
+
+- [8] Behave Health. *Recovery Residence Software for Sober Living Homes*. Available online: [https://behavehealth.com/recovery-residences](https://behavehealth.com/recovery-residences)
+
+- [9] Behave Health (2026). *Best EHR for Sober Living Homes*. Available online: [https://behavehealth.com/best-ehr-for-sober-living](https://behavehealth.com/best-ehr-for-sober-living)
+
+- [10] One Step Software (2024). *Must Haves in a Recovery App*. Available online: [https://www.onestepsoftware.com/must-haves-in-a-recovery-app/](https://www.onestepsoftware.com/must-haves-in-a-recovery-app/)
+
+- [11] Reddit (2025/2026). *Discussions on Sober Living Software and Alternatives to One Step*. Available online: [https://www.reddit.com/r/CRM/](https://www.reddit.com/r/CRM/)
+
+- [12] SobrietyHub. *Sober Living Software and Integrated Mobile App*. Available online: [https://www.sobrietyhub.com/](https://www.sobrietyhub.com/)
+
+- [13] PlanStreet. *Transitional Housing and Case Management Software*. Available online: [https://www.planstreet.com/transitional-housing](https://www.planstreet.com/transitional-housing)

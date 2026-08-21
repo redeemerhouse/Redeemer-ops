@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Recovery Housing Operations"
+description = "A focused operations workspace for recovery housing teams to manage resident records, housing status, and payment tracking in one calm, dependable place."
+version = "1.0.0"
+id = "artifacts/recovery-housing-operations"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 24336
+
+[services.development]
+run = "pnpm --filter @workspace/recovery-housing-operations run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/recovery-housing-operations", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/recovery-housing-operations/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24336"
+BASE_PATH = "/"
