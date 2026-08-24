@@ -8,6 +8,7 @@ import Dashboard from '@/pages/dashboard';
 import Residents from '@/pages/residents';
 import Payments from '@/pages/payments';
 import ResidentDetail from '@/pages/resident-detail';
+import Operations from '@/pages/operations';
 import {
   Route,
   Switch,
@@ -27,6 +28,7 @@ function Router() {
         <Route path="/residents" component={Residents} />
         <Route path="/residents/:id" component={ResidentDetail} />
         <Route path="/payments" component={Payments} />
+        <Route path="/operations" component={Operations} />
         <Route component={NotFound} />
       </Switch>
     </RoutedErrorBoundary>

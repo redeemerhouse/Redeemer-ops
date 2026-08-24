@@ -1,6 +1,6 @@
-# [Project name]
+# ONEsource Recovery Operations
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+ONEsource gives Redeemer House teams a dependable workspace for resident intake, housing operations, documents, payments, and reporting.
 
 ## Run & Operate
 
@@ -22,15 +22,19 @@ _Replace the heading above with the project's name, and this line with one sente
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `lib/db/src/schema/` — persistent resident, payment, house, application, document, operations, and audit models
+- `artifacts/api-server/src/routes/operations.ts` — core operations API
+- `artifacts/recovery-housing-operations/src/pages/operations.tsx` — staff operations workspace
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- Calendar dates use PostgreSQL `date`; timestamps are reserved for audit and event history.
+- Numeric payment values are converted at the API boundary before responses reach the UI.
+- Pilot seed data only initializes an empty houses table and never overwrites operational records.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+Staff can review residents and payment status, record payments, manage applications, view four-house capacity, review daily operations, and inspect an administrator reporting snapshot. Core records persist in PostgreSQL and mutations are auditable.
 
 ## User preferences
 
@@ -38,7 +42,8 @@ _Populate as you build — explicit user instructions worth remembering across s
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- Run `pnpm --filter @workspace/db run push` after schema changes, then `pnpm run typecheck` and restart managed workflows.
+- Vite builds require the workflow-injected `PORT`; use the artifact workflow or provide `PORT` and `BASE_PATH` for a standalone build.
 
 ## Pointers
 

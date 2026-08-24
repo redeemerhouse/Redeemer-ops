@@ -1,4 +1,4 @@
-import { Bell, Building2, CreditCard, LayoutDashboard, Menu, UsersRound, X } from 'lucide-react';
+import { Bell, Building2, CreditCard, LayoutDashboard, Menu, UsersRound, X, ClipboardList } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { Link, useLocation } from 'wouter';
 
@@ -6,6 +6,7 @@ const navItems = [
   { href: '/', label: 'Overview', icon: LayoutDashboard },
   { href: '/residents', label: 'Residents', icon: UsersRound },
   { href: '/payments', label: 'Payments', icon: CreditCard },
+  { href: '/operations', label: 'Operations', icon: ClipboardList },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {

@@ -1,1 +1,2 @@
 - [Security review baseline](security-review-baseline.md) — treat generated contracts and UI as non-boundaries until server middleware and scoped routes enforce them.
+- [Recovery operations data boundaries](recovery-operations.md) — core operational records persist in PostgreSQL; auth, binary document storage, and approved exports remain separate integration boundaries.
