@@ -1,4 +1,4 @@
-import { Bell, Building2, CalendarDays, CircleDollarSign, ClipboardList, CreditCard, LayoutDashboard, Mail, Pencil, Phone, Plus, Search, UsersRound, WalletCards, X } from "lucide-react";
+import { Bell, Building2, CalendarDays, CircleDollarSign, ClipboardList, CreditCard, LayoutDashboard, Mail, Menu, Pencil, Phone, Plus, Search, UsersRound, WalletCards, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useState } from "react";
@@ -32,12 +32,13 @@ export function Metric({ icon: Icon, label, value, note, tone }: { icon: LucideI
 
 export function Shell({ active, children }: { active: string; children: ReactNode }) {
   const nav: [string, string, LucideIcon][] = [["Overview", pagePath("Dashboard"), LayoutDashboard], ["Residents", pagePath("Residents"), UsersRound], ["Payments", pagePath("Payments"), CreditCard]];
+  const [mobileOpen, setMobileOpen] = useState(false);
   return <div className="rh-app"><div className="rh-shell"><aside className="rh-sidebar">
     <a className="rh-brand" href={pagePath("Dashboard")} aria-label="Redeemer House overview"><img src="/__mockup/images/redeemer-house-logo.jpeg" alt="Redeemer House" /><span className="rh-brand-copy"><strong>Redeemer House</strong><small>Staff workspace</small></span></a>
     <div className="rh-kicker">Workspace</div>
     <nav aria-label="Main navigation">{[...nav, ["Documents", pagePath("Documents"), ClipboardList] as [string, string, LucideIcon]].map(([label, href, Icon]) => <a className={`rh-nav ${active === label ? "active" : ""}`} href={href} key={label}><Icon size={17} />{label}</a>)}</nav>
     <div className="rh-side-bottom"><div className="rh-health"><strong>System healthy</strong><p>Resident and payment records are up to date.</p></div><div className="rh-user"><span className="rh-avatar">AM</span><span><strong>Alex Morgan</strong><small>House coordinator</small></span></div></div>
-  </aside><main className="rh-main"><header className="rh-topbar"><div className="rh-topbar-left"><span>Tuesday, October 15, 2024</span><b>/</b> Morning check-in</div><div className="rh-topbar-right"><Bell size={17} /><span>Redeemer House · Northside</span><span className="rh-avatar">AM</span></div></header><div className="rh-content">{children}</div></main></div></div>;
+  </aside><main className="rh-main"><header className="rh-topbar"><div className="rh-mobile-brand"><img src="/__mockup/images/redeemer-house-logo.jpeg" alt="Redeemer House" /><strong>Redeemer House</strong></div><div className="rh-topbar-left"><span>Tuesday, October 15, 2024</span><b>/</b> Morning check-in</div><div className="rh-topbar-right"><Bell size={17} /><span>Redeemer House · Northside</span><span className="rh-avatar">AM</span><button className="rh-mobile-menu" aria-label={mobileOpen ? "Close navigation" : "Open navigation"} onClick={() => setMobileOpen((open) => !open)}><Menu size={19} /></button></div></header>{mobileOpen && <nav className="rh-mobile-nav" aria-label="Mobile navigation">{[...nav, ["Documents", pagePath("Documents"), ClipboardList] as [string, string, LucideIcon]].map(([label, href, Icon]) => <a className={`rh-nav ${active === label ? "active" : ""}`} href={href} key={label} onClick={() => setMobileOpen(false)}><Icon size={17} />{label}</a>)}</nav>}<div className="rh-content">{children}</div></main></div></div>;
 }
 
 export function Info({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {

@@ -97,24 +97,20 @@ function getPreviewExamplePath(): string {
 }
 
 function Gallery() {
-  return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-8">
-      <div className="text-center max-w-md">
-        <h1 className="text-2xl font-semibold text-gray-900 mb-3">
-          Component Preview Server
-        </h1>
-        <p className="text-gray-500 mb-4">
-          This server renders individual components for the workspace canvas.
-        </p>
-        <p className="text-sm text-gray-400">
-          Access component previews at{" "}
-          <code className="bg-gray-100 px-1.5 py-0.5 rounded text-gray-600">
-            {getPreviewExamplePath()}
-          </code>
-        </p>
+  const basePath = getBasePath();
+  return <div className="min-h-screen bg-[#f5f1eb] p-8 text-[#17233a]">
+    <div className="mx-auto max-w-3xl pt-12">
+      <div className="mb-10 flex items-center gap-4">
+        <img src={`${basePath}/images/redeemer-house-logo.jpeg`} alt="Redeemer House" className="h-16 w-16 rounded-2xl bg-white object-contain shadow-sm" />
+        <div><div className="text-xs font-bold uppercase tracking-[.18em] text-[#a2185b]">Canvas previews</div><h1 className="mt-1 font-['Fraunces'] text-4xl font-semibold tracking-tight">Redeemer House Operations</h1></div>
       </div>
+      <p className="max-w-xl text-sm leading-7 text-[#647087]">Review-ready dashboard directions for the owner, program director, and assigned house manager perspective.</p>
+      <a href={`${basePath}/preview/redeemer-branded/Dashboard`} className="mt-8 flex items-center justify-between rounded-2xl border border-[#e6e0d9] bg-[#fffdfb] p-5 shadow-[0_10px_30px_rgba(20,43,85,.045)] transition hover:border-[#a2185b]">
+        <span><strong className="block text-sm">Redeemer dashboard · responsive</strong><small className="mt-1 block text-xs text-[#647087]">Scope controls, occupancy, attention states, activity, payments, and quick actions</small></span><span className="text-xl text-[#a2185b]">→</span>
+      </a>
+      <p className="mt-6 text-xs text-[#647087]">Additional page previews remain available at <code className="rounded bg-white px-1.5 py-1 text-[#a2185b]">{getPreviewExamplePath()}</code></p>
     </div>
-  );
+  </div>;
 }
 
 function getPreviewPath(): string | null {
