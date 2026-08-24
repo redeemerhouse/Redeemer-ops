@@ -1,0 +1,17 @@
+:root {
+  --rho-background: 42 37% 96%; --rho-foreground: 201 29% 19%;
+  --rho-border: 37 24% 86%; --rho-card: 42 45% 99%; --rho-card-border: 38 25% 88%;
+  --rho-primary: 169 42% 33%; --rho-primary-fg: 42 45% 98%; --rho-secondary: 35 31% 91%;
+  --rho-muted-fg: 199 13% 48%; --rho-accent: 14 72% 63%; --rho-sidebar: 195 32% 23%;
+}
+.rho { min-height:100vh; background:linear-gradient(120deg,hsl(var(--rho-background)),hsl(39 44% 94%)); color:hsl(var(--rho-foreground)); font-family:Manrope,ui-sans-serif,sans-serif; }
+.rho * { box-sizing:border-box; } .rho a { color:inherit;text-decoration:none; } .rho button,.rho input,.rho select,.rho textarea { font:inherit; }
+.rho-shell { display:flex; min-height:100vh; } .rho-sidebar { width:250px; flex:none; background:hsl(var(--rho-sidebar));color:hsl(41 37% 92%);padding:20px 16px;display:flex;flex-direction:column; }
+.rho-main { min-width:0;flex:1; } .rho-topbar { height:72px;border-bottom:1px solid hsl(var(--rho-border));background:hsl(42 45% 99%/.72);padding:0 32px;display:flex;align-items:center;justify-content:space-between; }
+.rho-content { max-width:1440px;margin:auto;padding:32px 40px; } .rho-serif { font-family:Newsreader,Georgia,serif; } .rho-kicker { color:hsl(var(--rho-muted-fg));font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase; }
+.rho-card { border:1px solid hsl(var(--rho-card-border));background:hsl(var(--rho-card));border-radius:16px;box-shadow:0 8px 30px hsl(195 25% 20%/.045); } .rho-muted { color:hsl(var(--rho-muted-fg)); }
+.rho-nav { display:flex;align-items:center;gap:12px;padding:12px;border-radius:12px;font-size:13px;font-weight:700;color:hsl(41 37% 92%/.68);margin-top:3px; }
+.rho-nav.active,.rho-nav:hover { background:hsl(195 26% 29%);color:hsl(41 37% 95%); } .rho-sidebar-spacer{flex:1}
+.rho-grid { display:grid;gap:16px; } .rho-button { border:0;border-radius:12px;padding:12px 16px;background:hsl(var(--rho-primary));color:hsl(var(--rho-primary-fg));font-size:12px;font-weight:800;cursor:pointer; }
+.rho-button.secondary { background:hsl(var(--rho-card));border:1px solid hsl(var(--rho-border));color:hsl(var(--rho-foreground)); }
+@media(max-width:800px){.rho-sidebar{display:none}.rho-topbar{padding:0 20px}.rho-content{padding:28px 20px}.rho-table-head{display:none!important}}
