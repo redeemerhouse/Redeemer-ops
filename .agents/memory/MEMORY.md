@@ -1,0 +1,1 @@
+- [Security review baseline](security-review-baseline.md) — treat generated contracts and UI as non-boundaries until server middleware and scoped routes enforce them.
