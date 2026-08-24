@@ -18,10 +18,11 @@ export const payments = [
 ];
 export const money = (n: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
 export const initials = (name: string) => name.split(" ").map((part) => part[0]).join("");
-export const pagePath = (page: "Dashboard" | "Residents" | "Payments" | "ResidentDetail") => `/__mockup/preview/redeemer-branded/${page}`;
+export const pagePath = (page: "Dashboard" | "Residents" | "Payments" | "ResidentDetail" | "Documents") => `/__mockup/preview/redeemer-branded/${page}`;
 
 export function Status({ value }: { value: string }) {
-  return <span className={`rh-status ${value}`}>{value}</span>;
+  const statusClass = value.toLowerCase().replace(/\s+/g, "-");
+  return <span className={`rh-status ${statusClass}`}>{value}</span>;
 }
 
 export function Metric({ icon: Icon, label, value, note, tone }: { icon: LucideIcon; label: string; value: string | number; note: string; tone: "mint" | "sand" | "blush" | "blue" }) {
@@ -34,7 +35,7 @@ export function Shell({ active, children }: { active: string; children: ReactNod
   return <div className="rh-app"><div className="rh-shell"><aside className="rh-sidebar">
     <a className="rh-brand" href={pagePath("Dashboard")} aria-label="Redeemer House overview"><img src="/__mockup/images/redeemer-house-logo.jpeg" alt="Redeemer House" /><span className="rh-brand-copy"><strong>Redeemer House</strong><small>Staff workspace</small></span></a>
     <div className="rh-kicker">Workspace</div>
-    <nav aria-label="Main navigation">{nav.map(([label, href, Icon]) => <a className={`rh-nav ${active === label ? "active" : ""}`} href={href} key={label}><Icon size={17} />{label}</a>)}</nav>
+    <nav aria-label="Main navigation">{[...nav, ["Documents", pagePath("Documents"), ClipboardList] as [string, string, LucideIcon]].map(([label, href, Icon]) => <a className={`rh-nav ${active === label ? "active" : ""}`} href={href} key={label}><Icon size={17} />{label}</a>)}</nav>
     <div className="rh-side-bottom"><div className="rh-health"><strong>System healthy</strong><p>Resident and payment records are up to date.</p></div><div className="rh-user"><span className="rh-avatar">AM</span><span><strong>Alex Morgan</strong><small>House coordinator</small></span></div></div>
   </aside><main className="rh-main"><header className="rh-topbar"><div className="rh-topbar-left"><span>Tuesday, October 15, 2024</span><b>/</b> Morning check-in</div><div className="rh-topbar-right"><Bell size={17} /><span>Redeemer House · Northside</span><span className="rh-avatar">AM</span></div></header><div className="rh-content">{children}</div></main></div></div>;
 }

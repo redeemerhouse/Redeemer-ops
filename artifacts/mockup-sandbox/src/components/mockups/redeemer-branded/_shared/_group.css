@@ -103,6 +103,9 @@
 .rh-status.active, .rh-status.paid { color: #226052; background: var(--rh-mint); }
 .rh-status.pending, .rh-status.due { color: #8c5a26; background: #f4e6ca; }
 .rh-status.overdue { color: #923d51; background: var(--rh-blush); }
+.rh-status.current { color: #226052; background: var(--rh-mint); }
+.rh-status.needs-review { color: #923d51; background: var(--rh-blush); }
+.rh-status.pending-signature, .rh-status.ready-to-file { color: #8c5a26; background: #f4e6ca; }
 .rh-tools { display: flex; gap: 11px; align-items: center; padding: 13px; }
 .rh-field { width: 100%; height: 42px; padding: 0 12px; border: 1px solid var(--rh-line); border-radius: 10px; color: var(--rh-ink); background: #fbf9f6; outline: none; }
 .rh-field:focus { border-color: var(--rh-magenta); box-shadow: 0 0 0 3px rgba(162,24,91,.1); }
