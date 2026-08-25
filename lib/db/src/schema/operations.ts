@@ -42,9 +42,25 @@ export const documentsTable = pgTable("documents", {
   residentId: integer("resident_id"),
   applicationId: integer("application_id"),
   objectPath: text("object_path"),
+  fileName: text("file_name"),
+  contentType: text("content_type"),
+  fileSize: integer("file_size"),
   visibility: text("visibility").notNull().default("staff"),
   status: text("status").notNull().default("requested"),
   uploadedBy: text("uploaded_by"),
+  sharedAt: timestamp("shared_at", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const documentHistoryTable = pgTable("document_history", {
+  id: serial("id").primaryKey(),
+  documentId: integer("document_id").notNull(),
+  action: text("action").notNull(),
+  actor: text("actor").notNull().default("system"),
+  fromVisibility: text("from_visibility"),
+  toVisibility: text("to_visibility"),
+  objectPath: text("object_path"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -72,9 +88,10 @@ export const auditEventsTable = pgTable("audit_events", {
 
 export const insertHouseSchema = createInsertSchema(housesTable).omit({ id: true });
 export const insertApplicationSchema = createInsertSchema(applicationsTable).omit({ id: true, createdAt: true, updatedAt: true });
-export const insertDocumentSchema = createInsertSchema(documentsTable).omit({ id: true, createdAt: true });
+export const insertDocumentSchema = createInsertSchema(documentsTable).omit({ id: true, createdAt: true, updatedAt: true, sharedAt: true });
 export const insertOperationSchema = createInsertSchema(operationsTable).omit({ id: true, createdAt: true });
 export type InsertHouse = z.infer<typeof insertHouseSchema>;
 export type InsertApplication = z.infer<typeof insertApplicationSchema>;
 export type InsertDocument = z.infer<typeof insertDocumentSchema>;
+export type Document = typeof documentsTable.$inferSelect;
 export type InsertOperation = z.infer<typeof insertOperationSchema>;
