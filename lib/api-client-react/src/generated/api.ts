@@ -22,6 +22,7 @@ import type {
 import type {
   Activity,
   Dashboard,
+  ExportReportParams,
   HealthStatus,
   ListPaymentsParams,
   ListResidentsParams,
@@ -738,6 +739,96 @@ export function useListActivity<TData = Awaited<ReturnType<typeof listActivity>>
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getListActivityQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getExportReportUrl = (reportType: 'occupancy' | 'roster' | 'payments' | 'revenue' | 'compliance' | 'referral' | 'audit',
+    params: ExportReportParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/reports/${reportType}/export?${stringifiedParams}` : `/api/reports/${reportType}/export`
+}
+
+/**
+ * Administrator-only CSV or PDF export. The server records the actor and timestamp in the audit history.
+ * @summary Export an approved report
+ */
+export const exportReport = async (reportType: 'occupancy' | 'roster' | 'payments' | 'revenue' | 'compliance' | 'referral' | 'audit',
+    params: ExportReportParams, options?: Parameters<typeof customFetch>[1]): Promise<string | Blob> => {
+
+  return customFetch<string | Blob>(getExportReportUrl(reportType,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportReportQueryKey = (reportType: 'occupancy' | 'roster' | 'payments' | 'revenue' | 'compliance' | 'referral' | 'audit',
+    params?: ExportReportParams,) => {
+    return [
+    `/api/reports/${reportType}/export`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getExportReportQueryOptions = <TData = Awaited<ReturnType<typeof exportReport>>, TError = ErrorType<void>>(reportType: 'occupancy' | 'roster' | 'payments' | 'revenue' | 'compliance' | 'referral' | 'audit',
+    params: ExportReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportReportQueryKey(reportType,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportReport>>> = ({ signal }) => exportReport(reportType,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: reportType !== null && reportType !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportReport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ExportReportQueryResult = NonNullable<Awaited<ReturnType<typeof exportReport>>>
+export type ExportReportQueryError = ErrorType<void>
+
+
+/**
+ * @summary Export an approved report
+ */
+
+export function useExportReport<TData = Awaited<ReturnType<typeof exportReport>>, TError = ErrorType<void>>(
+ reportType: 'occupancy' | 'roster' | 'payments' | 'revenue' | 'compliance' | 'referral' | 'audit',
+    params: ExportReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getExportReportQueryOptions(reportType,params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

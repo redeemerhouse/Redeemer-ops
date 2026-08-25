@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request } from "express";
 import { and, asc, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { db, residentsTable, paymentsTable, housesTable, applicationsTable, documentsTable, operationsTable, auditEventsTable } from "@workspace/db";
 import { GetDashboardResponse, CreateResidentBody, UpdateResidentBody, CreatePaymentBody, ListActivityResponse } from "@workspace/api-zod";
@@ -10,6 +10,64 @@ const asResident = (r: typeof residentsTable.$inferSelect) => ({
 });
 const audit = async (action: string, entityType: string, entityId?: number, metadata?: unknown) => {
   await db.insert(auditEventsTable).values({ action, entityType, entityId, metadata });
+};
+const reportTypes = ["occupancy", "roster", "payments", "revenue", "compliance", "referral", "audit"] as const;
+type ReportType = typeof reportTypes[number];
+type ReportRow = Record<string, string | number | boolean | null>;
+const csvCell = (value: unknown) => {
+  const text = value == null ? "" : String(value);
+  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+};
+const toCsv = (rows: ReportRow[]) => {
+  if (!rows.length) return "";
+  const columns = Object.keys(rows[0]);
+  return [columns, ...rows.map((row) => columns.map((column) => row[column]))]
+    .map((row) => row.map(csvCell).join(",")).join("\r\n") + "\r\n";
+};
+// A deliberately small, dependency-free PDF writer keeps exports available in the API
+// service without making report generation depend on a browser or binary package.
+const toPdf = (title: string, rows: ReportRow[]) => {
+  const lines = [title, `Generated ${new Date().toISOString()}`, "", ...rows.map((row) => Object.entries(row).map(([key, value]) => `${key}: ${value ?? ""}`).join(" | "))];
+  const escapePdf = (line: string) => line.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)").slice(0, 115);
+  const stream = ["BT", "/F1 9 Tf", "45 770 Td", ...lines.flatMap((line, index) => [index ? "0 -13 Td" : "", `(${escapePdf(line)}) Tj`]), "ET"].filter(Boolean).join("\n");
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
+  ];
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+  objects.forEach((object, index) => { offsets[index + 1] = pdf.length; pdf += `${index + 1} 0 obj\n${object}\nendobj\n`; });
+  const xref = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.slice(1).map((offset) => `${String(offset).padStart(10, "0")} 00000 n `).join("\n")}\ntrailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return Buffer.from(pdf, "binary");
+};
+const isAdmin = (req: Request) => req.header("x-user-role")?.toLowerCase() === "admin";
+const reportRows = async (type: ReportType): Promise<ReportRow[]> => {
+  const [residents, payments, houses, applications, documents, events] = await Promise.all([
+    db.select().from(residentsTable), db.select().from(paymentsTable), db.select().from(housesTable),
+    db.select().from(applicationsTable), db.select().from(documentsTable), db.select().from(auditEventsTable),
+  ]);
+  if (type === "occupancy") {
+    return houses.map((house) => ({ house: house.name, address: house.address, occupied: residents.filter((r) => r.home === house.name && r.status === "active").length, capacity: house.familyCapacity, available: Math.max(house.familyCapacity - residents.filter((r) => r.home === house.name && r.status === "active").length, 0) }));
+  }
+  if (type === "roster") return residents.map((r) => ({ id: r.id, name: r.name, home: r.home, status: r.status, moveInDate: r.moveInDate, balance: Number(r.balance) }));
+  if (type === "payments") {
+    return payments.map((payment) => ({ id: payment.id, resident: residents.find((r) => r.id === payment.residentId)?.name ?? "Unknown", amount: Number(payment.amount), dueDate: payment.dueDate, paidDate: payment.paidDate, status: payment.status, method: payment.method }));
+  }
+  if (type === "revenue") {
+    const paid = payments.filter((p) => p.status === "paid");
+    return [{ paidPayments: paid.length, collected: paid.reduce((sum, p) => sum + Number(p.amount), 0), outstanding: payments.filter((p) => p.status !== "paid").reduce((sum, p) => sum + Number(p.amount), 0) }];
+  }
+  if (type === "compliance") {
+    return [{ residents: residents.length, activeResidents: residents.filter((r) => r.status === "active").length, applications: applications.length, signedApplications: applications.filter((a) => a.signedAcknowledgment).length, documents: documents.length, approvedDocuments: documents.filter((d) => d.status === "approved").length }];
+  }
+  if (type === "referral") {
+    return applications.map((application) => ({ applicationId: application.id, applicant: application.applicantName, source: application.source, status: application.status, createdAt: application.createdAt.toISOString() }));
+  }
+  return events.map((event) => ({ id: event.id, action: event.action, entityType: event.entityType, entityId: event.entityId, actor: event.actor, timestamp: event.createdAt.toISOString() }));
 };
 
 router.get("/dashboard", async (_req, res): Promise<void> => {
@@ -115,6 +173,20 @@ router.post("/operations", async (req, res): Promise<void> => { const [created] 
 router.get("/reports/summary", async (_req, res): Promise<void> => {
   const [residents, payments, applications, documents, events] = await Promise.all([db.select().from(residentsTable), db.select().from(paymentsTable), db.select().from(applicationsTable), db.select().from(documentsTable), db.select().from(auditEventsTable)]);
   res.json({ generatedAt: new Date().toISOString(), occupancy: { active: residents.filter((r) => r.status === "active").length, total: residents.length }, payments: { collected: payments.filter((p) => p.status === "paid").reduce((s, p) => s + Number(p.amount), 0), overdue: payments.filter((p) => p.status === "overdue").length }, applications: applications.length, documents: documents.length, auditEvents: events.length });
+});
+router.get("/reports/:reportType/export", async (req, res): Promise<void> => {
+  if (!isAdmin(req)) { res.status(403).json({ error: "Administrator access is required to export reports." }); return; }
+  const reportType = req.params.reportType as ReportType;
+  const format = req.query.format === "pdf" ? "pdf" : req.query.format === "csv" ? "csv" : null;
+  if (!reportTypes.includes(reportType) || !format) { res.status(400).json({ error: "Choose an approved report type and format (csv or pdf)." }); return; }
+  const rows = await reportRows(reportType);
+  if (!rows.length) { res.status(404).json({ error: "There is no data available for this report yet." }); return; }
+  const actor = req.header("x-actor")?.trim() || "administrator";
+  await db.insert(auditEventsTable).values({ action: "Report exported", entityType: "report", actor, metadata: { reportType, format, exportedAt: new Date().toISOString() } });
+  const filename = `${reportType}-report.${format}`;
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  if (format === "csv") { res.type("text/csv").send(toCsv(rows)); return; }
+  res.type("application/pdf").send(toPdf(`${reportType[0].toUpperCase()}${reportType.slice(1)} report`, rows));
 });
 
 export default router;

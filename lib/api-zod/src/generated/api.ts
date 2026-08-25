@@ -195,3 +195,22 @@ export const ListActivityResponseItem = zod.object({
 export const ListActivityResponse = zod.array(ListActivityResponseItem)
 
 
+/**
+ * Administrator-only CSV or PDF export. The server records the actor and timestamp in the audit history.
+ * @summary Export an approved report
+ */
+export const ExportReportParams = zod.object({
+  "reportType": zod.enum(['occupancy', 'roster', 'payments', 'revenue', 'compliance', 'referral', 'audit'])
+})
+
+export const ExportReportQueryParams = zod.object({
+  "format": zod.enum(['csv', 'pdf'])
+})
+
+export const ExportReportHeader = zod.object({
+  "X-User-Role": zod.enum(['admin'])
+})
+
+export const ExportReportResponse = zod.unknown()
+
+

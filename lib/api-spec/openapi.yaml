@@ -177,6 +177,37 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Activity"
+  /reports/{reportType}/export:
+    get:
+      operationId: exportReport
+      tags: [reports]
+      summary: Export an approved report
+      description: Administrator-only CSV or PDF export. The server records the actor and timestamp in the audit history.
+      parameters:
+        - name: reportType
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [occupancy, roster, payments, revenue, compliance, referral, audit]
+        - name: format
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [csv, pdf]
+        - name: X-User-Role
+          in: header
+          required: true
+          schema: { type: string, enum: [admin] }
+      responses:
+        "200":
+          description: Report file
+          content:
+            text/csv: { schema: { type: string } }
+            application/pdf: { schema: { type: string, format: binary } }
+        "403": { description: Administrator access required }
+        "404": { description: No report data available }
 components:
   parameters:
     Id:

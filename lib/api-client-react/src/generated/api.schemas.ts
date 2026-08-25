@@ -160,3 +160,15 @@ export const ListPaymentsStatus = {
   overdue: 'overdue',
 } as const;
 
+export type ExportReportParams = {
+format: ExportReportFormat;
+};
+
+export type ExportReportFormat = typeof ExportReportFormat[keyof typeof ExportReportFormat];
+
+
+export const ExportReportFormat = {
+  csv: 'csv',
+  pdf: 'pdf',
+} as const;
+

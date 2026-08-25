@@ -10,6 +10,7 @@ export * from './activity';
 export * from './activityType';
 export * from './dashboard';
 export * from './dashboardStatusCounts';
+export * from './exportReportFormat';
 export * from './healthStatus';
 export * from './listPaymentsParams';
 export * from './listPaymentsStatus';

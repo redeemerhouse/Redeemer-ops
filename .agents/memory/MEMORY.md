@@ -1,2 +1,3 @@
 - [Security review baseline](security-review-baseline.md) — treat generated contracts and UI as non-boundaries until server middleware and scoped routes enforce them.
 - [Recovery operations data boundaries](recovery-operations.md) — core operational records persist in PostgreSQL; auth, binary document storage, and approved exports remain separate integration boundaries.
+- [OpenAPI export parameter generation](openapi-orval-params.md) — path-and-query operations can collide in generated Zod params exports; run codegen and library checks together.
