@@ -1,4 +1,4 @@
-import { Bell, Building2, CreditCard, LayoutDashboard, Menu, UsersRound, X, ClipboardList } from 'lucide-react';
+import { Bell, CreditCard, LayoutDashboard, Menu, UsersRound, X, ClipboardList } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { Link, useLocation } from 'wouter';
 
@@ -18,8 +18,8 @@ export function AppShell({ children }: { children: ReactNode }) {
       <aside className={`sidebar fixed inset-y-0 left-0 z-40 flex w-[250px] flex-col border-r border-sidebar-border px-4 py-5 transition-transform duration-300 lg:static lg:translate-x-0 ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="flex items-center justify-between px-3">
           <Link href="/" data-testid="link-brand" className="flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-sidebar-primary text-sidebar-primary-foreground"><Building2 size={20} strokeWidth={1.8} /></span>
-            <span><span className="block text-[15px] font-extrabold tracking-tight">Harbor House</span><span className="mono mt-0.5 block text-[10px] uppercase tracking-[.18em] text-sidebar-foreground/55">Operations</span></span>
+            <img src="/redeemer-house-logo.jpeg" alt="Redeemer House" className="h-12 w-12 rounded-xl bg-white object-contain p-0.5" />
+            <span><span className="display-serif block text-[17px] font-semibold tracking-tight">Redeemer House</span><span className="mono mt-0.5 block text-[10px] uppercase tracking-[.18em] text-sidebar-foreground/55">Staff workspace</span></span>
           </Link>
           <button data-testid="button-close-menu" className="text-sidebar-foreground/60 lg:hidden" onClick={() => setMobileOpen(false)} aria-label="Close navigation"><X size={19} /></button>
         </div>
@@ -44,7 +44,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <header className="flex h-[72px] items-center justify-between border-b border-[hsl(var(--border))] bg-[hsl(42_45%_99%/.72)] px-5 backdrop-blur-md sm:px-8">
           <button data-testid="button-open-menu" className="text-[hsl(var(--muted-foreground))] lg:hidden" onClick={() => setMobileOpen(true)} aria-label="Open navigation"><Menu size={21} /></button>
           <div className="hidden text-[12px] font-semibold text-[hsl(var(--muted-foreground))] lg:block">Tuesday, October 15, 2024 <span className="mx-2 text-[hsl(var(--border))]">/</span> Morning check-in</div>
-          <div className="relative ml-auto flex items-center gap-4"><button data-testid="button-notifications" aria-label="Notifications" onClick={() => setNotificationsOpen((value) => !value)} className="relative rounded-lg p-2 text-[hsl(var(--muted-foreground))] transition-colors hover:bg-[hsl(var(--muted))]"><Bell size={18} /><span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[hsl(var(--accent))]" /></button>{notificationsOpen && <div data-testid="popover-notifications" className="absolute right-0 top-11 z-20 w-64 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-4 shadow-xl"><div className="text-xs font-extrabold">You’re all caught up</div><p className="mt-1 text-xs leading-relaxed text-[hsl(var(--muted-foreground))]">No new handoffs or payment alerts.</p></div>}<div className="hidden h-5 w-px bg-[hsl(var(--border))] sm:block" /><span className="hidden text-xs font-bold text-[hsl(var(--muted-foreground))] sm:block">Harbor House · Northside</span></div>
+           <div className="relative ml-auto flex items-center gap-4"><button data-testid="button-notifications" aria-label="Notifications" onClick={() => setNotificationsOpen((value) => !value)} className="relative rounded-lg p-2 text-[hsl(var(--muted-foreground))] transition-colors hover:bg-[hsl(var(--muted))]"><Bell size={18} /><span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[hsl(var(--accent))]" /></button>{notificationsOpen && <div data-testid="popover-notifications" className="absolute right-0 top-11 z-20 w-64 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-4 shadow-xl"><div className="text-xs font-extrabold">You’re all caught up</div><p className="mt-1 text-xs leading-relaxed text-[hsl(var(--muted-foreground))]">No new handoffs or payment alerts.</p></div>}<div className="hidden h-5 w-px bg-[hsl(var(--border))] sm:block" /><span className="hidden text-xs font-bold text-[hsl(var(--muted-foreground))] sm:block">Redeemer House · Northside</span></div>
         </header>
         <div className="mx-auto max-w-[1440px] px-5 py-8 sm:px-8 lg:px-10">{children}</div>
       </main>

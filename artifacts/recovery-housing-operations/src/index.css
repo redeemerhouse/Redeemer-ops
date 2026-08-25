@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap');
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
@@ -34,38 +34,38 @@
 }
 
 :root {
-  --background: 42 37% 96%;
-  --foreground: 201 29% 19%;
-  --border: 37 24% 86%;
-  --input: 37 24% 82%;
-  --ring: 169 42% 33%;
-  --card: 42 45% 99%;
-  --card-foreground: 201 29% 19%;
-  --card-border: 38 25% 88%;
-  --popover: 42 45% 99%;
-  --popover-foreground: 201 29% 19%;
-  --popover-border: 38 25% 88%;
-  --primary: 169 42% 33%;
-  --primary-foreground: 42 45% 98%;
-  --secondary: 35 31% 91%;
-  --secondary-foreground: 201 29% 19%;
-  --muted: 40 25% 92%;
-  --muted-foreground: 199 13% 48%;
-  --accent: 14 72% 63%;
-  --accent-foreground: 201 29% 19%;
+  --background: 34 27% 95%;
+  --foreground: 218 38% 16%;
+  --border: 31 22% 87%;
+  --input: 31 22% 82%;
+  --ring: 333 73% 36%;
+  --card: 30 100% 99%;
+  --card-foreground: 218 38% 16%;
+  --card-border: 31 22% 87%;
+  --popover: 30 100% 99%;
+  --popover-foreground: 218 38% 16%;
+  --popover-border: 31 22% 87%;
+  --primary: 333 73% 36%;
+  --primary-foreground: 30 100% 99%;
+  --secondary: 31 28% 91%;
+  --secondary-foreground: 218 38% 16%;
+  --muted: 34 24% 92%;
+  --muted-foreground: 217 16% 46%;
+  --accent: 333 49% 81%;
+  --accent-foreground: 218 38% 16%;
   --destructive: 7 58% 50%;
   --destructive-foreground: 42 45% 98%;
-  --sidebar: 195 32% 23%;
-  --sidebar-foreground: 41 37% 92%;
-  --sidebar-border: 195 26% 31%;
-  --sidebar-primary: 165 48% 67%;
-  --sidebar-primary-foreground: 195 32% 18%;
-  --sidebar-accent: 195 26% 29%;
-  --sidebar-accent-foreground: 41 37% 95%;
-  --sidebar-ring: 165 48% 67%;
-  --app-font-sans: 'Manrope', sans-serif;
+  --sidebar: 219 64% 14%;
+  --sidebar-foreground: 30 33% 97%;
+  --sidebar-border: 218 38% 24%;
+  --sidebar-primary: 333 73% 36%;
+  --sidebar-primary-foreground: 30 100% 99%;
+  --sidebar-accent: 218 38% 20%;
+  --sidebar-accent-foreground: 30 33% 97%;
+  --sidebar-ring: 333 73% 36%;
+  --app-font-sans: 'DM Sans', sans-serif;
   --app-font-mono: 'DM Mono', monospace;
-  --app-font-serif: 'Newsreader', serif;
+  --app-font-serif: 'Fraunces', serif;
   --radius: 0.85rem;
 }
 
@@ -83,7 +83,7 @@ button, input, select, textarea { font: inherit; }
 button { cursor: pointer; }
 a { color: inherit; text-decoration: none; }
 
-.app-shell { min-height: 100dvh; background: linear-gradient(120deg, hsl(42 37% 96%), hsl(39 44% 94%)); }
+.app-shell { min-height: 100dvh; background: linear-gradient(120deg, hsl(34 27% 95%), hsl(31 28% 93%)); }
 .sidebar { background: hsl(var(--sidebar)); color: hsl(var(--sidebar-foreground)); }
 .display-serif { font-family: var(--app-font-serif); }
 .mono { font-family: var(--app-font-mono); }
