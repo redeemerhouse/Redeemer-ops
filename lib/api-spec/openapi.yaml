@@ -200,6 +200,11 @@ paths:
           in: header
           required: true
           schema: { type: string, enum: [admin] }
+        - name: X-Actor
+          in: header
+          required: false
+          description: Audit actor recorded for a successful export.
+          schema: { type: string }
       responses:
         "200":
           description: Report file
