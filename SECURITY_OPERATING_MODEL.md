@@ -185,10 +185,59 @@ returning every column.
   cannot set paid status, alter amount, change resident ownership, or erase a payment.
 - Owner admin and program director may administer payment corrections within policy;
   house managers may work only within assigned resident scope.
-- QuickBooks integration is deferred. No QuickBooks synchronization, card-data
-  processing, or accounting system-of-record assumption is approved until the bookkeeper
-  confirms transaction mapping, included transaction types, processing behavior,
-  conflict rules, and system of record.
+- QuickBooks synchronization implementation remains deferred until a separate
+  implementation task. The transaction policy below is the approved pre-implementation
+  decision for the bookkeeper and owner-admin review.
+
+#### QuickBooks transaction decision record
+
+**Decision status:** Approved for future implementation; no QuickBooks routes,
+credentials, or synchronization jobs are authorized by this document.
+
+**Included transaction types**
+
+- **Payments:** confirmed resident rent and approved move-in-fee payments, including
+  partial payments. A resident-submitted payment confirmation is not an accounting
+  event until an authorized staff member or an approved payment provider marks it
+  confirmed.
+- **Credits:** reason-coded credits that reduce a resident balance. Credits are
+  accounting adjustments, not refunds, and must retain their actor audit event.
+- **Returned-payment fees:** a confirmed bank return reverses the original payment
+  and creates one separate $50.00 returned-payment-fee charge. The reversal and fee
+  are exported as linked events.
+- **Corrections:** audited corrections and reversals of an exported event. The
+  original event is never edited or deleted; a linked adjustment is exported instead.
+
+Unpaid scheduled obligations, unverified payment confirmations, refunds, card data,
+donations/fundraising, and other transaction types are excluded from the initial
+QuickBooks boundary. Refunds remain unsupported by product policy.
+
+**System of record:** ONEsource is authoritative for resident ownership, operational
+payment facts, confirmation state, credits, bank-return events, corrections, and
+the immutable event history. QuickBooks is the downstream accounting ledger and is
+authoritative only for its own posting identifiers and general-ledger presentation.
+QuickBooks must not create, overwrite, or change an ONEsource payment or balance.
+
+**Sync direction and processing behavior:** The initial integration is one-way,
+from ONEsource to QuickBooks. Only finalized, approved events are sent. Each
+source event is exported once using a stable ONEsource event identifier as the
+idempotency key, and the resulting QuickBooks posting identifier and outcome are
+recorded back in ONEsource without changing the source amount or business meaning.
+
+**Conflict handling:** A matching source event and QuickBooks posting with the same
+idempotency key is treated as the same export only when the amount, currency,
+transaction type, and resident-safe accounting mapping match. A duplicate with
+different values, a missing expected posting, or an unmapped account is blocked
+from automatic resolution, flagged for administrator/bookkeeper reconciliation,
+and preserved with its audit trail. The integration never silently overwrites
+either system.
+
+**Retry behavior:** Transient transport or QuickBooks availability failures retry
+automatically with bounded exponential backoff and the same idempotency key. After
+five unsuccessful attempts, the event moves to a durable manual-reconciliation
+queue and generates an administrator alert; it is never dropped or recreated under
+a new key. Validation, authorization, mapping, and conflict failures do not retry
+until corrected and explicitly requeued.
 
 ## 6. Retention, deletion, audit, and operations
 
@@ -264,7 +313,9 @@ returning every column.
 ### Deferred pending explicit decision
 
 - QuickBooks synchronization or any accounting integration.
-- Final accounting transaction mapping, system-of-record and conflict rules.
+- QuickBooks synchronization implementation, including provider-specific account
+  mapping and credentials; the transaction policy above is approved, but the
+  integration itself remains a separate launch gate.
 - Any identity provider, SSO, or MFA requirement beyond the approved email/password
   posture.
 - Production migration/import until source mapping and reconciliation are approved.
