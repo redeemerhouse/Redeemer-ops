@@ -8,7 +8,9 @@ ONEsource gives Redeemer House teams a dependable workspace for resident intake,
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
+- `pnpm --filter @workspace/db run generate` — generate a reviewed SQL migration after schema changes
+- `pnpm --filter @workspace/db run migrate` — apply checked-in migrations non-interactively
+- `pnpm run db:release-check` — validate the migration journal and apply the same migration command used for release (requires `DATABASE_URL`)
 - Required env: `DATABASE_URL` — Postgres connection string
 
 ## Stack
@@ -46,7 +48,7 @@ _Populate as you build — explicit user instructions worth remembering across s
 
 ## Gotchas
 
-- Run `pnpm --filter @workspace/db run push` after schema changes, then `pnpm run typecheck` and restart managed workflows.
+- Generate and review a migration after schema changes, then run `pnpm --filter @workspace/db run migrate`, `pnpm run typecheck`, and restart managed workflows.
 - Run `pnpm --filter @workspace/api-server run test:retention` for the focused 15-day quarantine/legal-hold policy checks.
 - Vite builds require the workflow-injected `PORT`; use the artifact workflow or provide `PORT` and `BASE_PATH` for a standalone build.
 

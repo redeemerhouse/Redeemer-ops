@@ -4,3 +4,4 @@
 - [Redeemer House brand system](redeemer-brand-system.md) — every production page must carry the approved logo, navy/magenta palette, warm oat surfaces, and editorial typography.
 - [Workspace TypeScript builds](workspace-typescript-builds.md) — force-rebuild referenced composite packages when source exports change before trusting downstream typecheck results.
 - [Node strip-types test runner](node-strip-types-tests.md) — built-in TypeScript tests need runtime-independent imports and avoid unsupported parameter-property syntax.
+- [Drizzle migration output](drizzle-migration-workflow.md) — use a package-relative output path with this Drizzle CLI; absolute config paths can be incorrectly prefixed.

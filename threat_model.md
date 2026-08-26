@@ -23,7 +23,7 @@ No resident or payment data, secrets, tokens, or credentials are copied into thi
 | API process | `artifacts/api-server/src/index.ts` | Requires `PORT`, seeds pilot data on every startup path, then starts Express. Startup fails if seeding or listening fails. |
 | Express app | `artifacts/api-server/src/app.ts` | Adds pino HTTP logging, unrestricted `cors()`, JSON/urlencoded parsers with no explicit size limit, then mounts `/api`. No security-header, auth, authorization, error, or rate-limit middleware is present. |
 | API routes | `artifacts/api-server/src/routes/index.ts`, `src/routes/{health,operations}.ts` | Mounts public health plus all MVP operations. The operations router directly queries and mutates database tables; only a few legacy resident/payment/dashboard/activity responses use generated Zod parsing. |
-| Database | `lib/db/src/index.ts`, `lib/db/src/schema/*.ts` | Creates a `pg.Pool` from `DATABASE_URL` and a schema-aware Drizzle client. The merged schema covers houses, applications, documents, operations, audit events, residents, and payments. No checked-in SQL migration directory is present; the package exposes Drizzle `push`/`push-force` instead. Query, transaction, timeout, shutdown, tenant scope, and repository/service policy are not present in the reviewed API. |
+| Database | `lib/db/src/index.ts`, `lib/db/src/schema/*.ts`, `lib/db/drizzle/` | Creates a `pg.Pool` from `DATABASE_URL` and a schema-aware Drizzle client. The merged schema covers houses, applications, documents, operations, audit events, residents, and payments. The current PostgreSQL schema is represented by a checked-in Drizzle SQL migration and journal, and `pnpm --filter @workspace/db run migrate` is the non-interactive apply path. Query, transaction, timeout, shutdown, tenant scope, and repository/service policy are not present in the reviewed API. |
 | Contract/codegen | `lib/api-spec/openapi.yaml`, `lib/api-zod/src/generated/*` | OpenAPI is the intended contract source; Orval generates TypeScript client types/hooks and Zod schemas. Generation is documented in `replit.md`. Generated artifacts are not themselves route middleware. |
 
 ### Reachable versus described surfaces
@@ -65,7 +65,7 @@ The merged MVP adds sensitive surfaces that must be included in the existing sec
 | Daily operations | Resident-linked notes and `private` records are exposed by an unscoped list route. | **Identity/access owner (B1):** house/resident scope and administrator-only private records. **Logging owner (B5):** note redaction and audit minimum-data policy. |
 | Houses and dashboard/activity | Addresses, capacity, pricing, resident counts, payment totals, and audit details are globally aggregated. | **Scoped-data owner (B3):** house/organization-scoped aggregates. **Dashboard test owner (task 8):** verify empty/loading/error and scoped-data states without treating visual behavior as authorization. |
 | Reports | Report summary is unprotected; exports query all sensitive tables and emit roster, financial, referral, compliance, or audit data. Export audit metadata uses caller-supplied actor/header values. | **Identity/access + export owners (B1/B3/B5):** administrator authorization from authenticated identity, scoped report rows, safe response headers, and export audit actor derived server-side. **Report regression owner (task 15):** CSV/PDF route and download checks. |
-| Seed/startup and schema | Startup writes pilot records; schema changes have no checked-in migration artifact or migration verification path. | **Release-verification owner (task 14):** prove startup uses the intended environment and that schema push/migration checks are repeatable before production. **API hardening owner (task 13):** safe startup, pool lifecycle, and production configuration. |
+| Seed/startup and schema | Startup writes pilot records; checked-in migrations now provide a repeatable schema apply path, but backup/restore and production migration rehearsal remain unverified. | **Release-verification owner (task 14):** prove startup uses the intended environment and run the checked-in migration path before production. **API hardening owner (task 13):** safe startup, pool lifecycle, and production configuration. |
 
 The original resident/payment blockers therefore apply to the full merged route tree. No new route is launch-ready solely because it responds successfully.
 
@@ -272,7 +272,7 @@ These decisions must be recorded before implementing B1–B5:
 - The managed API workflow rebuilt and started successfully on its configured port.
 - Direct startup probes returned `200` for health plus the mounted dashboard, resident, payment, application, document, operations, house, and report-summary routes.
 - `git diff --check` passes for this review.
-- The database package exposes schema push commands, but no checked-in migration files were found.
+- The database package contains a checked-in initial migration and journal for all eight current PostgreSQL tables. `pnpm --filter @workspace/db run migrate` applies pending migrations without an interactive schema diff or force push.
 
 ### Launch blockers remaining
 
@@ -283,9 +283,15 @@ The following remain blockers before any production exposure of sensitive routes
 3. **Scoped data access and database invariants (B3):** reads and aggregates query globally, relationship checks are incomplete, and status/financial invariants are not enforced across the expanded schema.
 4. **Transport, limits, and safe errors (B4):** wildcard CORS, unlimited parsers, missing security headers/rate limits, and no centralized production error boundary remain.
 5. **Audit and sensitive-data handling (B5):** audit records are incomplete, can capture payment metadata, and export actor identity is caller-supplied; redaction and retention controls are unverified.
-6. **Release verification (H2–H4/task 14):** the expanded route inventory, contract regeneration, security tests, and production configuration checks must pass as one release gate. The aggregate workspace build and database schema check also need a repeatable environment-safe command; the current full build is blocked by the mockup workflow’s required `PORT`, and Drizzle check is blocked by its current Data API parameter interpretation.
+6. **Release verification (H2–H4/task 14):** the expanded route inventory, contract regeneration, security tests, production configuration checks, and the database migration release check must pass as one release gate. The migration check validates the journal and runs the same non-interactive `db migrate` command used for production against a `DATABASE_URL` target. The aggregate workspace build is blocked by the mockup workflow’s required `PORT`.
 
 Successful startup and `200` responses demonstrate merge coherence only. They are not evidence that the sensitive routes are secure. Production exposure remains prohibited until the security release-verification task passes with the blockers above either closed or explicitly accepted by the product owner.
+
+### Migration and recovery expectations
+
+- Schema changes are generated into `lib/db/drizzle/`, reviewed as SQL, committed with the Drizzle journal metadata, and applied with `pnpm --filter @workspace/db run migrate`. Production must not use `push`, `push --force`, or an interactive schema diff.
+- Before applying a production migration, take or confirm a restorable database backup and verify the target and migration version. The release check requires `DATABASE_URL` and exercises the production apply command; it does not replace backup or restore testing.
+- Migrations are forward-only release artifacts. If an application rollback is needed, first deploy the last compatible application version without reversing a schema migration. A schema rollback must use a reviewed forward-fix migration or restore/PITR to an approved recovery point after reconciling any writes made since that point; do not manually drop tables or delete resident, payment, application, document, operations, house, or audit data as a rollback mechanism.
 
 ## Validation and unresolved assumptions
 
