@@ -7,6 +7,8 @@ info:
 servers:
   - url: /api
     description: Base API path
+security:
+  - BearerAuth: []
 tags:
   - name: health
     description: Health operations
@@ -23,6 +25,7 @@ paths:
       tags: [health]
       summary: Health check
       description: Returns server health status
+      security: []
       responses:
         "200":
           description: Healthy
@@ -35,6 +38,8 @@ paths:
       operationId: getDashboard
       tags: [dashboard]
       summary: Get operations dashboard
+      security:
+        - BearerAuth: []
       responses:
         "200":
           description: Dashboard summary
@@ -47,6 +52,8 @@ paths:
       operationId: listResidents
       tags: [residents]
       summary: List residents
+      security:
+        - BearerAuth: []
       parameters:
         - name: search
           in: query
@@ -72,6 +79,8 @@ paths:
       operationId: createResident
       tags: [residents]
       summary: Add a resident
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -90,6 +99,8 @@ paths:
       operationId: getResident
       tags: [residents]
       summary: Get a resident
+      security:
+        - BearerAuth: []
       parameters:
         - $ref: "#/components/parameters/Id"
       responses:
@@ -105,6 +116,8 @@ paths:
       operationId: updateResident
       tags: [residents]
       summary: Update a resident
+      security:
+        - BearerAuth: []
       parameters:
         - $ref: "#/components/parameters/Id"
       requestBody:
@@ -125,6 +138,8 @@ paths:
       operationId: listPayments
       tags: [payments]
       summary: List payments
+      security:
+        - BearerAuth: []
       parameters:
         - name: residentId
           in: query
@@ -150,6 +165,8 @@ paths:
       operationId: createPayment
       tags: [payments]
       summary: Record a payment
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -168,6 +185,8 @@ paths:
       operationId: listActivity
       tags: [dashboard]
       summary: Get recent activity
+      security:
+        - BearerAuth: []
       responses:
         "200":
           description: Recent activity
@@ -183,6 +202,8 @@ paths:
       tags: [reports]
       summary: Export an approved report
       description: Administrator-only CSV or PDF export. The server records the actor and timestamp in the audit history.
+      security:
+        - BearerAuth: []
       parameters:
         - name: reportType
           in: path
@@ -196,15 +217,6 @@ paths:
           schema:
             type: string
             enum: [csv, pdf]
-        - name: X-User-Role
-          in: header
-          required: true
-          schema: { type: string, enum: [admin] }
-        - name: X-Actor
-          in: header
-          required: false
-          description: Audit actor recorded for a successful export.
-          schema: { type: string }
       responses:
         "200":
           description: Report file
@@ -214,6 +226,11 @@ paths:
         "403": { description: Administrator access required }
         "404": { description: No report data available }
 components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: signed-session
   parameters:
     Id:
       name: id

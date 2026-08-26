@@ -207,10 +207,6 @@ export const ExportReportQueryParams = zod.object({
   "format": zod.enum(['csv', 'pdf'])
 })
 
-export const ExportReportHeader = zod.object({
-  "X-User-Role": zod.enum(['admin'])
-})
-
 export const ExportReportResponse = zod.unknown()
 
 

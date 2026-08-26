@@ -1,12 +1,19 @@
-import { Router, type IRouter, type Request } from "express";
-import { and, asc, desc, eq, ilike, or, sql } from "drizzle-orm";
+import { Router, type IRouter } from "express";
+import { and, asc, desc, eq, getTableColumns, ilike, inArray, or, sql } from "drizzle-orm";
 import { db, residentsTable, paymentsTable, housesTable, applicationsTable, documentsTable, operationsTable, auditEventsTable } from "@workspace/db";
 import { GetDashboardResponse, CreateResidentBody, UpdateResidentBody, CreatePaymentBody, ListActivityResponse } from "@workspace/api-zod";
+import { authenticate, authorize, canAccessResident, denyNotFound, getPrincipal, hasHouseScope, isAdministrator, type Principal } from "../middlewares/auth";
 
 const router: IRouter = Router();
+router.use(authenticate);
+// There is one organization at launch. Keep the organization boundary explicit
+// on organization-wide administrator queries until tenant columns are introduced.
+const organizationScope = sql`TRUE`;
 const today = () => new Date().toISOString().slice(0, 10);
-const asResident = (r: typeof residentsTable.$inferSelect) => ({
-  ...r, balance: Number(r.balance), nextPaymentDate: r.nextPaymentDate,
+const asResident = (r: typeof residentsTable.$inferSelect, principal?: Principal) => ({
+  ...r,
+  ...(principal?.role === "resident" ? { notes: undefined } : {}),
+  balance: Number(r.balance), nextPaymentDate: r.nextPaymentDate,
 });
 const audit = async (action: string, entityType: string, entityId?: number, metadata?: unknown) => {
   await db.insert(auditEventsTable).values({ action, entityType, entityId, metadata });
@@ -44,11 +51,10 @@ const toPdf = (title: string, rows: ReportRow[]) => {
   pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.slice(1).map((offset) => `${String(offset).padStart(10, "0")} 00000 n `).join("\n")}\ntrailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
   return Buffer.from(pdf, "binary");
 };
-const isAdmin = (req: Request) => req.header("x-user-role")?.toLowerCase() === "admin";
 const reportRows = async (type: ReportType): Promise<ReportRow[]> => {
   const [residents, payments, houses, applications, documents, events] = await Promise.all([
-    db.select().from(residentsTable), db.select().from(paymentsTable), db.select().from(housesTable),
-    db.select().from(applicationsTable), db.select().from(documentsTable), db.select().from(auditEventsTable),
+    db.select(getTableColumns(residentsTable)).from(residentsTable).where(organizationScope), db.select(getTableColumns(paymentsTable)).from(paymentsTable).where(organizationScope), db.select(getTableColumns(housesTable)).from(housesTable).where(organizationScope),
+    db.select(getTableColumns(applicationsTable)).from(applicationsTable).where(organizationScope), db.select(getTableColumns(documentsTable)).from(documentsTable).where(organizationScope), db.select(getTableColumns(auditEventsTable)).from(auditEventsTable).where(organizationScope),
   ]);
   if (type === "occupancy") {
     return houses.map((house) => ({ house: house.name, address: house.address, occupied: residents.filter((r) => r.home === house.name && r.status === "active").length, capacity: house.familyCapacity, available: Math.max(house.familyCapacity - residents.filter((r) => r.home === house.name && r.status === "active").length, 0) }));
@@ -71,10 +77,19 @@ const reportRows = async (type: ReportType): Promise<ReportRow[]> => {
 };
 
 router.get("/dashboard", async (_req, res): Promise<void> => {
-  const residents = await db.select().from(residentsTable);
-  const payments = await db.select().from(paymentsTable);
+  const principal = getPrincipal(res);
+  if (!authorize(principal, "dashboard:read")) { res.status(403).json({ error: "You do not have permission to view the dashboard." }); return; }
+  const residentFilter = !isAdministrator(principal) && principal.role === "house_manager"
+    ? inArray(residentsTable.home, principal.houseNames)
+    : undefined;
+  const residents = await db.select(getTableColumns(residentsTable)).from(residentsTable).where(residentFilter ?? organizationScope);
+  const payments = isAdministrator(principal)
+    ? await db.select(getTableColumns(paymentsTable)).from(paymentsTable).where(organizationScope)
+    : (await db.select({ payment: paymentsTable }).from(paymentsTable).innerJoin(residentsTable, eq(paymentsTable.residentId, residentsTable.id)).where(residentFilter)).map(({ payment }) => payment);
   const active = residents.filter((r) => r.status === "active");
-  const houses = await db.select().from(housesTable);
+  const houses = await db.select(getTableColumns(housesTable)).from(housesTable).where(
+    principal.role === "house_manager" ? inArray(housesTable.name, principal.houseNames) : undefined,
+  );
   const occupied = active.length;
   const capacity = houses.reduce((sum, h) => sum + (h.familyCapacity || 0), 0) || 32;
   const due = payments.filter((p) => p.status !== "paid").length;
@@ -87,59 +102,95 @@ router.get("/dashboard", async (_req, res): Promise<void> => {
 });
 
 router.get("/activity", async (_req, res): Promise<void> => {
-  const events = await db.select().from(auditEventsTable).orderBy(desc(auditEventsTable.createdAt)).limit(12);
+  const principal = getPrincipal(res);
+  if (!authorize(principal, "activity:read")) { res.status(403).json({ error: "You do not have permission to view activity." }); return; }
+  let events = await db.select(getTableColumns(auditEventsTable)).from(auditEventsTable).where(organizationScope).orderBy(desc(auditEventsTable.createdAt)).limit(100);
+  if (!isAdministrator(principal)) {
+    const visibleResidents = await db.select({ id: residentsTable.id }).from(residentsTable).where(inArray(residentsTable.home, principal.houseNames));
+    const visibleResidentIds = new Set(visibleResidents.map(({ id }) => id));
+    const visiblePayments = await db.select({ id: paymentsTable.id, residentId: paymentsTable.residentId }).from(paymentsTable);
+    const visiblePaymentIds = new Set(visiblePayments.filter((payment) => visibleResidentIds.has(payment.residentId)).map(({ id }) => id));
+    events = events.filter((event) =>
+      (event.entityType === "resident" && event.entityId !== null && visibleResidentIds.has(event.entityId)) ||
+      (event.entityType === "payment" && event.entityId !== null && visiblePaymentIds.has(event.entityId)));
+  }
+  events = events.slice(0, 12);
   const activities = events.map((e) => ({ id: e.id, type: e.entityType === "payment" ? "payment" : e.entityType === "resident" ? "resident" : "note", title: e.action, detail: `${e.entityType}${e.entityId ? ` #${e.entityId}` : ""}`, timestamp: e.createdAt.toISOString() }));
   res.json(ListActivityResponse.parse(activities));
 });
 
 router.get("/residents", async (req, res): Promise<void> => {
+  const principal = getPrincipal(res);
+  if (!authorize(principal, "resident:list")) { res.status(403).json({ error: "You do not have permission to list residents." }); return; }
   const search = typeof req.query.search === "string" ? req.query.search : "";
   const status = typeof req.query.status === "string" ? req.query.status : "all";
   const filters = [];
+  if (principal.role === "house_manager") filters.push(inArray(residentsTable.home, principal.houseNames));
+  if (principal.role === "resident") filters.push(eq(residentsTable.id, principal.residentId!));
   if (status !== "all") filters.push(eq(residentsTable.status, status));
   if (search) filters.push(or(ilike(residentsTable.name, `%${search}%`), ilike(residentsTable.email, `%${search}%`), ilike(residentsTable.home, `%${search}%`)));
-  const rows = await db.select().from(residentsTable).where(filters.length ? and(...filters) : undefined).orderBy(asc(residentsTable.name));
-  res.json(rows.map(asResident));
+  const rows = await db.select(getTableColumns(residentsTable)).from(residentsTable).where(filters.length ? and(...filters) : organizationScope).orderBy(asc(residentsTable.name));
+  res.json(rows.map((row) => asResident(row, principal)));
 });
 
 router.post("/residents", async (req, res): Promise<void> => {
+  const principal = getPrincipal(res);
   const parsed = CreateResidentBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!authorize(principal, "resident:create", { targetHouseName: parsed.data.home })) { res.status(403).json({ error: "You do not have permission to create this resident." }); return; }
   const [created] = await db.insert(residentsTable).values({ ...parsed.data, nextPaymentDate: parsed.data.moveInDate }).returning();
   await audit("Resident added", "resident", created.id);
-  res.status(201).json(asResident(created));
+  res.status(201).json(asResident(created, principal));
 });
 
 router.get("/residents/:id", async (req, res): Promise<void> => {
+  const principal = getPrincipal(res);
   const id = Number(req.params.id);
-  const [row] = await db.select().from(residentsTable).where(eq(residentsTable.id, id));
-  if (!row) { res.status(404).json({ error: "Resident not found" }); return; }
-  res.json(asResident(row));
+  const [row] = await db.select(getTableColumns(residentsTable)).from(residentsTable).where(eq(residentsTable.id, id));
+  if (!row || !authorize(principal, "resident:read", { houseName: row.home, residentId: row.id })) { denyNotFound(res); return; }
+  res.json(asResident(row, principal));
 });
 
 router.patch("/residents/:id", async (req, res): Promise<void> => {
+  const principal = getPrincipal(res);
   const id = Number(req.params.id);
   const parsed = UpdateResidentBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  const [existing] = await db.select(getTableColumns(residentsTable)).from(residentsTable).where(eq(residentsTable.id, id));
+  if (!existing || !authorize(principal, "resident:update", { houseName: existing.home, residentId: existing.id })) { denyNotFound(res); return; }
+  if (parsed.data.home && !hasHouseScope(principal, parsed.data.home)) {
+    res.status(403).json({ error: "You cannot assign a resident outside your house scope." });
+    return;
+  }
   const [updated] = await db.update(residentsTable).set({ ...parsed.data, updatedAt: new Date() }).where(eq(residentsTable.id, id)).returning();
-  if (!updated) { res.status(404).json({ error: "Resident not found" }); return; }
+  if (!updated) { denyNotFound(res); return; }
   await audit("Resident updated", "resident", id);
-  res.json(asResident(updated));
+  res.json(asResident(updated, principal));
 });
 
 router.get("/payments", async (req, res): Promise<void> => {
+  const principal = getPrincipal(res);
   const residentId = req.query.residentId ? Number(req.query.residentId) : undefined;
   const status = typeof req.query.status === "string" ? req.query.status : "all";
+  if (residentId !== undefined) {
+    const [resident] = await db.select({ id: residentsTable.id, home: residentsTable.home }).from(residentsTable).where(eq(residentsTable.id, residentId));
+    if (!resident || !authorize(principal, "payment:list", { houseName: resident.home, residentId: resident.id })) { denyNotFound(res); return; }
+  }
   const conditions = [];
-  if (residentId) conditions.push(eq(paymentsTable.residentId, residentId));
+  if (residentId !== undefined) conditions.push(eq(paymentsTable.residentId, residentId));
+  if (principal.role === "house_manager") conditions.push(inArray(residentsTable.home, principal.houseNames));
+  if (principal.role === "resident") conditions.push(eq(residentsTable.id, principal.residentId!));
   if (status !== "all") conditions.push(eq(paymentsTable.status, status));
   const rows = await db.select({ payment: paymentsTable, residentName: residentsTable.name }).from(paymentsTable).innerJoin(residentsTable, eq(paymentsTable.residentId, residentsTable.id)).where(conditions.length ? and(...conditions) : undefined).orderBy(desc(paymentsTable.dueDate));
   res.json(rows.map(({ payment, residentName }) => ({ ...payment, residentName, amount: Number(payment.amount) })));
 });
 
 router.post("/payments", async (req, res): Promise<void> => {
+  const principal = getPrincipal(res);
   const parsed = CreatePaymentBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  const [targetResident] = await db.select({ id: residentsTable.id, home: residentsTable.home }).from(residentsTable).where(eq(residentsTable.id, parsed.data.residentId));
+  if (!targetResident || !authorize(principal, "payment:create", { houseName: targetResident.home, residentId: targetResident.id })) { denyNotFound(res); return; }
   const status = parsed.data.paidDate ? "paid" : (new Date(parsed.data.dueDate).getTime() + 5 * 86400000 < Date.now() ? "overdue" : "due");
   const [created] = await db.insert(paymentsTable).values({ residentId: parsed.data.residentId, amount: String(parsed.data.amount), dueDate: parsed.data.dueDate, paidDate: parsed.data.paidDate, method: parsed.data.method, status } as any).returning();
   const [resident] = await db.select({ name: residentsTable.name }).from(residentsTable).where(eq(residentsTable.id, created.residentId));
@@ -148,40 +199,125 @@ router.post("/payments", async (req, res): Promise<void> => {
 });
 
 router.get("/houses", async (_req, res): Promise<void> => {
-  const houses = await db.select().from(housesTable);
+  const principal = getPrincipal(res);
+  if (!authorize(principal, "house:list")) { res.status(403).json({ error: "You do not have permission to view houses." }); return; }
+  const houses = await db.select().from(housesTable).where(
+    principal.role === "house_manager" ? inArray(housesTable.name, principal.houseNames)
+      : principal.role === "resident"
+        ? inArray(housesTable.name, (await db.select({ home: residentsTable.home }).from(residentsTable).where(eq(residentsTable.id, principal.residentId!))).map(({ home }) => home))
+      : undefined,
+  );
   const counts = await db.select({ house: residentsTable.home, count: sql<number>`count(*)` }).from(residentsTable).groupBy(residentsTable.home);
   res.json(houses.map((h) => ({ ...h, occupancy: Number(counts.find((c) => c.house === h.name)?.count ?? 0), individualWeekly: Number(h.individualWeekly), familyWeekly: Number(h.familyWeekly), individualMonthly: Number(h.individualMonthly), familyMonthly: Number(h.familyMonthly) })));
 });
 
-router.get("/applications", async (_req, res): Promise<void> => { res.json(await db.select().from(applicationsTable).orderBy(desc(applicationsTable.createdAt))); });
+router.get("/applications", async (_req, res): Promise<void> => {
+  const principal = getPrincipal(res);
+  if (principal.role === "resident") { res.status(403).json({ error: "You do not have permission to view applications." }); return; }
+  if (isAdministrator(principal)) {
+    res.json(await db.select(getTableColumns(applicationsTable)).from(applicationsTable).where(organizationScope).orderBy(desc(applicationsTable.createdAt)));
+    return;
+  }
+  const scopedHouses = await db.select({ id: housesTable.id }).from(housesTable).where(inArray(housesTable.name, principal.houseNames));
+  res.json(await db.select(getTableColumns(applicationsTable)).from(applicationsTable).where(inArray(applicationsTable.preferredHouseId, scopedHouses.map(({ id }) => id))).orderBy(desc(applicationsTable.createdAt)));
+});
 router.post("/applications", async (req, res): Promise<void> => {
+  const principal = getPrincipal(res);
+  if (principal.role === "resident") { res.status(403).json({ error: "You do not have permission to create applications." }); return; }
+  if (!isAdministrator(principal)) {
+    const [house] = await db.select({ name: housesTable.name }).from(housesTable).where(eq(housesTable.id, Number(req.body?.preferredHouseId)));
+    if (!house || !hasHouseScope(principal, house.name)) { res.status(403).json({ error: "You cannot create an application outside your house scope." }); return; }
+  }
   const [created] = await db.insert(applicationsTable).values(req.body).returning();
   await audit("Application submitted", "application", created.id);
   res.status(201).json(created);
 });
 router.patch("/applications/:id", async (req, res): Promise<void> => {
+  const principal = getPrincipal(res);
+  if (principal.role === "resident") { res.status(403).json({ error: "You do not have permission to update applications." }); return; }
+  if (!isAdministrator(principal)) {
+    const [existing] = await db.select({ preferredHouseId: applicationsTable.preferredHouseId }).from(applicationsTable).where(eq(applicationsTable.id, Number(req.params.id)));
+    const [house] = existing?.preferredHouseId
+      ? await db.select({ name: housesTable.name }).from(housesTable).where(eq(housesTable.id, existing.preferredHouseId))
+      : [];
+    if (!existing || !house || !hasHouseScope(principal, house.name)) { denyNotFound(res); return; }
+  }
   const [updated] = await db.update(applicationsTable).set({ ...req.body, updatedAt: new Date() }).where(eq(applicationsTable.id, Number(req.params.id))).returning();
   if (!updated) { res.status(404).json({ error: "Application not found" }); return; }
   await audit(`Application ${req.body.status ?? "updated"}`, "application", updated.id, req.body.exceptionReason);
   res.json(updated);
 });
 
-router.get("/documents", async (_req, res): Promise<void> => { res.json(await db.select().from(documentsTable).orderBy(desc(documentsTable.createdAt))); });
-router.post("/documents", async (req, res): Promise<void> => { const [created] = await db.insert(documentsTable).values(req.body).returning(); await audit("Document added", "document", created.id); res.status(201).json(created); });
-router.get("/operations", async (_req, res): Promise<void> => { res.json(await db.select().from(operationsTable).orderBy(asc(operationsTable.scheduledDate), desc(operationsTable.createdAt))); });
-router.post("/operations", async (req, res): Promise<void> => { const [created] = await db.insert(operationsTable).values(req.body).returning(); await audit("Operation logged", "operation", created.id); res.status(201).json(created); });
+router.get("/documents", async (_req, res): Promise<void> => {
+  const principal = getPrincipal(res);
+  if (isAdministrator(principal)) {
+    res.json(await db.select(getTableColumns(documentsTable)).from(documentsTable).where(organizationScope).orderBy(desc(documentsTable.createdAt)));
+    return;
+  }
+  const residents = await db.select({ id: residentsTable.id, home: residentsTable.home }).from(residentsTable);
+  const visibleIds = residents.filter((resident) => canAccessResident(principal, resident)).map(({ id }) => id);
+  res.json(await db.select(getTableColumns(documentsTable)).from(documentsTable).where(inArray(documentsTable.residentId, visibleIds)).orderBy(desc(documentsTable.createdAt)));
+});
+router.post("/documents", async (req, res): Promise<void> => {
+  const principal = getPrincipal(res);
+  const [resident] = req.body?.residentId
+    ? await db.select({ id: residentsTable.id, home: residentsTable.home }).from(residentsTable).where(eq(residentsTable.id, Number(req.body.residentId)))
+    : [];
+  if (!resident || (principal.role !== "resident" && !canAccessResident(principal, resident, true)) ||
+      (principal.role === "resident" && !canAccessResident(principal, resident))) {
+    denyNotFound(res);
+    return;
+  }
+  const [created] = await db.insert(documentsTable).values(req.body).returning();
+  await audit("Document added", "document", created.id);
+  res.status(201).json(created);
+});
+router.get("/operations", async (_req, res): Promise<void> => {
+  const principal = getPrincipal(res);
+  if (isAdministrator(principal)) {
+    res.json(await db.select(getTableColumns(operationsTable)).from(operationsTable).where(organizationScope).orderBy(asc(operationsTable.scheduledDate), desc(operationsTable.createdAt)));
+    return;
+  }
+  const residents = await db.select({ id: residentsTable.id, home: residentsTable.home }).from(residentsTable);
+  const visibleIds = residents.filter((resident) => canAccessResident(principal, resident)).map(({ id }) => id);
+  res.json(await db.select(getTableColumns(operationsTable)).from(operationsTable).where(inArray(operationsTable.residentId, visibleIds)).orderBy(asc(operationsTable.scheduledDate), desc(operationsTable.createdAt)));
+});
+router.post("/operations", async (req, res): Promise<void> => {
+  const principal = getPrincipal(res);
+  const [resident] = req.body?.residentId
+    ? await db.select({ id: residentsTable.id, home: residentsTable.home }).from(residentsTable).where(eq(residentsTable.id, Number(req.body.residentId)))
+    : [];
+  if (!resident || !canAccessResident(principal, resident, true)) { denyNotFound(res); return; }
+  const [created] = await db.insert(operationsTable).values(req.body).returning();
+  await audit("Operation logged", "operation", created.id);
+  res.status(201).json(created);
+});
 router.get("/reports/summary", async (_req, res): Promise<void> => {
-  const [residents, payments, applications, documents, events] = await Promise.all([db.select().from(residentsTable), db.select().from(paymentsTable), db.select().from(applicationsTable), db.select().from(documentsTable), db.select().from(auditEventsTable)]);
+  const principal = getPrincipal(res);
+  if (!authorize(principal, "report:read")) { res.status(403).json({ error: "You do not have permission to view reports." }); return; }
+  const residentFilter = principal.role === "house_manager"
+    ? inArray(residentsTable.home, principal.houseNames)
+    : undefined;
+  const [residents, payments, applications, documents, events] = await Promise.all([
+    db.select(getTableColumns(residentsTable)).from(residentsTable).where(residentFilter ?? organizationScope),
+    isAdministrator(principal)
+      ? db.select(getTableColumns(paymentsTable)).from(paymentsTable).where(organizationScope)
+      : (await db.select({ payment: paymentsTable }).from(paymentsTable).innerJoin(residentsTable, eq(paymentsTable.residentId, residentsTable.id)).where(residentFilter)).map(({ payment }) => payment),
+    isAdministrator(principal) ? db.select(getTableColumns(applicationsTable)).from(applicationsTable).where(organizationScope) : db.select(getTableColumns(applicationsTable)).from(applicationsTable).where(sql`false`),
+    isAdministrator(principal) ? db.select(getTableColumns(documentsTable)).from(documentsTable).where(organizationScope) : db.select(getTableColumns(documentsTable)).from(documentsTable).where(sql`false`),
+    isAdministrator(principal) ? db.select(getTableColumns(auditEventsTable)).from(auditEventsTable).where(organizationScope) : db.select(getTableColumns(auditEventsTable)).from(auditEventsTable).where(sql`false`),
+  ]);
   res.json({ generatedAt: new Date().toISOString(), occupancy: { active: residents.filter((r) => r.status === "active").length, total: residents.length }, payments: { collected: payments.filter((p) => p.status === "paid").reduce((s, p) => s + Number(p.amount), 0), overdue: payments.filter((p) => p.status === "overdue").length }, applications: applications.length, documents: documents.length, auditEvents: events.length });
 });
 router.get("/reports/:reportType/export", async (req, res): Promise<void> => {
-  if (!isAdmin(req)) { res.status(403).json({ error: "Administrator access is required to export reports." }); return; }
+  const principal = getPrincipal(res);
+  if (!authorize(principal, "report:export")) { res.status(403).json({ error: "Administrator access is required to export reports." }); return; }
   const reportType = req.params.reportType as ReportType;
   const format = req.query.format === "pdf" ? "pdf" : req.query.format === "csv" ? "csv" : null;
   if (!reportTypes.includes(reportType) || !format) { res.status(400).json({ error: "Choose an approved report type and format (csv or pdf)." }); return; }
   const rows = await reportRows(reportType);
   if (!rows.length) { res.status(404).json({ error: "There is no data available for this report yet." }); return; }
-  const actor = req.header("x-actor")?.trim() || "administrator";
+  const actor = principal.sub;
   await db.insert(auditEventsTable).values({ action: "Report exported", entityType: "report", actor, metadata: { reportType, format, exportedAt: new Date().toISOString() } });
   const filename = `${reportType}-report.${format}`;
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
