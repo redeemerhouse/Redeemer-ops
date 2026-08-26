@@ -2,9 +2,9 @@ import { ClipboardCheck, Download, FileText, Home, Plus, RefreshCw, ShieldCheck,
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AppShell } from '@/components/app-shell';
 import { EmptyState, Field, Modal, QueryState, SelectField, SubmitButton, useDisclosure } from '@/components/ui-primitives';
+import { exportReport, get, isAdministrator, reportFilename, reportTypes, type ReportFormat, type ReportType } from '@/lib/api';
 import { useState } from 'react';
 
-const get = async (path: string) => { const response = await fetch(`/api${path}`); if (!response.ok) throw new Error('Unable to load operations data'); return response.json(); };
 const date = (value?: string) => value ? new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(value)) : 'Not scheduled';
 
 export default function Operations() {
@@ -46,18 +46,38 @@ function Applications({ data, onNew }: { data: any[]; onNew: () => void }) { ret
 function Houses({ data }: { data: any[] }) { return <><Header eyebrow="Capacity & placement" title="Houses and beds" />{data.length ? <div className="grid gap-4 p-6 md:grid-cols-2">{data.map((h) => <div key={h.id} className="rounded-2xl border border-[hsl(var(--border))] p-5"><div className="flex items-start justify-between"><div><div className="text-sm font-extrabold">{h.name}</div><div className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">{h.address}</div></div><Home size={18} className="text-[hsl(var(--primary))]" /></div><div className="mt-6 flex items-end justify-between"><div><div className="section-kicker">Current residents</div><div className="mt-1 text-2xl font-extrabold">{h.occupancy}</div></div><div className="text-right"><div className="section-kicker">Family capacity</div><div className="mt-1 text-lg font-extrabold">{h.familyCapacity}</div></div></div><div className="mt-4 h-2 overflow-hidden rounded-full bg-[hsl(var(--muted))]"><div className="h-full rounded-full bg-[hsl(var(--primary))]" style={{ width: `${Math.min((h.occupancy / Math.max(h.familyCapacity, 1)) * 100, 100)}%` }} /></div><div className="mt-3 text-xs text-[hsl(var(--muted-foreground))]">Individual ${h.individualWeekly}/week · Family ${h.familyWeekly}/week</div></div>)}</div> : <div className="p-6"><EmptyState title="No houses configured" detail="Add the four Redeemer House locations to begin assigning capacity." /></div>}</>; }
 function Daily({ data }: { data: any[] }) { return <><Header eyebrow="Today & recurring" title="Daily operations" />{data.length ? <div className="divide-y divide-[hsl(var(--border))]">{data.map((o) => <div key={o.id} className="flex items-center gap-4 px-6 py-4"><div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[hsl(38_66%_88%)]"><ClipboardCheck size={16} /></div><div className="flex-1"><div className="text-sm font-extrabold">{o.title}</div><div className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">{o.type} · {date(o.scheduledDate)}</div></div><span className="text-[10px] font-extrabold uppercase text-[hsl(var(--muted-foreground))]">{o.status}</span></div>)}</div> : <div className="p-6"><EmptyState title="The daily board is clear" detail="Randomized UAs, meetings, chores, milestones, incidents, and grievances will appear here." /></div>}</>; }
 function Reports({ data }: { data?: any }) {
-  const [state, setState] = useState<{ type: string; message: string } | null>(null);
-  const types = ['occupancy', 'roster', 'payments', 'revenue', 'compliance', 'referral', 'audit'];
-  const download = async (type: string, format: 'csv' | 'pdf') => {
+  const [reportType, setReportType] = useState<ReportType>('occupancy');
+  const [format, setFormat] = useState<ReportFormat>('csv');
+  const [state, setState] = useState<{ type: 'empty' | 'error'; message: string } | null>(null);
+  const [downloading, setDownloading] = useState(false);
+  const download = async () => {
     setState(null);
+    setDownloading(true);
     try {
-      const response = await fetch(`/api/reports/${type}/export?format=${format}`, { headers: { 'X-User-Role': 'admin', 'X-Actor': 'administrator' } });
-      if (!response.ok) { const body = await response.json().catch(() => ({})); throw new Error(body.error || 'Unable to export this report.'); }
-      const blob = await response.blob(); const url = URL.createObjectURL(blob); const link = document.createElement('a');
-      link.href = url; link.download = `${type}-report.${format}`; link.click(); URL.revokeObjectURL(url);
-    } catch (error) { setState({ type: 'error', message: error instanceof Error ? error.message : 'Unable to export this report.' }); }
+      const response = await exportReport(reportType, format);
+      if (response.status === 404) {
+        const body = await response.json().catch(() => ({}));
+        setState({ type: 'empty', message: body.error || 'There is no data available for this report yet.' });
+        return;
+      }
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error || 'Unable to export this report.');
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = reportFilename(response, `${reportType}-report.${format}`);
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch (error) {
+      setState({ type: 'error', message: error instanceof Error ? error.message : 'Unable to export this report.' });
+    } finally {
+      setDownloading(false);
+    }
   };
-  return <><Header eyebrow="Administrator view" title="Reporting snapshot" /><div className="grid gap-4 p-6 sm:grid-cols-2 lg:grid-cols-4">{[['Active residents', data?.occupancy?.active ?? 0], ['Collected', `$${data?.payments?.collected ?? 0}`], ['Overdue payments', data?.payments?.overdue ?? 0], ['Audit events', data?.auditEvents ?? 0]].map(([label, value]) => <div key={String(label)} className="rounded-2xl bg-[hsl(var(--secondary)/.55)] p-4"><div className="section-kicker">{String(label)}</div><div className="mt-2 text-2xl font-extrabold">{String(value)}</div></div>)}</div><div className="border-t border-[hsl(var(--border))] px-6 py-5"><div className="section-kicker">Approved downloads</div><p className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">Exports are administrator-only and each download is recorded with its actor and timestamp.</p>{state && <div role="alert" className="mt-4 rounded-xl bg-[hsl(4_70%_94%)] px-4 py-3 text-xs font-bold text-[hsl(4_60%_35%)]">{state.message}</div>}<div className="mt-5 divide-y divide-[hsl(var(--border))] rounded-2xl border border-[hsl(var(--border))]">{types.map((type) => <div key={type} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"><span className="text-sm font-extrabold capitalize">{type} report</span><div className="flex gap-2"><button onClick={() => download(type, 'csv')} className="flex items-center gap-2 rounded-lg border border-[hsl(var(--border))] px-3 py-2 text-[11px] font-extrabold"><Download size={13} /> CSV</button><button onClick={() => download(type, 'pdf')} className="flex items-center gap-2 rounded-lg bg-[hsl(var(--primary))] px-3 py-2 text-[11px] font-extrabold text-white"><Download size={13} /> PDF</button></div></div>)}</div></div></>; }
+  return <><Header eyebrow="Administrator view" title="Reporting snapshot" /><div className="grid gap-4 p-6 sm:grid-cols-2 lg:grid-cols-4">{[['Active residents', data?.occupancy?.active ?? 0], ['Collected', `$${data?.payments?.collected ?? 0}`], ['Overdue payments', data?.payments?.overdue ?? 0], ['Audit events', data?.auditEvents ?? 0]].map(([label, value]) => <div key={String(label)} className="rounded-2xl bg-[hsl(var(--secondary)/.55)] p-4"><div className="section-kicker">{String(label)}</div><div className="mt-2 text-2xl font-extrabold">{String(value)}</div></div>)}</div><div className="border-t border-[hsl(var(--border))] px-6 py-5"><div className="section-kicker">Approved downloads</div>{isAdministrator ? <><p className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">Choose an approved report and file format. Each successful download is recorded with its actor and timestamp.</p>{state && <div role={state.type === 'empty' ? 'status' : 'alert'} className={`mt-4 rounded-xl px-4 py-3 text-xs font-bold ${state.type === 'empty' ? 'bg-[hsl(var(--secondary))] text-[hsl(var(--foreground))]' : 'bg-[hsl(4_70%_94%)] text-[hsl(4_60%_35%)]'}`}>{state.message}</div>}<div className="mt-5 flex flex-col gap-3 rounded-2xl border border-[hsl(var(--border))] p-4 sm:flex-row sm:items-end"><SelectField label="Report" name="report-type" value={reportType} onChange={(value) => setReportType(value as ReportType)} options={reportTypes} /><SelectField label="Format" name="report-format" value={format} onChange={(value) => setFormat(value as ReportFormat)} options={[{ value: 'csv', label: 'CSV' }, { value: 'pdf', label: 'PDF' }]} /><button data-testid="button-download-report" onClick={download} disabled={downloading} className="flex h-11 items-center justify-center gap-2 rounded-xl bg-[hsl(var(--primary))] px-4 text-xs font-extrabold text-white disabled:cursor-wait disabled:opacity-60"><Download size={14} />{downloading ? 'Preparing…' : 'Download report'}</button></div></> : <div className="mt-4 rounded-2xl bg-[hsl(var(--secondary)/.6)] p-4 text-sm text-[hsl(var(--muted-foreground))]">Report downloads are available to administrators only.</div>}</div></>; }
 function ApplicationModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) { const [form, setForm] = useState({ applicantName: '', email: '', phone: '', status: 'submitted', signedAcknowledgment: false, source: 'direct' }); const [saving, setSaving] = useState(false); const set = (k: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [k]: v })); const submit = async (e: React.FormEvent) => { e.preventDefault(); setSaving(true); await fetch('/api/applications', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) }); setSaving(false); onSaved(); }; return <Modal title="Start an application" eyebrow="New intake" onClose={onClose}><form onSubmit={submit} className="space-y-4"><Field label="Applicant name" name="application-name" value={form.applicantName} onChange={set('applicantName')} required placeholder="Full legal name" /><Field label="Email" name="application-email" value={form.email} onChange={set('email')} type="email" required placeholder="applicant@email.com" /><Field label="Phone" name="application-phone" value={form.phone} onChange={set('phone')} placeholder="(555) 000-0000" /><SelectField label="Source" name="application-source" value={form.source} onChange={set('source')} options={[{ value: 'direct', label: 'Direct inquiry' }, { value: 'referral', label: 'Referral partner' }, { value: 'one-step', label: 'One Step import' }]} /><label className="flex items-start gap-3 rounded-xl bg-[hsl(var(--secondary)/.5)] p-3 text-xs leading-relaxed"><input type="checkbox" checked={form.signedAcknowledgment} onChange={(e) => setForm((f) => ({ ...f, signedAcknowledgment: e.target.checked }))} required /> Applicant acknowledges the intake and consent statement.</label><div className="flex justify-end gap-3 border-t border-[hsl(var(--border))] pt-5"><button type="button" onClick={onClose} className="rounded-xl px-4 py-2.5 text-xs font-extrabold">Cancel</button><SubmitButton pending={saving}>Create application</SubmitButton></div></form></Modal>; }
 
 function DocumentModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
