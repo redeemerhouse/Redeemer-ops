@@ -1,4 +1,5 @@
 import { pgTable, serial, text, integer, numeric, date, timestamp, boolean, jsonb } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -82,7 +83,13 @@ export const auditEventsTable = pgTable("audit_events", {
   entityType: text("entity_type").notNull(),
   entityId: integer("entity_id"),
   actor: text("actor").notNull().default("system"),
+  scope: jsonb("scope"),
+  correlationId: text("correlation_id"),
+  outcome: text("outcome").notNull().default("success"),
   metadata: jsonb("metadata"),
+  retentionUntil: timestamp("retention_until", { withTimezone: true })
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP + interval '7 years'`),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

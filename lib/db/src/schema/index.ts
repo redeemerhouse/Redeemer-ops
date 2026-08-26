@@ -20,3 +20,4 @@
 export * from "./residents";
 export * from "./payments";
 export * from "./operations";
+export * from "./retention";

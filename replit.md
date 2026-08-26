@@ -24,6 +24,7 @@ ONEsource gives Redeemer House teams a dependable workspace for resident intake,
 
 - `lib/db/src/schema/` — persistent resident, payment, house, application, document, operations, and audit models
 - `artifacts/api-server/src/routes/operations.ts` — core operations API
+- `artifacts/api-server/src/lib/retention.ts` — server-only deletion quarantine, legal-hold, and restore procedures
 - `artifacts/recovery-housing-operations/src/pages/operations.tsx` — staff operations workspace
 
 ## Architecture decisions
@@ -46,6 +47,7 @@ _Populate as you build — explicit user instructions worth remembering across s
 ## Gotchas
 
 - Run `pnpm --filter @workspace/db run push` after schema changes, then `pnpm run typecheck` and restart managed workflows.
+- Run `pnpm --filter @workspace/api-server run test:retention` for the focused 15-day quarantine/legal-hold policy checks.
 - Vite builds require the workflow-injected `PORT`; use the artifact workflow or provide `PORT` and `BASE_PATH` for a standalone build.
 
 ## Pointers

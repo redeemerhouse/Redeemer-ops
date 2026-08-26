@@ -3,3 +3,4 @@
 - [OpenAPI export parameter generation](openapi-orval-params.md) — path-and-query operations can collide in generated Zod params exports; run codegen and library checks together.
 - [Redeemer House brand system](redeemer-brand-system.md) — every production page must carry the approved logo, navy/magenta palette, warm oat surfaces, and editorial typography.
 - [Workspace TypeScript builds](workspace-typescript-builds.md) — force-rebuild referenced composite packages when source exports change before trusting downstream typecheck results.
+- [Node strip-types test runner](node-strip-types-tests.md) — built-in TypeScript tests need runtime-independent imports and avoid unsupported parameter-property syntax.

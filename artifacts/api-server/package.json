@@ -9,6 +9,7 @@
     "start": "node --enable-source-maps ./dist/index.mjs",
     "test:rate-limit": "node --experimental-strip-types --test test/security-rate-limit.test.ts",
     "test:reports": "node --test test/report-exports.test.mjs",
+    "test:retention": "node --experimental-strip-types --test test/retention-policy.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

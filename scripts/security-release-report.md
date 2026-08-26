@@ -44,6 +44,27 @@ The release gate is not a substitute for route tests. Before a GO decision, rout
 - Collection limits, body limits, CORS, rate limiting, security headers, and safe error mapping are asserted.
 - Logs and browser error handling redact request bodies, PII, money, tokens, SQL, and stack traces.
 
+## Retention verification
+
+Deletion retention is kept behind a server-only service boundary until the
+authentication and authorization work is complete. The boundary:
+
+- stores an immutable target/scope/reason/actor snapshot in a 15-day quarantine;
+- writes the quarantine audit event before the source-move callback runs;
+- exposes quarantine metadata only to an authenticated `owner_admin` or
+  `program_director`, never the archived record itself;
+- requires an audited administrator cancellation reason and an explicit restore
+  callback; and
+- re-checks active legal holds inside the purge transaction, records a blocked
+  purge, claims due rows to prevent concurrent workers, and empties the archive
+  only after durable purge evidence is written.
+
+Run `pnpm --filter @workspace/api-server run test:retention` to verify the
+15-day boundary, organization scope, administrator roles, reason validation,
+restore state transitions, and legal-hold pause policy. This does not make any
+route safe by itself; the future authenticated route must pass a principal
+object into the service rather than trusting request headers.
+
 ## Current release decision
 
 The current repository is **NO-GO**. The API mounts sensitive handlers that directly access PostgreSQL and accept raw request bodies; authentication, centralized authorization, tenant/house scoping, complete validation, response shaping, safe error middleware, explicit CORS, parser limits, rate limiting, and security headers are not yet established consistently. Report exports additionally use a client-controlled role header and unscoped aggregate queries.
