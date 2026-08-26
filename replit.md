@@ -31,6 +31,9 @@ ONEsource gives Redeemer House teams a dependable workspace for resident intake,
 - Calendar dates use PostgreSQL `date`; timestamps are reserved for audit and event history.
 - Numeric payment values are converted at the API boundary before responses reach the UI.
 - Pilot seed data only initializes an empty houses table and never overwrites operational records.
+- `SECURITY_OPERATING_MODEL.md` is the approved source of truth for identity, roles, house
+  scope, resident lifecycle, documents, payments, exports, notifications, retention, and
+  deletion. Sensitive route work must reference it and enforce policy server-side.
 
 ## Product
 

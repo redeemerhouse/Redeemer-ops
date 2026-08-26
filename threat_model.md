@@ -223,7 +223,22 @@ The first four items are **launch blockers** for any sensitive resident/payment 
 
 - **Acceptance criteria:** Add route-level tests for authz/IDOR/mass assignment/validation/errors/limits/CORS and a dependency audit in CI. This is testing and maintenance work, not a substitute for the controls above.
 
-## 7. Product-owner decisions required
+## 7. Product-owner decisions resolved
+
+The product-owner decisions are approved and published in
+[`SECURITY_OPERATING_MODEL.md`](SECURITY_OPERATING_MODEL.md). That document is the
+implementation source of truth for the single organization/multiple-house tenancy,
+`owner_admin`, `program_director`, `house_manager`, and `resident` roles; email/password
+identity and session posture; resident lifecycle; household and child representation;
+data visibility; documents and attendance; money rules; exports; notifications; audit;
+retention; and deletion quarantine.
+
+The following legacy contract observations remain implementation work, not unresolved
+policy: the current OpenAPI status enums and report role header predate the approved
+model, and must be updated as part of the relevant route/contract hardening task. No
+implementation may treat those legacy fields as permission enforcement.
+
+## 7a. Historical questions (resolved by the operating model)
 
 These decisions must be recorded before implementing B1–B5:
 
