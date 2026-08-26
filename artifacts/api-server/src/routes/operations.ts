@@ -1,7 +1,27 @@
-import { Router, type IRouter, type Request } from "express";
-import { and, asc, desc, eq, getTableColumns, ilike, inArray, or, sql } from "drizzle-orm";
-import { db, residentsTable, paymentsTable, housesTable, applicationsTable, documentsTable, operationsTable, auditEventsTable } from "@workspace/db";
-import {
+import 
+{
+ Router, type IRouter, type Request 
+}
+ from "express"
+;
+
+import 
+{
+ and, asc, desc, eq, getTableColumns, ilike, inArray, or, sql 
+}
+ from "drizzle-orm"
+;
+
+import 
+{
+ db, residentsTable, paymentsTable, housesTable, applicationsTable, documentsTable, documentHistoryTable, operationsTable, auditEventsTable, insertDocumentSchema 
+}
+ from "@workspace/db"
+;
+
+import 
+{
+
   GetDashboardResponse,
   CreateResidentBody,
   UpdateResidentBody,
@@ -12,58 +32,165 @@ import {
   ListPaymentsQueryParams,
   ListPaymentsResponse,
   ListResidentsQueryParams,
-} from "@workspace/api-zod";
-import { authenticate, authorize, canAccessResident, getPrincipal, hasHouseScope, isAdministrator, type Principal } from "../middlewares/auth";
-import { problem } from "../middlewares/errors";
+}
+ from "@workspace/api-zod"
+;
 
-const router: IRouter = Router();
-router.use(authenticate);
+import 
+{
+ authenticate, authorize, canAccessResident, getPrincipal, hasHouseScope, isAdministrator, type Principal 
+}
+ from "../middlewares/auth"
+;
+
+import 
+{
+ problem 
+}
+ from "../middlewares/errors"
+;
+
+
+const router: IRouter = Router()
+;
+
+router.use(authenticate)
+;
+
 // There is one organization at launch. Keep the organization boundary explicit
 // on organization-wide administrator queries until tenant columns are introduced.
-const organizationScope = sql`TRUE`;
-const today = () => new Date().toISOString().slice(0, 10);
-const isInteger = (value: number) => Number.isInteger(value);
-const isCalendarDate = (value: unknown) => {
-  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const [year, month, day] = value.split("-").map(Number);
-  const candidate = new Date(Date.UTC(year, month - 1, day));
-  return candidate.getUTCFullYear() === year && candidate.getUTCMonth() === month - 1 && candidate.getUTCDate() === day;
-};
-const sqlDate = (value: Date) => value.toISOString().slice(0, 10);
-const asResident = (r: typeof residentsTable.$inferSelect, principal?: Principal) => ({
+const organizationScope = sql`TRUE`
+;
+
+const today = () => new Date().toISOString().slice(0, 10)
+;
+
+const isInteger = (value: number) => Number.isInteger(value)
+;
+
+const isCalendarDate = (value: unknown) => 
+{
+
+  if (typeof value !== "string" || !/^\d
+{
+4
+}
+-\d
+{
+2
+}
+-\d
+{
+2
+}
+$/.test(value)) return false
+;
+
+  const [year, month, day] = value.split("-").map(Number)
+;
+
+  const candidate = new Date(Date.UTC(year, month - 1, day))
+;
+
+  return candidate.getUTCFullYear() === year && candidate.getUTCMonth() === month - 1 && candidate.getUTCDate() === day
+;
+
+}
+;
+
+const sqlDate = (value: Date) => value.toISOString().slice(0, 10)
+;
+
+const asResident = (r: typeof residentsTable.$inferSelect, principal?: Principal) => (
+{
+
   ...r,
-  ...(principal?.role === "resident" ? { notes: undefined } : {}),
+  ...(principal?.role === "resident" ? 
+{
+ notes: undefined 
+}
+ : 
+{
+}
+),
   balance: Number(r.balance), nextPaymentDate: r.nextPaymentDate,
-});
-const AUDIT_RETENTION_YEARS = 7;
-const safeActor = (req: Request): string => {
-  const actor = req.res?.locals.actorId ?? req.res?.locals.principal?.sub;
-  return typeof actor === "string" && /^[a-zA-Z0-9._:@-]{1,128}$/.test(actor)
+}
+)
+;
+
+const AUDIT_RETENTION_YEARS = 7
+;
+
+const safeActor = (req: Request): string => 
+{
+
+  const actor = req.res?.locals.actorId ?? req.res?.locals.principal?.sub
+;
+
+  return typeof actor === "string" && /^[a-zA-Z0-9._:@-]
+{
+1,128
+}
+$/.test(actor)
     ? actor
-    : "unattributed";
-};
-const audit = async (req: Request, action: string, entityType: string, entityId?: number, metadata?: Record<string, string | number | boolean | null>) => {
-  const retentionUntil = new Date();
-  retentionUntil.setUTCFullYear(retentionUntil.getUTCFullYear() + AUDIT_RETENTION_YEARS);
-  await db.insert(auditEventsTable).values({
+    : "unattributed"
+;
+
+}
+;
+
+const audit = async (req: Request, action: string, entityType: string, entityId?: number, metadata?: Record<string, string | number | boolean | null>) => 
+{
+
+  const retentionUntil = new Date()
+;
+
+  retentionUntil.setUTCFullYear(retentionUntil.getUTCFullYear() + AUDIT_RETENTION_YEARS)
+;
+
+  await db.insert(auditEventsTable).values(
+{
+
     action,
     entityType,
     entityId,
     actor: safeActor(req),
-    metadata: {
+    metadata: 
+{
+
       correlationId: req.res?.locals.correlationId ?? "unknown",
       outcome: "success",
       retentionUntil: retentionUntil.toISOString(),
       ...metadata,
-    },
-  });
-};
-const reportTypes = ["occupancy", "roster", "payments", "revenue", "compliance", "referral", "audit"] as const;
-type ReportType = typeof reportTypes[number];
-type ReportRow = Record<string, string | number | boolean | null>;
-const csvCell = (value: unknown) => {
-  const text = value == null ? "" : String(value);
-  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+    
+}
+,
+  
+}
+)
+;
+
+}
+;
+
+const reportTypes = ["occupancy", "roster", "payments", "revenue", "compliance", "referral", "audit"] as const
+;
+
+type ReportType = typeof reportTypes[number]
+;
+
+type ReportRow = Record<string, string | number | boolean | null>
+;
+
+const csvCell = (value: unknown) => 
+{
+
+  const text = value == null ? "" : String(value)
+;
+
+  return /[",\n\r]/.test(text) ? `"$
+{
+text.replace(/"/g, '""')}"` : text;
 };
 const toCsv = (rows: ReportRow[]) => {
   if (!rows.length) return "";
@@ -74,21 +201,69 @@ const toCsv = (rows: ReportRow[]) => {
 // A deliberately small, dependency-free PDF writer keeps exports available in the API
 // service without making report generation depend on a browser or binary package.
 const toPdf = (title: string, rows: ReportRow[]) => {
-  const lines = [title, `Generated ${new Date().toISOString()}`, "", ...rows.map((row) => Object.entries(row).map(([key, value]) => `${key}: ${value ?? ""}`).join(" | "))];
+  const lines = [title, `Generated $
+{
+new Date().toISOString()
+}
+`, "", ...rows.map((row) => Object.entries(row).map(([key, value]) => `$
+{
+key
+}
+: $
+{
+value ?? ""
+}
+`).join(" | "))];
   const escapePdf = (line: string) => line.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)").slice(0, 115);
-  const stream = ["BT", "/F1 9 Tf", "45 770 Td", ...lines.flatMap((line, index) => [index ? "0 -13 Td" : "", `(${escapePdf(line)}) Tj`]), "ET"].filter(Boolean).join("\n");
+  const stream = ["BT", "/F1 9 Tf", "45 770 Td", ...lines.flatMap((line, index) => [index ? "0 -13 Td" : "", `($
+{
+escapePdf(line)
+}
+) Tj`]), "ET"].filter(Boolean).join("\n");
   const objects = [
     "<< /Type /Catalog /Pages 2 0 R >>",
     "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
     "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-    `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
+    `<< /Length $
+{
+stream.length
+}
+ >>\nstream\n$
+{
+stream
+}
+\nendstream`,
   ];
   let pdf = "%PDF-1.4\n";
   const offsets = [0];
-  objects.forEach((object, index) => { offsets[index + 1] = pdf.length; pdf += `${index + 1} 0 obj\n${object}\nendobj\n`; });
+  objects.forEach((object, index) => { offsets[index + 1] = pdf.length; pdf += `$
+{
+index + 1
+}
+ 0 obj\n$
+{
+object
+}
+\nendobj\n`; });
   const xref = pdf.length;
-  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.slice(1).map((offset) => `${String(offset).padStart(10, "0")} 00000 n `).join("\n")}\ntrailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  pdf += `xref\n0 $
+{
+objects.length + 1
+}
+\n0000000000 65535 f \n$
+{
+offsets.slice(1).map((offset) => `${String(offset).padStart(10, "0")} 00000 n `).join("\n")
+}
+\ntrailer\n<< /Size $
+{
+objects.length + 1
+}
+ /Root 1 0 R >>\nstartxref\n$
+{
+xref
+}
+\n%%EOF`;
   return Buffer.from(pdf, "binary");
 };
 const reportRows = async (type: ReportType): Promise<ReportRow[]> => {
@@ -156,7 +331,15 @@ router.get("/activity", async (_req, res): Promise<void> => {
       (event.entityType === "payment" && event.entityId !== null && visiblePaymentIds.has(event.entityId)));
   }
   events = events.slice(0, 12);
-  const activities = events.map((e) => ({ id: e.id, type: e.entityType === "payment" ? "payment" : e.entityType === "resident" ? "resident" : "note", title: e.action, detail: `${e.entityType}${e.entityId ? ` #${e.entityId}` : ""}`, timestamp: e.createdAt.toISOString() }));
+  const activities = events.map((e) => ({ id: e.id, type: e.entityType === "payment" ? "payment" : e.entityType === "resident" ? "resident" : "note", title: e.action, detail: `$
+{
+e.entityType
+}
+$
+{
+e.entityId ? ` #${e.entityId}` : ""
+}
+`, timestamp: e.createdAt.toISOString() }));
   res.json(ListActivityResponse.parse(activities));
   await audit(_req, "Activity viewed", "audit");
 });
@@ -172,7 +355,19 @@ router.get("/residents", async (req, res): Promise<void> => {
   if (principal.role === "house_manager") filters.push(inArray(residentsTable.home, principal.houseNames));
   if (principal.role === "resident") filters.push(eq(residentsTable.id, principal.residentId!));
   if (status !== "all") filters.push(eq(residentsTable.status, status));
-  if (search) filters.push(or(ilike(residentsTable.name, `%${search}%`), ilike(residentsTable.email, `%${search}%`), ilike(residentsTable.home, `%${search}%`)));
+  if (search) filters.push(or(ilike(residentsTable.name, `%$
+{
+search
+}
+%`), ilike(residentsTable.email, `%$
+{
+search
+}
+%`), ilike(residentsTable.home, `%$
+{
+search
+}
+%`)));
   const rows = await db.select(getTableColumns(residentsTable)).from(residentsTable).where(filters.length ? and(...filters) : organizationScope).orderBy(asc(residentsTable.name));
   res.json(rows.map((row) => asResident(row, principal)));
   await audit(req, "Resident list viewed", "resident");
@@ -281,7 +476,15 @@ router.post("/payments", async (req, res): Promise<void> => {
     if (status === "paid") {
       await tx.update(residentsTable)
         .set({
-          balance: sql`GREATEST(${residentsTable.balance} - ${parsed.data.amount}, 0)`,
+          balance: sql`GREATEST($
+{
+residentsTable.balance
+}
+ - $
+{
+parsed.data.amount
+}
+, 0)`,
           updatedAt: new Date(),
         })
         .where(eq(residentsTable.id, resident.id));
@@ -362,22 +565,136 @@ router.get("/documents", async (_req, res): Promise<void> => {
   }
   const residents = await db.select({ id: residentsTable.id, home: residentsTable.home }).from(residentsTable);
   const visibleIds = residents.filter((resident) => canAccessResident(principal, resident)).map(({ id }) => id);
-  res.json(await db.select(getTableColumns(documentsTable)).from(documentsTable).where(inArray(documentsTable.residentId, visibleIds)).orderBy(desc(documentsTable.createdAt)));
+  const scope = visibleIds.length ? inArray(documentsTable.residentId, visibleIds) : sql`false`;
+  const visibility = principal.role === "resident" ? eq(documentsTable.visibility, "resident") : undefined;
+  res.json(await db.select(getTableColumns(documentsTable)).from(documentsTable).where(visibility ? and(scope, visibility) : scope).orderBy(desc(documentsTable.createdAt)));
   await audit(_req, "Document list viewed", "document");
 });
+
+const documentMetadataError = "Document metadata, object path, and a resident are required for shared documents";
+const hasCompleteFileMetadata = (document: {
+  objectPath?: unknown;
+  fileName?: unknown;
+  contentType?: unknown;
+  fileSize?: unknown;
+}) =>
+  typeof document.objectPath === "string" &&
+  document.objectPath.startsWith("/objects/") &&
+  document.objectPath.length > "/objects/".length &&
+  typeof document.fileName === "string" &&
+  document.fileName.trim().length > 0 &&
+  typeof document.contentType === "string" &&
+  document.contentType.trim().length > 0 &&
+  Number.isInteger(document.fileSize) &&
+  Number(document.fileSize) > 0;
+const isValidDocumentVisibility = (visibility: unknown): visibility is "staff" | "resident" =>
+  visibility === "staff" || visibility === "resident";
+
 router.post("/documents", async (req, res): Promise<void> => {
   const principal = getPrincipal(res);
-  const [resident] = req.body?.residentId
-    ? await db.select({ id: residentsTable.id, home: residentsTable.home }).from(residentsTable).where(eq(residentsTable.id, Number(req.body.residentId)))
-    : [];
-  if (!resident || (principal.role !== "resident" && !canAccessResident(principal, resident, true)) ||
-      (principal.role === "resident" && !canAccessResident(principal, resident))) {
+  const parsed = insertDocumentSchema.safeParse({ ...req.body, status: "uploaded" });
+  const document = parsed.success ? parsed.data : null;
+  const residentId = document?.residentId;
+  if (
+    !document ||
+    !hasCompleteFileMetadata(document) ||
+    !isValidDocumentVisibility(document.visibility) ||
+    (typeof residentId !== "number" || !Number.isInteger(residentId) || residentId <= 0) ||
+    (document.visibility === "resident" && !document.residentId)
+  ) {
+    res.status(400).json({ error: documentMetadataError });
+    return;
+  }
+  const [resident] = await db.select({ id: residentsTable.id, home: residentsTable.home }).from(residentsTable).where(eq(residentsTable.id, residentId));
+  if (!resident || !canAccessResident(principal, resident, true)) {
     problem(req, res, 404);
     return;
   }
-  const [created] = await db.insert(documentsTable).values(req.body).returning();
-  await audit(req, "Document added", "document", created.id);
+  const [created] = await db.insert(documentsTable).values(document).returning();
+  await db.insert(documentHistoryTable).values({ documentId: created.id, action: "uploaded", actor: safeActor(req), objectPath: created.objectPath });
+  await audit(req, "Document uploaded", "document", created.id, { category: created.category });
   res.status(201).json(created);
+});
+router.get("/documents/:id/history", async (req, res): Promise<void> => {
+  const principal = getPrincipal(res);
+  const id = Number(req.params.id);
+  const [document] = Number.isInteger(id) && id > 0
+    ? await db.select(getTableColumns(documentsTable)).from(documentsTable).where(eq(documentsTable.id, id))
+    : [];
+  if (!document || principal.role === "resident") { problem(req, res, 404); return; }
+  const [resident] = document.residentId
+    ? await db.select({ id: residentsTable.id, home: residentsTable.home }).from(residentsTable).where(eq(residentsTable.id, document.residentId))
+    : [];
+  if (!resident || !canAccessResident(principal, resident)) { problem(req, res, 404); return; }
+  const history = await db.select().from(documentHistoryTable).where(eq(documentHistoryTable.documentId, id)).orderBy(desc(documentHistoryTable.createdAt));
+  res.json(history);
+  await audit(req, "Document history viewed", "document", id);
+});
+router.patch("/documents/:id", async (req, res): Promise<void> => {
+  const principal = getPrincipal(res);
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) { problem(req, res, 404); return; }
+  const [current] = await db.select(getTableColumns(documentsTable)).from(documentsTable).where(eq(documentsTable.id, id));
+  if (!current || principal.role === "resident") { problem(req, res, 404); return; }
+  const [currentResident] = current.residentId
+    ? await db.select({ id: residentsTable.id, home: residentsTable.home }).from(residentsTable).where(eq(residentsTable.id, current.residentId))
+    : [];
+  if (!currentResident || !canAccessResident(principal, currentResident, true)) { problem(req, res, 404); return; }
+
+  const allowed = ["title", "category", "visibility", "status", "residentId", "objectPath", "fileName", "contentType", "fileSize"] as const;
+  const changes: Record<string, unknown> = {};
+  for (const key of allowed) {
+    if (Object.prototype.hasOwnProperty.call(req.body ?? {}, key)) changes[key] = req.body[key];
+  }
+  if (
+    ("title" in changes && (typeof changes.title !== "string" || !changes.title.trim())) ||
+    ("category" in changes && (typeof changes.category !== "string" || !changes.category.trim())) ||
+    ("status" in changes && (typeof changes.status !== "string" || !changes.status.trim())) ||
+    ("visibility" in changes && !isValidDocumentVisibility(changes.visibility)) ||
+    ("residentId" in changes && changes.residentId !== null && (!Number.isInteger(changes.residentId) || Number(changes.residentId) <= 0)) ||
+    ("fileSize" in changes && (!Number.isInteger(changes.fileSize) || Number(changes.fileSize) <= 0)) ||
+    ("objectPath" in changes && (typeof changes.objectPath !== "string" || !changes.objectPath.startsWith("/objects/"))) ||
+    ("fileName" in changes && (typeof changes.fileName !== "string" || !changes.fileName.trim())) ||
+    ("contentType" in changes && (typeof changes.contentType !== "string" || !changes.contentType.trim()))
+  ) {
+    res.status(400).json({ error: documentMetadataError });
+    return;
+  }
+
+  const nextVisibility = changes.visibility ?? current.visibility;
+  const nextResidentId = changes.residentId === undefined ? current.residentId : changes.residentId;
+  const candidateFile = {
+    objectPath: changes.objectPath ?? current.objectPath,
+    fileName: changes.fileName ?? current.fileName,
+    contentType: changes.contentType ?? current.contentType,
+    fileSize: changes.fileSize ?? current.fileSize,
+  };
+  if (!isValidDocumentVisibility(nextVisibility) || (nextVisibility === "resident" && (!Number.isInteger(nextResidentId) || Number(nextResidentId) <= 0)) || !hasCompleteFileMetadata(candidateFile)) {
+    res.status(400).json({ error: documentMetadataError });
+    return;
+  }
+  const [targetResident] = Number.isInteger(nextResidentId)
+    ? await db.select({ id: residentsTable.id, home: residentsTable.home }).from(residentsTable).where(eq(residentsTable.id, Number(nextResidentId)))
+    : [];
+  if (!targetResident || !canAccessResident(principal, targetResident, true)) { problem(req, res, 404); return; }
+
+  const [updated] = await db.update(documentsTable).set({
+    ...changes,
+    sharedAt: nextVisibility === "resident" && current.visibility !== "resident" ? new Date() : current.sharedAt,
+    updatedAt: new Date(),
+  }).where(eq(documentsTable.id, id)).returning();
+  const replacement = Object.prototype.hasOwnProperty.call(changes, "objectPath");
+  const accessChanged = nextVisibility !== current.visibility;
+  await db.insert(documentHistoryTable).values({
+    documentId: id,
+    action: accessChanged ? "access_changed" : replacement ? "replaced" : "updated",
+    actor: safeActor(req),
+    fromVisibility: current.visibility,
+    toVisibility: updated.visibility,
+    objectPath: updated.objectPath,
+  });
+  await audit(req, accessChanged ? "Document access changed" : replacement ? "Document replaced" : "Document updated", "document", id);
+  res.json(updated);
 });
 router.get("/operations", async (_req, res): Promise<void> => {
   const principal = getPrincipal(res);
@@ -428,10 +745,28 @@ router.get("/reports/:reportType/export", async (req, res): Promise<void> => {
   const rows = await reportRows(reportType);
   if (!rows.length) { problem(req, res, 404); return; }
   await audit(req, "Report exported", "report", undefined, { reportType, format });
-  const filename = `${reportType}-report.${format}`;
-  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  const filename = `$
+{
+reportType
+}
+-report.$
+{
+format
+}
+`;
+  res.setHeader("Content-Disposition", `attachment
+;
+ filename="${filename}"`);
   if (format === "csv") { res.type("text/csv").send(toCsv(rows)); return; }
-  res.type("application/pdf").send(toPdf(`${reportType[0].toUpperCase()}${reportType.slice(1)} report`, rows));
+  res.type("application/pdf").send(toPdf(`$
+{
+reportType[0].toUpperCase()
+}
+$
+{
+reportType.slice(1)
+}
+ report`, rows));
 });
 
 export default router;

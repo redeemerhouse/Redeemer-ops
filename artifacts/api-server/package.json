@@ -11,6 +11,7 @@
     "test:reports": "node --test test/report-exports.test.mjs",
     "test:retention": "node --experimental-strip-types --test test/retention-policy.test.ts",
     "test:security": "node --test test/security-controls.test.mjs",
+    "test:documents": "node --test test/document-sharing.test.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
