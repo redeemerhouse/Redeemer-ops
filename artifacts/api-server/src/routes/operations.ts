@@ -1,7 +1,18 @@
 import { Router, type IRouter, type Request } from "express";
 import { and, asc, desc, eq, getTableColumns, ilike, inArray, or, sql } from "drizzle-orm";
 import { db, residentsTable, paymentsTable, housesTable, applicationsTable, documentsTable, operationsTable, auditEventsTable } from "@workspace/db";
-import { GetDashboardResponse, CreateResidentBody, UpdateResidentBody, CreatePaymentBody, ListActivityResponse } from "@workspace/api-zod";
+import {
+  GetDashboardResponse,
+  CreateResidentBody,
+  UpdateResidentBody,
+  CreatePaymentBody,
+  CreatePaymentResponse,
+  GetResidentParams,
+  ListActivityResponse,
+  ListPaymentsQueryParams,
+  ListPaymentsResponse,
+  ListResidentsQueryParams,
+} from "@workspace/api-zod";
 import { authenticate, authorize, canAccessResident, getPrincipal, hasHouseScope, isAdministrator, type Principal } from "../middlewares/auth";
 import { problem } from "../middlewares/errors";
 
@@ -11,6 +22,14 @@ router.use(authenticate);
 // on organization-wide administrator queries until tenant columns are introduced.
 const organizationScope = sql`TRUE`;
 const today = () => new Date().toISOString().slice(0, 10);
+const isInteger = (value: number) => Number.isInteger(value);
+const isCalendarDate = (value: unknown) => {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  const candidate = new Date(Date.UTC(year, month - 1, day));
+  return candidate.getUTCFullYear() === year && candidate.getUTCMonth() === month - 1 && candidate.getUTCDate() === day;
+};
+const sqlDate = (value: Date) => value.toISOString().slice(0, 10);
 const asResident = (r: typeof residentsTable.$inferSelect, principal?: Principal) => ({
   ...r,
   ...(principal?.role === "resident" ? { notes: undefined } : {}),
@@ -145,8 +164,10 @@ router.get("/activity", async (_req, res): Promise<void> => {
 router.get("/residents", async (req, res): Promise<void> => {
   const principal = getPrincipal(res);
   if (!authorize(principal, "resident:list")) { problem(req, res, 403); return; }
-  const search = typeof req.query.search === "string" ? req.query.search : "";
-  const status = typeof req.query.status === "string" ? req.query.status : "all";
+  const parsedQuery = ListResidentsQueryParams.strict().safeParse(req.query);
+  if (!parsedQuery.success) { res.status(400).json({ error: "Invalid resident filters." }); return; }
+  const search = parsedQuery.data.search ?? "";
+  const status = parsedQuery.data.status ?? "all";
   const filters = [];
   if (principal.role === "house_manager") filters.push(inArray(residentsTable.home, principal.houseNames));
   if (principal.role === "resident") filters.push(eq(residentsTable.id, principal.residentId!));
@@ -159,7 +180,7 @@ router.get("/residents", async (req, res): Promise<void> => {
 
 router.post("/residents", async (req, res): Promise<void> => {
   const principal = getPrincipal(res);
-  const parsed = CreateResidentBody.safeParse(req.body);
+  const parsed = CreateResidentBody.strict().safeParse(req.body);
   if (!parsed.success) { problem(req, res, 400); return; }
   if (!authorize(principal, "resident:create", { targetHouseName: parsed.data.home })) { problem(req, res, 403); return; }
   const [created] = await db.insert(residentsTable).values({ ...parsed.data, nextPaymentDate: parsed.data.moveInDate }).returning();
@@ -168,8 +189,10 @@ router.post("/residents", async (req, res): Promise<void> => {
 });
 
 router.get("/residents/:id", async (req, res): Promise<void> => {
+  const parsedParams = GetResidentParams.safeParse(req.params);
+  if (!parsedParams.success) { res.status(400).json({ error: "Invalid resident identifier." }); return; }
   const principal = getPrincipal(res);
-  const id = Number(req.params.id);
+  const id = parsedParams.data.id;
   const [row] = await db.select(getTableColumns(residentsTable)).from(residentsTable).where(eq(residentsTable.id, id));
   if (!row || !authorize(principal, "resident:read", { houseName: row.home, residentId: row.id })) { problem(req, res, 404); return; }
   res.json(asResident(row, principal));
@@ -178,8 +201,10 @@ router.get("/residents/:id", async (req, res): Promise<void> => {
 
 router.patch("/residents/:id", async (req, res): Promise<void> => {
   const principal = getPrincipal(res);
-  const id = Number(req.params.id);
-  const parsed = UpdateResidentBody.safeParse(req.body);
+  const parsedParams = GetResidentParams.safeParse(req.params);
+  if (!parsedParams.success) { res.status(400).json({ error: "Invalid resident identifier." }); return; }
+  const id = parsedParams.data.id;
+  const parsed = UpdateResidentBody.strict().safeParse(req.body);
   if (!parsed.success) { problem(req, res, 400); return; }
   const [existing] = await db.select(getTableColumns(residentsTable)).from(residentsTable).where(eq(residentsTable.id, id));
   if (!existing || !authorize(principal, "resident:update", { houseName: existing.home, residentId: existing.id })) { problem(req, res, 404); return; }
@@ -195,8 +220,13 @@ router.patch("/residents/:id", async (req, res): Promise<void> => {
 
 router.get("/payments", async (req, res): Promise<void> => {
   const principal = getPrincipal(res);
-  const residentId = req.query.residentId ? Number(req.query.residentId) : undefined;
-  const status = typeof req.query.status === "string" ? req.query.status : "all";
+  const parsedQuery = ListPaymentsQueryParams.strict().safeParse(req.query);
+  if (!parsedQuery.success) { res.status(400).json({ error: "Invalid payment filters." }); return; }
+  if (parsedQuery.data.residentId !== undefined && !isInteger(parsedQuery.data.residentId)) {
+    res.status(400).json({ error: "Invalid payment filters." }); return;
+  }
+  const residentId = parsedQuery.data.residentId;
+  const status = parsedQuery.data.status ?? "all";
   if (residentId !== undefined) {
     const [resident] = await db.select({ id: residentsTable.id, home: residentsTable.home }).from(residentsTable).where(eq(residentsTable.id, residentId));
     if (!resident || !authorize(principal, "payment:list", { houseName: resident.home, residentId: resident.id })) { problem(req, res, 404); return; }
@@ -207,21 +237,68 @@ router.get("/payments", async (req, res): Promise<void> => {
   if (principal.role === "resident") conditions.push(eq(residentsTable.id, principal.residentId!));
   if (status !== "all") conditions.push(eq(paymentsTable.status, status));
   const rows = await db.select({ payment: paymentsTable, residentName: residentsTable.name }).from(paymentsTable).innerJoin(residentsTable, eq(paymentsTable.residentId, residentsTable.id)).where(conditions.length ? and(...conditions) : undefined).orderBy(desc(paymentsTable.dueDate));
-  res.json(rows.map(({ payment, residentName }) => ({ ...payment, residentName, amount: Number(payment.amount) })));
+  res.json(ListPaymentsResponse.parse(rows.map(({ payment, residentName }) => ({
+    id: payment.id,
+    residentId: payment.residentId,
+    residentName,
+    amount: Number(payment.amount),
+    dueDate: payment.dueDate,
+    paidDate: payment.paidDate,
+    status: payment.status,
+    method: payment.method,
+  }))));
   await audit(req, "Payment list viewed", "payment");
 });
 
 router.post("/payments", async (req, res): Promise<void> => {
   const principal = getPrincipal(res);
-  const parsed = CreatePaymentBody.safeParse(req.body);
+  const parsed = CreatePaymentBody.strict().safeParse(req.body);
   if (!parsed.success) { problem(req, res, 400); return; }
-  const [targetResident] = await db.select({ id: residentsTable.id, home: residentsTable.home }).from(residentsTable).where(eq(residentsTable.id, parsed.data.residentId));
-  if (!targetResident || !authorize(principal, "payment:create", { houseName: targetResident.home, residentId: targetResident.id })) { problem(req, res, 404); return; }
+  const rawBody = req.body as Record<string, unknown>;
+  if (!isCalendarDate(rawBody.dueDate) || (rawBody.paidDate !== undefined && !isCalendarDate(rawBody.paidDate))) {
+    problem(req, res, 400); return;
+  }
+  if (!isInteger(parsed.data.residentId)) {
+    problem(req, res, 400); return;
+  }
+  const [resident] = await db.select({
+    id: residentsTable.id,
+    name: residentsTable.name,
+    home: residentsTable.home,
+    balance: residentsTable.balance,
+  }).from(residentsTable).where(eq(residentsTable.id, parsed.data.residentId));
+  if (!resident || !authorize(principal, "payment:create", { houseName: resident.home, residentId: resident.id })) { problem(req, res, 404); return; }
   const status = parsed.data.paidDate ? "paid" : (new Date(parsed.data.dueDate).getTime() + 5 * 86400000 < Date.now() ? "overdue" : "due");
-  const [created] = await db.insert(paymentsTable).values({ residentId: parsed.data.residentId, amount: String(parsed.data.amount), dueDate: parsed.data.dueDate, paidDate: parsed.data.paidDate, method: parsed.data.method, status } as any).returning();
-  const [resident] = await db.select({ name: residentsTable.name }).from(residentsTable).where(eq(residentsTable.id, created.residentId));
-  await audit(req, "Payment recorded", "payment", created.id);
-  res.status(201).json({ ...created, residentName: resident?.name ?? "Unknown resident", amount: Number(created.amount) });
+  const created = await db.transaction(async (tx) => {
+    const [payment] = await tx.insert(paymentsTable).values({
+      residentId: resident.id,
+      amount: parsed.data.amount,
+      dueDate: sqlDate(parsed.data.dueDate),
+      paidDate: parsed.data.paidDate ? sqlDate(parsed.data.paidDate) : undefined,
+      method: parsed.data.method,
+      status,
+    }).returning();
+    if (status === "paid") {
+      await tx.update(residentsTable)
+        .set({
+          balance: sql`GREATEST(${residentsTable.balance} - ${parsed.data.amount}, 0)`,
+          updatedAt: new Date(),
+        })
+        .where(eq(residentsTable.id, resident.id));
+    }
+    return payment;
+  });
+  await audit(req, "Payment recorded", "payment", created.id, { method: parsed.data.method ?? null });
+  res.status(201).json(CreatePaymentResponse.parse({
+    id: created.id,
+    residentId: created.residentId,
+    residentName: resident.name,
+    amount: Number(created.amount),
+    dueDate: created.dueDate,
+    paidDate: created.paidDate,
+    status: created.status,
+    method: created.method,
+  }));
 });
 
 router.get("/houses", async (_req, res): Promise<void> => {

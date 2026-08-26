@@ -93,23 +93,49 @@ export const PaymentStatus = {
 } as const;
 
 export interface Payment {
+  /**
+     * @minimum 1
+     * @maximum 2147483647
+     */
   id: number;
+  /**
+     * @minimum 1
+     * @maximum 2147483647
+     */
   residentId: number;
   residentName: string;
+  /**
+     * @minimum 0
+     * @maximum 99999999.99
+     */
   amount: number;
   dueDate: string;
   /** @nullable */
   paidDate: string | null;
   status: PaymentStatus;
-  /** @nullable */
+  /**
+     * @maxLength 80
+     * @nullable
+     */
   method: string | null;
 }
 
 export interface PaymentInput {
+  /**
+     * @minimum 1
+     * @maximum 2147483647
+     */
   residentId: number;
-  amount: number;
+  /**
+     * Non-negative USD amount with at most two decimal places.
+     * @minLength 1
+     * @maxLength 11
+     * @pattern ^(0|[1-9][0-9]{0,7})(\.[0-9]{1,2})?$
+     */
+  amount: string;
   dueDate: string;
   paidDate?: string;
+  /** @maxLength 80 */
   method?: string;
 }
 
@@ -146,6 +172,10 @@ export const ListResidentsStatus = {
 } as const;
 
 export type ListPaymentsParams = {
+/**
+ * @minimum 1
+ * @maximum 2147483647
+ */
 residentId?: number;
 status?: ListPaymentsStatus;
 };

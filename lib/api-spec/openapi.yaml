@@ -146,6 +146,9 @@ paths:
           required: false
           schema:
             type: number
+            multipleOf: 1
+            minimum: 1
+            maximum: 2147483647
         - name: status
           in: query
           required: false
@@ -238,6 +241,9 @@ components:
       required: true
       schema:
         type: number
+        multipleOf: 1
+        minimum: 1
+        maximum: 2147483647
   schemas:
     HealthStatus:
       type: object
@@ -295,25 +301,34 @@ components:
         notes: { type: string }
     Payment:
       type: object
+      additionalProperties: false
       required: [id, residentId, residentName, amount, dueDate, paidDate, status, method]
       properties:
-        id: { type: number }
-        residentId: { type: number }
+        id: { type: number, multipleOf: 1, minimum: 1, maximum: 2147483647 }
+        residentId: { type: number, multipleOf: 1, minimum: 1, maximum: 2147483647 }
         residentName: { type: string }
-        amount: { type: number }
-        dueDate: { type: string }
-        paidDate: { type: ["string", "null"] }
+        amount: { type: number, minimum: 0, maximum: 99999999.99, multipleOf: 0.01 }
+        dueDate: { type: string, format: date }
+        paidDate: { type: ["string", "null"], format: date }
         status: { type: string, enum: [paid, due, overdue] }
-        method: { type: ["string", "null"] }
+        method: { type: ["string", "null"], maxLength: 80 }
     PaymentInput:
       type: object
+      additionalProperties: false
       required: [residentId, amount, dueDate]
       properties:
-        residentId: { type: number }
-        amount: { type: number }
-        dueDate: { type: string }
-        paidDate: { type: string }
-        method: { type: string }
+        residentId: { type: number, multipleOf: 1, minimum: 1, maximum: 2147483647 }
+        # Decimal text avoids binary floating-point rounding before the server
+        # stores the value in PostgreSQL numeric(10, 2).
+        amount:
+          type: string
+          minLength: 1
+          maxLength: 11
+          pattern: '^(0|[1-9][0-9]{0,7})(\.[0-9]{1,2})?$'
+          description: Non-negative USD amount with at most two decimal places.
+        dueDate: { type: string, format: date }
+        paidDate: { type: string, format: date }
+        method: { type: string, maxLength: 80 }
     Activity:
       type: object
       required: [id, type, title, detail, timestamp]
@@ -323,4 +338,3 @@ components:
         title: { type: string }
         detail: { type: string }
         timestamp: { type: string }
-

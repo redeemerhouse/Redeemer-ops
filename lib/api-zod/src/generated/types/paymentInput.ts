@@ -7,9 +7,20 @@
  */
 
 export interface PaymentInput {
+  /**
+     * @minimum 1
+     * @maximum 2147483647
+     */
   residentId: number;
-  amount: number;
-  dueDate: string;
-  paidDate?: string;
+  /**
+     * Non-negative USD amount with at most two decimal places.
+     * @minLength 1
+     * @maxLength 11
+     * @pattern ^(0|[1-9][0-9]{0,7})(\.[0-9]{1,2})?$
+     */
+  amount: string;
+  dueDate: Date;
+  paidDate?: Date;
+  /** @maxLength 80 */
   method?: string;
 }

@@ -8,14 +8,29 @@
 import type { PaymentStatus } from './paymentStatus';
 
 export interface Payment {
+  /**
+     * @minimum 1
+     * @maximum 2147483647
+     */
   id: number;
+  /**
+     * @minimum 1
+     * @maximum 2147483647
+     */
   residentId: number;
   residentName: string;
+  /**
+     * @minimum 0
+     * @maximum 99999999.99
+     */
   amount: number;
-  dueDate: string;
+  dueDate: Date;
   /** @nullable */
-  paidDate: string | null;
+  paidDate: Date | null;
   status: PaymentStatus;
-  /** @nullable */
+  /**
+     * @maxLength 80
+     * @nullable
+     */
   method: string | null;
 }

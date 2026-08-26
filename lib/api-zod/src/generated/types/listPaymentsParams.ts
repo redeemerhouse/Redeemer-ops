@@ -8,6 +8,10 @@
 import type { ListPaymentsStatus } from './listPaymentsStatus';
 
 export type ListPaymentsParams = {
+/**
+ * @minimum 1
+ * @maximum 2147483647
+ */
 residentId?: number;
 status?: ListPaymentsStatus;
 };

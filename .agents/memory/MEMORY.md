@@ -5,3 +5,4 @@
 - [Workspace TypeScript builds](workspace-typescript-builds.md) — force-rebuild referenced composite packages when source exports change before trusting downstream typecheck results.
 - [Node strip-types test runner](node-strip-types-tests.md) — built-in TypeScript tests need runtime-independent imports and avoid unsupported parameter-property syntax.
 - [Drizzle migration output](drizzle-migration-workflow.md) — use a package-relative output path with this Drizzle CLI; absolute config paths can be incorrectly prefixed.
+- [Orval and Zod compatibility](orval-zod-runtime.md) — generated date/integer validators must match the workspace’s pinned Zod runtime before changing generator options.

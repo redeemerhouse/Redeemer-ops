@@ -86,8 +86,13 @@ export const CreateResidentResponse = zod.object({
 /**
  * @summary Get a resident
  */
+export const getResidentPathIdMax = 2147483647;
+export const getResidentPathIdMultipleOf = 1;
+
+
+
 export const GetResidentParams = zod.object({
-  "id": zod.coerce.number()
+  "id": zod.coerce.number().min(1).max(getResidentPathIdMax).multipleOf(getResidentPathIdMultipleOf)
 })
 
 export const GetResidentResponse = zod.object({
@@ -107,8 +112,13 @@ export const GetResidentResponse = zod.object({
 /**
  * @summary Update a resident
  */
+export const updateResidentPathIdMax = 2147483647;
+export const updateResidentPathIdMultipleOf = 1;
+
+
+
 export const UpdateResidentParams = zod.object({
-  "id": zod.coerce.number()
+  "id": zod.coerce.number().min(1).max(updateResidentPathIdMax).multipleOf(updateResidentPathIdMultipleOf)
 })
 
 
@@ -141,20 +151,39 @@ export const UpdateResidentResponse = zod.object({
 /**
  * @summary List payments
  */
+export const listPaymentsQueryResidentIdMax = 2147483647;
+export const listPaymentsQueryResidentIdMultipleOf = 1;
+
+
+
 export const ListPaymentsQueryParams = zod.object({
-  "residentId": zod.coerce.number().optional(),
+  "residentId": zod.coerce.number().min(1).max(listPaymentsQueryResidentIdMax).multipleOf(listPaymentsQueryResidentIdMultipleOf).optional(),
   "status": zod.enum(['all', 'paid', 'due', 'overdue']).optional()
 })
 
+export const listPaymentsResponseIdMax = 2147483647;
+export const listPaymentsResponseIdMultipleOf = 1;
+
+export const listPaymentsResponseResidentIdMax = 2147483647;
+export const listPaymentsResponseResidentIdMultipleOf = 1;
+
+export const listPaymentsResponseAmountMin = 0;
+export const listPaymentsResponseAmountMax = 99999999.99;
+export const listPaymentsResponseAmountMultipleOf = 0.01;
+
+export const listPaymentsResponseMethodMax = 80;
+
+
+
 export const ListPaymentsResponseItem = zod.object({
-  "id": zod.number(),
-  "residentId": zod.number(),
+  "id": zod.number().min(1).max(listPaymentsResponseIdMax).multipleOf(listPaymentsResponseIdMultipleOf),
+  "residentId": zod.number().min(1).max(listPaymentsResponseResidentIdMax).multipleOf(listPaymentsResponseResidentIdMultipleOf),
   "residentName": zod.string(),
-  "amount": zod.number(),
-  "dueDate": zod.string(),
-  "paidDate": zod.string().nullable(),
+  "amount": zod.number().min(listPaymentsResponseAmountMin).max(listPaymentsResponseAmountMax).multipleOf(listPaymentsResponseAmountMultipleOf),
+  "dueDate": zod.coerce.date(),
+  "paidDate": zod.coerce.date().nullable(),
   "status": zod.enum(['paid', 'due', 'overdue']),
-  "method": zod.string().nullable()
+  "method": zod.string().max(listPaymentsResponseMethodMax).nullable()
 })
 export const ListPaymentsResponse = zod.array(ListPaymentsResponseItem)
 
@@ -162,23 +191,48 @@ export const ListPaymentsResponse = zod.array(ListPaymentsResponseItem)
 /**
  * @summary Record a payment
  */
+export const createPaymentBodyResidentIdMax = 2147483647;
+export const createPaymentBodyResidentIdMultipleOf = 1;
+
+export const createPaymentBodyAmountMax = 11;
+
+
+export const createPaymentBodyAmountRegExp = new RegExp('^(0|[1-9][0-9]{0,7})(\\.[0-9]{1,2})?$');
+export const createPaymentBodyMethodMax = 80;
+
+
+
 export const CreatePaymentBody = zod.object({
-  "residentId": zod.number(),
-  "amount": zod.number(),
-  "dueDate": zod.string(),
-  "paidDate": zod.string().optional(),
-  "method": zod.string().optional()
+  "residentId": zod.number().min(1).max(createPaymentBodyResidentIdMax).multipleOf(createPaymentBodyResidentIdMultipleOf),
+  "amount": zod.string().min(1).max(createPaymentBodyAmountMax).regex(createPaymentBodyAmountRegExp).describe('Non-negative USD amount with at most two decimal places.'),
+  "dueDate": zod.coerce.date(),
+  "paidDate": zod.coerce.date().optional(),
+  "method": zod.string().max(createPaymentBodyMethodMax).optional()
 })
 
+export const createPaymentResponseIdMax = 2147483647;
+export const createPaymentResponseIdMultipleOf = 1;
+
+export const createPaymentResponseResidentIdMax = 2147483647;
+export const createPaymentResponseResidentIdMultipleOf = 1;
+
+export const createPaymentResponseAmountMin = 0;
+export const createPaymentResponseAmountMax = 99999999.99;
+export const createPaymentResponseAmountMultipleOf = 0.01;
+
+export const createPaymentResponseMethodMax = 80;
+
+
+
 export const CreatePaymentResponse = zod.object({
-  "id": zod.number(),
-  "residentId": zod.number(),
+  "id": zod.number().min(1).max(createPaymentResponseIdMax).multipleOf(createPaymentResponseIdMultipleOf),
+  "residentId": zod.number().min(1).max(createPaymentResponseResidentIdMax).multipleOf(createPaymentResponseResidentIdMultipleOf),
   "residentName": zod.string(),
-  "amount": zod.number(),
-  "dueDate": zod.string(),
-  "paidDate": zod.string().nullable(),
+  "amount": zod.number().min(createPaymentResponseAmountMin).max(createPaymentResponseAmountMax).multipleOf(createPaymentResponseAmountMultipleOf),
+  "dueDate": zod.coerce.date(),
+  "paidDate": zod.coerce.date().nullable(),
   "status": zod.enum(['paid', 'due', 'overdue']),
-  "method": zod.string().nullable()
+  "method": zod.string().max(createPaymentResponseMethodMax).nullable()
 })
 
 

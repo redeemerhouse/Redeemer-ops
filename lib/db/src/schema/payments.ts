@@ -1,5 +1,6 @@
-import { pgTable, serial, integer, text, numeric, date } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, numeric, date, check } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
+import { sql } from "drizzle-orm";
 import { z } from "zod/v4";
 import { residentsTable } from "./residents";
 
@@ -11,7 +12,13 @@ export const paymentsTable = pgTable("payments", {
   paidDate: date("paid_date"),
   status: text("status").notNull().default("due"),
   method: text("method"),
-});
+}, (table) => [
+  check("payments_amount_non_negative", sql`${table.amount} >= 0`),
+  check("payments_amount_maximum", sql`${table.amount} <= 99999999.99`),
+  check("payments_status_allowed", sql`${table.status} IN ('paid', 'due', 'overdue')`),
+  check("payments_status_matches_paid_date", sql`(${table.status} = 'paid') = (${table.paidDate} IS NOT NULL)`),
+  check("payments_method_length", sql`${table.method} IS NULL OR char_length(${table.method}) <= 80`),
+]);
 
 export const insertPaymentSchema = createInsertSchema(paymentsTable).omit({ id: true });
 export type InsertPayment = z.infer<typeof insertPaymentSchema>;
