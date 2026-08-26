@@ -1,14 +1,14 @@
 # Recovery Housing Operations — Security Architecture Review
 
-**Review date:** 2026-08-24  
-**Scope:** Current repository state before additional resident, payment, reporting, or messaging features are added.  
+**Review date:** 2026-08-25
+**Scope:** Post-MVP merged repository state, including the mounted Recovery Operations API, PostgreSQL schema, document/report flows, and browser client.
 **Out of scope:** Implementing authentication, a user-management workflow, SSO, integrations, penetration testing, dependency remediation, or asserting HIPAA, SOC 2, or other regulatory compliance.
 
 ## Executive summary
 
 The repository contains a browser application, an Express 5 API artifact, generated OpenAPI/Zod/client packages, and PostgreSQL/Drizzle models. The production security boundary is **not** the mockup canvas, generated UI inventory, OpenAPI document, or browser form. It is the server route/middleware/database path.
 
-At review time, the API mounts only `GET /api/healthz`. The OpenAPI document describes dashboard, resident, payment, and activity endpoints, and the browser imports generated React Query hooks for those endpoints, but no corresponding server routes are mounted. Generated Zod schemas exist, yet only the health response is parsed at runtime. Therefore, this review treats all sensitive CRUD behavior as **planned/scaffolded**, not as an implemented control.
+The MVP is now mounted and reachable beyond health: resident, payment, application, document, daily-operations, house, dashboard, activity, report-summary, and report-export handlers are in the API router. This is a material change from the pre-MVP review: the sensitive CRUD behavior is no longer merely planned/scaffolded, but it is also **not secure for production exposure** because authentication, authorization, scoped access, comprehensive validation, and a centralized error boundary remain absent. The OpenAPI document and generated client still describe only the original subset of these operations, so contract drift is now a release risk.
 
 No resident or payment data, secrets, tokens, or credentials are copied into this document. The repository exposes environment variable names only; secret values were not inspected.
 
@@ -20,28 +20,54 @@ No resident or payment data, secrets, tokens, or credentials are copied into thi
 |---|---|---|
 | Browser client | `artifacts/recovery-housing-operations/src/App.tsx`, `src/pages/{dashboard,residents,resident-detail,payments}.tsx` | Routes users to dashboard, resident list/detail, and payments screens. Uses generated React Query hooks. No authentication gate is present in the app tree. |
 | Generated browser client | `lib/api-client-react/src/generated/api.ts` and `src/custom-fetch.ts` | Produces calls under `/api/*`. Supports an optional bearer-token getter, but this is a generic client capability and is not configured by the web app. It does not enforce authorization. |
-| API process | `artifacts/api-server/src/index.ts` | Requires `PORT`, starts Express, and imports `app`. |
+| API process | `artifacts/api-server/src/index.ts` | Requires `PORT`, seeds pilot data on every startup path, then starts Express. Startup fails if seeding or listening fails. |
 | Express app | `artifacts/api-server/src/app.ts` | Adds pino HTTP logging, unrestricted `cors()`, JSON/urlencoded parsers with no explicit size limit, then mounts `/api`. No security-header, auth, authorization, error, or rate-limit middleware is present. |
-| API routes | `artifacts/api-server/src/routes/index.ts`, `src/routes/health.ts` | Mounts only public `GET /api/healthz`; it returns `{status:"ok"}` after parsing with the generated health response schema. |
-| Database | `lib/db/src/index.ts`, `lib/db/src/schema/*.ts` | Creates a `pg.Pool` from `DATABASE_URL` and a schema-aware Drizzle client. No query, transaction, timeout, shutdown, tenant scope, or repository/service policy is present in the reviewed API. |
+| API routes | `artifacts/api-server/src/routes/index.ts`, `src/routes/{health,operations}.ts` | Mounts public health plus all MVP operations. The operations router directly queries and mutates database tables; only a few legacy resident/payment/dashboard/activity responses use generated Zod parsing. |
+| Database | `lib/db/src/index.ts`, `lib/db/src/schema/*.ts` | Creates a `pg.Pool` from `DATABASE_URL` and a schema-aware Drizzle client. The merged schema covers houses, applications, documents, operations, audit events, residents, and payments. No checked-in SQL migration directory is present; the package exposes Drizzle `push`/`push-force` instead. Query, transaction, timeout, shutdown, tenant scope, and repository/service policy are not present in the reviewed API. |
 | Contract/codegen | `lib/api-spec/openapi.yaml`, `lib/api-zod/src/generated/*` | OpenAPI is the intended contract source; Orval generates TypeScript client types/hooks and Zod schemas. Generation is documented in `replit.md`. Generated artifacts are not themselves route middleware. |
 
 ### Reachable versus described surfaces
 
-**Confirmed reachable from the API router:**
+**Confirmed reachable from the API router after the MVP merge:**
 
 - `GET /api/healthz` — public, no authentication or authorization.
+- `GET /api/dashboard`, `GET /api/activity` — unscoped resident/payment/audit aggregates and activity.
+- `GET/POST/PATCH /api/residents` and `/api/residents/:id` — resident PII and status mutation.
+- `GET/POST /api/payments` — payment amounts, dates, methods, and resident relationship.
+- `GET/POST/PATCH /api/applications` and `/api/applications/:id` — intake, referral/treatment history, spiritual reflection, family information, signatures, checklists, and exception reasons.
+- `GET/POST /api/documents` — document metadata, resident/application links, visibility, upload path, and status.
+- `GET/POST /api/operations` — resident-linked daily-operation records, notes, and private flag.
+- `GET /api/houses` — house addresses, capacity, and pricing.
+- `GET /api/reports/summary` — cross-domain operational counts and payment totals.
+- `GET /api/reports/:reportType/export` — CSV/PDF exports; the only route with an admin check, implemented from a client-controlled `X-User-Role` header.
 - Express framework fallbacks for unmatched paths (exact response behavior is not specified by an application error handler).
 
-**Described in the contract and called by the browser, but not currently mounted:**
+**Described in the contract/generated client but not fully aligned with the mounted router:**
 
 - `GET /api/dashboard`
 - `GET/POST /api/residents`
 - `GET/PATCH /api/residents/{id}`
 - `GET/POST /api/payments`
 - `GET /api/activity`
+- `GET /api/reports/{reportType}/export` is described, but its required `X-User-Role` header is not an identity mechanism.
+- Mounted `/applications`, `/documents`, `/operations`, `/houses`, and `/reports/summary` have no OpenAPI operations or generated client coverage.
 
-This is an important release gate: a route must not be considered protected merely because it appears in `openapi.yaml`, has a generated hook, or has a UI form.
+This is an important release gate: a route must not be considered protected merely because it appears in `openapi.yaml`, has a generated hook, has a UI form, or contains an `X-User-Role` check.
+
+### Post-merge security reconciliation
+
+The merged MVP adds sensitive surfaces that must be included in the existing security work rather than treated as feature-complete controls:
+
+| Surface | Data/access risk | Required owner and acceptance boundary |
+|---|---|---|
+| Applications | Intake PII, family/referral/treatment history, spiritual reflection, signature and exception fields; raw body writes currently accept arbitrary fields. | **Identity/access + API hardening owners (B1/B4):** authenticated staff/resident policy and bounded transport. **Validation owner (B2):** allowlisted application DTOs, status transitions, length and format limits. **Persistence owner (B3):** application-to-resident conversion and audit transaction rules. |
+| Documents | Resident/application linkage, visibility, upload path, and status are returned to any caller; `objectPath` is metadata only and binary storage is not an API authorization boundary. | **Identity/access owner (B1):** role- and resident-scoped reads/writes. **Validation/persistence owner (B2/B3):** safe linkage, visibility/status transitions, object-path policy, and no client-controlled ownership. **Document regression owner (task 16):** tests for sharing and cross-resident access. |
+| Daily operations | Resident-linked notes and `private` records are exposed by an unscoped list route. | **Identity/access owner (B1):** house/resident scope and administrator-only private records. **Logging owner (B5):** note redaction and audit minimum-data policy. |
+| Houses and dashboard/activity | Addresses, capacity, pricing, resident counts, payment totals, and audit details are globally aggregated. | **Scoped-data owner (B3):** house/organization-scoped aggregates. **Dashboard test owner (task 8):** verify empty/loading/error and scoped-data states without treating visual behavior as authorization. |
+| Reports | Report summary is unprotected; exports query all sensitive tables and emit roster, financial, referral, compliance, or audit data. Export audit metadata uses caller-supplied actor/header values. | **Identity/access + export owners (B1/B3/B5):** administrator authorization from authenticated identity, scoped report rows, safe response headers, and export audit actor derived server-side. **Report regression owner (task 15):** CSV/PDF route and download checks. |
+| Seed/startup and schema | Startup writes pilot records; schema changes have no checked-in migration artifact or migration verification path. | **Release-verification owner (task 14):** prove startup uses the intended environment and that schema push/migration checks are repeatable before production. **API hardening owner (task 13):** safe startup, pool lifecycle, and production configuration. |
+
+The original resident/payment blockers therefore apply to the full merged route tree. No new route is launch-ready solely because it responds successfully.
 
 ## 2. Assets, actors, and trust boundaries
 
@@ -223,9 +249,32 @@ These decisions must be recorded before implementing B1–B5:
 7. Add audit events, redaction tests, retention/access rules, and operational dashboards (B5).
 8. Add focused authorization/security tests and run dependency/static validation before exposing any sensitive route.
 
+## 9. Post-merge release status
+
+### Verified after the MVP merge
+
+- The API build and all workspace typechecks completed for the API, web, mockup, and scripts packages.
+- The managed API workflow rebuilt and started successfully on its configured port.
+- Direct startup probes returned `200` for health plus the mounted dashboard, resident, payment, application, document, operations, house, and report-summary routes.
+- `git diff --check` passes for this review.
+- The database package exposes schema push commands, but no checked-in migration files were found.
+
+### Launch blockers remaining
+
+The following remain blockers before any production exposure of sensitive routes:
+
+1. **Identity and authorization (B1):** all MVP routes except the superficial export header check accept unauthenticated requests; the header is client-controlled and is not an identity boundary.
+2. **Validation and authoritative mutations (B2):** application, document, operation, and report inputs are largely raw request bodies; resident/payment validation and server-authoritative business rules are incomplete.
+3. **Scoped data access and database invariants (B3):** reads and aggregates query globally, relationship checks are incomplete, and status/financial invariants are not enforced across the expanded schema.
+4. **Transport, limits, and safe errors (B4):** wildcard CORS, unlimited parsers, missing security headers/rate limits, and no centralized production error boundary remain.
+5. **Audit and sensitive-data handling (B5):** audit records are incomplete, can capture payment metadata, and export actor identity is caller-supplied; redaction and retention controls are unverified.
+6. **Release verification (H2–H4/task 14):** the expanded route inventory, contract regeneration, security tests, and production configuration checks must pass as one release gate. The aggregate workspace build and database schema check also need a repeatable environment-safe command; the current full build is blocked by the mockup workflow’s required `PORT`, and Drizzle check is blocked by its current Data API parameter interpretation.
+
+Successful startup and `200` responses demonstrate merge coherence only. They are not evidence that the sensitive routes are secure. Production exposure remains prohibited until the security release-verification task passes with the blockers above either closed or explicitly accepted by the product owner.
+
 ## Validation and unresolved assumptions
 
-- Repository paths and claims in this review were checked against the current source tree on 2026-08-24.
+- Repository paths and claims in this review were checked against the current source tree on 2026-08-25, after the MVP merge.
 - The available workspace validation commands are `pnpm run typecheck` and `pnpm run build`; they are intended to be run without changing application behavior after this documentation-only review.
 - This review did not inspect secret values, production deployment settings, live database contents, backups, network policy, identity provider configuration, or log sink retention. Those are explicitly unverified, not assumed secure.
 - No penetration test was performed, and no regulatory compliance conclusion is made.
