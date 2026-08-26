@@ -27,7 +27,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <nav className="mt-3 space-y-1" aria-label="Primary navigation">
           {navItems.map(({ href, label, icon: Icon }) => {
             const active = href === '/' ? location === '/' : location.startsWith(href);
-            return <Link key={href} href={href} data-testid={`link-nav-${label.toLowerCase()}`} className={`flex items-center gap-3 rounded-xl px-3 py-3 text-[13px] font-semibold transition-colors ${active ? 'bg-sidebar-accent text-sidebar-accent-foreground' : 'text-sidebar-foreground/65 hover:bg-sidebar-accent/70 hover:text-sidebar-foreground'}`} onClick={() => setMobileOpen(false)}><Icon size={18} strokeWidth={active ? 2.2 : 1.7} /><span>{label}</span>{active && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-sidebar-primary" />}</Link>;
+            return <Link key={href} href={href} data-testid={`link-nav-${label.toLowerCase()}`} className={`flex items-center gap-3 rounded-xl px-3 py-3 text-[13px] font-semibold transition-colors ${active ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-lg shadow-black/10' : 'text-sidebar-foreground/65 hover:bg-sidebar-accent/70 hover:text-sidebar-foreground'}`} onClick={() => setMobileOpen(false)}><Icon size={18} strokeWidth={active ? 2.2 : 1.7} /><span>{label}</span>{active && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-sidebar-primary-foreground/80" />}</Link>;
           })}
         </nav>
         <div className="mt-auto rounded-2xl border border-sidebar-border bg-sidebar-accent/50 p-4">
@@ -35,13 +35,13 @@ export function AppShell({ children }: { children: ReactNode }) {
           <p className="mt-2 text-[11px] leading-relaxed text-sidebar-foreground/55">All resident and payment records are up to date.</p>
         </div>
         <div className="mt-4 flex items-center gap-3 border-t border-sidebar-border px-3 pt-4">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[hsl(14_72%_63%)] text-xs font-extrabold text-[hsl(201_29%_19%)]">AM</div>
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[hsl(var(--accent))] text-xs font-extrabold text-[hsl(var(--primary))]">AM</div>
           <div><div className="text-xs font-bold">Alex Morgan</div><div className="text-[10px] text-sidebar-foreground/50">House coordinator</div></div>
         </div>
       </aside>
-      {mobileOpen && <button data-testid="button-overlay-menu" className="fixed inset-0 z-30 bg-[hsl(201_29%_19%/.35)] lg:hidden" onClick={() => setMobileOpen(false)} aria-label="Close menu overlay" />}
+      {mobileOpen && <button data-testid="button-overlay-menu" className="fixed inset-0 z-30 bg-[hsl(219_64%_14%/.35)] lg:hidden" onClick={() => setMobileOpen(false)} aria-label="Close menu overlay" />}
       <main className="min-w-0 flex-1">
-        <header className="flex h-[72px] items-center justify-between border-b border-[hsl(var(--border))] bg-[hsl(42_45%_99%/.72)] px-5 backdrop-blur-md sm:px-8">
+        <header className="flex h-[72px] items-center justify-between border-b border-[hsl(var(--border))] bg-[hsl(var(--card)/.72)] px-5 backdrop-blur-md sm:px-8">
           <button data-testid="button-open-menu" className="text-[hsl(var(--muted-foreground))] lg:hidden" onClick={() => setMobileOpen(true)} aria-label="Open navigation"><Menu size={21} /></button>
           <div className="hidden text-[12px] font-semibold text-[hsl(var(--muted-foreground))] lg:block">Tuesday, October 15, 2024 <span className="mx-2 text-[hsl(var(--border))]">/</span> Morning check-in</div>
            <div className="relative ml-auto flex items-center gap-4"><button data-testid="button-notifications" aria-label="Notifications" onClick={() => setNotificationsOpen((value) => !value)} className="relative rounded-lg p-2 text-[hsl(var(--muted-foreground))] transition-colors hover:bg-[hsl(var(--muted))]"><Bell size={18} /><span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[hsl(var(--accent))]" /></button>{notificationsOpen && <div data-testid="popover-notifications" className="absolute right-0 top-11 z-20 w-64 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-4 shadow-xl"><div className="text-xs font-extrabold">You’re all caught up</div><p className="mt-1 text-xs leading-relaxed text-[hsl(var(--muted-foreground))]">No new handoffs or payment alerts.</p></div>}<div className="hidden h-5 w-px bg-[hsl(var(--border))] sm:block" /><span className="hidden text-xs font-bold text-[hsl(var(--muted-foreground))] sm:block">Redeemer House · Northside</span></div>
