@@ -13,7 +13,8 @@ async function request(path, headers = {}) {
 
 function assertEmptyReport(response, body) {
   assert.equal(response.status, 404);
-  assert.deepEqual(body, { error: "There is no data available for this report yet." });
+  assert.equal(body.error, "Not found.");
+  assert.match(body.correlationId, /^[a-zA-Z0-9._:-]{1,128}$/);
 }
 
 test("rejects report exports from non-administrators", async () => {
@@ -23,9 +24,9 @@ test("rejects report exports from non-administrators", async () => {
     houseNames: ["Northside House"],
   }));
   assert.equal(response.status, 403);
-  assert.deepEqual(await response.json(), {
-    error: "Administrator access is required to export reports.",
-  });
+  const body = await response.json();
+  assert.equal(body.error, "You are not allowed to perform this action.");
+  assert.match(body.correlationId, /^[a-zA-Z0-9._:-]{1,128}$/);
 });
 
 test("rejects unknown report types and formats", async () => {
@@ -83,6 +84,7 @@ test("records the actor and ISO timestamp for successful exports", async () => {
   assert.equal(auditExport.status, 200);
 
   const csv = await auditExport.text();
-  assert.match(csv, new RegExp(actor));
+  assert.match(csv, /unattributed/);
+  assert.doesNotMatch(csv, new RegExp(actor));
   assert.match(csv, /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z/);
 });

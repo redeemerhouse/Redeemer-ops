@@ -8,6 +8,7 @@ import {
   type RateLimitBucket,
   type RateLimitStore,
 } from "../lib/rateLimitStore";
+import { problem } from "./errors";
 
 const memoryStore = createMemoryRateLimitStore();
 let postgresStorePromise: Promise<RateLimitStore> | undefined;
@@ -53,8 +54,10 @@ function clientKey(req: Request): string {
 export function securityHeaders(_req: Request, res: Response, next: NextFunction): void {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("X-DNS-Prefetch-Control", "off");
   res.setHeader("Referrer-Policy", "no-referrer");
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
   res.setHeader("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'");
   if (serverConfig.isProduction) {
     res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
@@ -73,12 +76,12 @@ export function requestId(req: Request, res: Response, next: NextFunction): void
 export function requestTimeout(req: Request, res: Response, next: NextFunction): void {
   req.setTimeout(serverConfig.requestTimeoutMs, () => {
     if (!res.headersSent) {
-      res.status(408).json({ error: "Request timed out.", correlationId: res.locals.correlationId });
+      problem(req, res, 408);
     }
   });
   res.setTimeout(serverConfig.requestTimeoutMs, () => {
     if (!res.headersSent) {
-      res.status(503).json({ error: "Request timed out.", correlationId: res.locals.correlationId });
+      problem(req, res, 503);
     }
   });
   next();
@@ -90,7 +93,7 @@ export function responseSizeLimit(req: Request, res: Response, next: NextFunctio
   const originalWrite = res.write.bind(res);
   const originalEnd = res.end.bind(res);
   const tooLarge = () => {
-    if (!res.headersSent) res.status(500).json({ error: "Response exceeds the permitted size.", correlationId: res.locals.correlationId });
+    if (!res.headersSent) problem(req, res, 413);
     req.destroy();
   };
   res.write = ((chunk: any, ...args: any[]) => {
@@ -109,13 +112,13 @@ export function responseSizeLimit(req: Request, res: Response, next: NextFunctio
 export function requestParameterLimit(req: Request, res: Response, next: NextFunction): void {
   const queryEntries = Object.entries(req.query);
   const queryText = JSON.stringify(req.query);
-  if (queryEntries.length > serverConfig.maxParameters || queryText.length > 8_192) {
-    res.status(400).json({ error: "Request parameters exceed the permitted limits.", correlationId: res.locals.correlationId });
+  if (queryEntries.length > serverConfig.maxParameters || queryText.length > serverConfig.maxQueryBytes) {
+    problem(req, res, 400);
     return;
   }
   for (const value of Object.values(req.params)) {
-    if (typeof value === "string" && value.length > 256) {
-      res.status(400).json({ error: "Request parameters exceed the permitted limits.", correlationId: res.locals.correlationId });
+    if (typeof value === "string" && value.length > serverConfig.maxParameterLength) {
+      problem(req, res, 400);
       return;
     }
   }

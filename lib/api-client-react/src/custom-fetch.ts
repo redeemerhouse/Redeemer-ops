@@ -144,31 +144,48 @@ function getStringField(value: unknown, key: string): string | undefined {
   return trimmed === "" ? undefined : trimmed;
 }
 
-function truncate(text: string, maxLength = 300): string {
-  return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
+const safeErrorMessages: Record<number, string> = {
+  400: "The request could not be processed.",
+  401: "Authentication is required.",
+  403: "You are not allowed to perform this action.",
+  404: "The requested resource was not found.",
+  408: "The request timed out.",
+  409: "The request conflicts with the current record.",
+  413: "The request is too large.",
+  429: "Too many requests. Please try again later.",
+  500: "The service could not complete the request.",
+  503: "The service is temporarily unavailable.",
+};
+
+function safeUrl(value: string): string {
+  try {
+    const url = new URL(value, typeof location === "undefined" ? "http://localhost" : location.origin);
+    return `${url.origin}${url.pathname}`;
+  } catch {
+    return value.split(/[?#]/, 1)[0] || "/";
+  }
+}
+
+function correlationId(response: Response, data: unknown): string | undefined {
+  const header = response.headers.get("x-correlation-id")?.trim();
+  const candidate = header || getStringField(data, "correlationId");
+  return candidate && /^[a-zA-Z0-9._:-]{1,128}$/.test(candidate)
+    ? candidate
+    : undefined;
 }
 
 function buildErrorMessage(response: Response, data: unknown): string {
-  const prefix = `HTTP ${response.status} ${response.statusText}`;
+  const statusMessage = safeErrorMessages[response.status] ?? "The request could not be completed.";
+  const id = correlationId(response, data);
+  return id ? `${statusMessage} Reference: ${id}` : statusMessage;
+}
 
-  if (typeof data === "string") {
-    const text = data.trim();
-    return text ? `${prefix}: ${truncate(text)}` : prefix;
-  }
-
-  const title = getStringField(data, "title");
-  const detail = getStringField(data, "detail");
-  const message =
-    getStringField(data, "message") ??
-    getStringField(data, "error_description") ??
-    getStringField(data, "error");
-
-  if (title && detail) return `${prefix}: ${title} — ${detail}`;
-  if (detail) return `${prefix}: ${detail}`;
-  if (message) return `${prefix}: ${message}`;
-  if (title) return `${prefix}: ${title}`;
-
-  return prefix;
+function safeErrorData(response: Response, data: unknown): { error: string; correlationId?: string } {
+  const id = correlationId(response, data);
+  return {
+    error: safeErrorMessages[response.status] ?? "The request could not be completed.",
+    ...(id ? { correlationId: id } : {}),
+  };
 }
 
 export class ApiError<T = unknown> extends Error {
@@ -190,13 +207,15 @@ export class ApiError<T = unknown> extends Error {
     Object.setPrototypeOf(this, new.target.prototype);
 
     this.status = response.status;
-    this.statusText = response.statusText;
-    this.data = data;
+    this.statusText = safeErrorMessages[response.status] ?? "Request failed.";
+    this.data = safeErrorData(response, data) as T;
     this.headers = response.headers;
     this.response = response;
     this.method = requestInfo.method;
-    this.url = response.url || requestInfo.url;
+    this.url = safeUrl(response.url || requestInfo.url);
+    this.correlationId = correlationId(response, data);
   }
+  readonly correlationId?: string;
 }
 
 export class ResponseParseError extends Error {
@@ -207,29 +226,24 @@ export class ResponseParseError extends Error {
   readonly response: Response;
   readonly method: string;
   readonly url: string;
-  readonly rawBody: string;
-  readonly cause: unknown;
+  readonly correlationId?: string;
 
   constructor(
     response: Response,
-    rawBody: string,
-    cause: unknown,
     requestInfo: { method: string; url: string },
   ) {
     super(
-      `Failed to parse response from ${requestInfo.method} ${response.url || requestInfo.url} ` +
-        `(${response.status} ${response.statusText}) as JSON`,
+      "The service returned an invalid response.",
     );
     Object.setPrototypeOf(this, new.target.prototype);
 
     this.status = response.status;
-    this.statusText = response.statusText;
+    this.statusText = "The service returned an invalid response.";
     this.headers = response.headers;
     this.response = response;
     this.method = requestInfo.method;
-    this.url = response.url || requestInfo.url;
-    this.rawBody = rawBody;
-    this.cause = cause;
+    this.url = safeUrl(response.url || requestInfo.url);
+    this.correlationId = response.headers.get("x-correlation-id")?.trim() || undefined;
   }
 }
 
@@ -246,8 +260,8 @@ async function parseJsonBody(
 
   try {
     return JSON.parse(normalized);
-  } catch (cause) {
-    throw new ResponseParseError(response, raw, cause, requestInfo);
+  } catch {
+    throw new ResponseParseError(response, requestInfo);
   }
 }
 
@@ -260,7 +274,7 @@ async function parseErrorBody(response: Response, method: string): Promise<unkno
 
   // Fall back to text when blob() is unavailable (e.g. some React Native builds).
   if (mediaType && !isJsonMediaType(mediaType) && !isTextMediaType(mediaType)) {
-    return typeof response.blob === "function" ? response.blob() : response.text();
+    return null;
   }
 
   const raw = await response.text();
@@ -275,11 +289,11 @@ async function parseErrorBody(response: Response, method: string): Promise<unkno
     try {
       return JSON.parse(normalized);
     } catch {
-      return raw;
+      return null;
     }
   }
 
-  return raw;
+  return null;
 }
 
 function inferResponseType(response: Response): "json" | "text" | "blob" {

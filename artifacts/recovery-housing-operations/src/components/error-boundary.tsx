@@ -25,14 +25,7 @@ function toError(value: unknown): Error {
   if (value instanceof Error) {
     return value;
   }
-  if (typeof value === 'string') {
-    return new Error(value);
-  }
-  try {
-    return new Error(JSON.stringify(value));
-  } catch {
-    return new Error(String(value));
-  }
+  return new Error(typeof value === 'string' ? value : 'The application encountered an error.');
 }
 
 function DefaultFallback({ error, resetError }: ErrorFallbackProps) {
@@ -75,11 +68,9 @@ export class ErrorBoundary extends Component<
   }
 
   componentDidCatch(error: unknown, info: ErrorInfo): void {
-    console.error(
-      'ErrorBoundary caught an error:',
-      toError(error),
-      info.componentStack,
-    );
+    void error;
+    void info;
+    console.error('UI error captured');
   }
 
   componentDidUpdate(prevProps: ErrorBoundaryProps): void {

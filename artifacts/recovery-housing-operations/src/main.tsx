@@ -7,8 +7,8 @@ import './index.css';
 
 createRoot(document.getElementById('root')!, {
   // Keeps caught errors off reportError(), which would raise the dev overlay.
-  onCaughtError: (error, errorInfo) => {
-    console.error(error, errorInfo.componentStack);
+  onCaughtError: () => {
+    console.error('UI error captured');
   },
 }).render(
   <ErrorBoundary>

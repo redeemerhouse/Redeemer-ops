@@ -10,6 +10,7 @@
     "test:rate-limit": "node --experimental-strip-types --test test/security-rate-limit.test.ts",
     "test:reports": "node --test test/report-exports.test.mjs",
     "test:retention": "node --experimental-strip-types --test test/retention-policy.test.ts",
+    "test:security": "node --test test/security-controls.test.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

@@ -8,7 +8,33 @@ export const logger = pino({
     "req.headers.authorization",
     "req.headers.cookie",
     "res.headers['set-cookie']",
+    "req.headers['x-actor']",
+    "req.headers['x-user-role']",
+    "req.headers['x-api-key']",
+    "req.body",
+    "req.query",
+    "req.params",
+    "body",
+    "query",
+    "params",
+    "password",
+    "token",
+    "accessToken",
+    "refreshToken",
+    "secret",
+    "amount",
+    "payment",
+    "notes",
+    "email",
+    "phone",
   ],
+  serializers: {
+    err(error: unknown) {
+      return {
+        errorType: error instanceof Error ? error.name : typeof error,
+      };
+    },
+  },
   ...(isProduction
     ? {}
     : {

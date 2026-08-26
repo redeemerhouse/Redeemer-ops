@@ -27,6 +27,8 @@ export const serverConfig = {
   isProduction,
   bodyLimit: process.env.API_BODY_LIMIT ?? "1mb",
   maxParameters: Number(process.env.API_PARAMETER_LIMIT ?? 100),
+  maxQueryBytes: Number(process.env.API_QUERY_LIMIT_BYTES ?? 8_192),
+  maxParameterLength: Number(process.env.API_PARAMETER_LENGTH_LIMIT ?? 256),
   maxResponseBytes: Number(process.env.API_RESPONSE_LIMIT_BYTES ?? 2_000_000),
   requestTimeoutMs: Number(process.env.API_REQUEST_TIMEOUT_MS ?? 30_000),
   rateWindowMs: Number(process.env.API_RATE_WINDOW_MS ?? 60_000),
@@ -38,7 +40,7 @@ export const serverConfig = {
 };
 
 for (const [name, value] of Object.entries(serverConfig)) {
-  if (typeof value === "number" && (!Number.isFinite(value) || value <= 0)) {
+  if (typeof value === "number" && (!Number.isInteger(value) || value <= 0)) {
     throw new Error(`${name} must be a positive number.`);
   }
 }
