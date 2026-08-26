@@ -1,4 +1,13 @@
 const isProduction = process.env.NODE_ENV === "production";
+const configuredRateLimitStore = process.env.API_RATE_LIMIT_STORE ?? (isProduction ? "postgres" : "memory");
+
+if (configuredRateLimitStore !== "memory" && configuredRateLimitStore !== "postgres") {
+  throw new Error("API_RATE_LIMIT_STORE must be either memory or postgres.");
+}
+
+if (isProduction && configuredRateLimitStore !== "postgres") {
+  throw new Error("API_RATE_LIMIT_STORE=postgres is required in production.");
+}
 
 function listFromEnv(name: string): string[] {
   return (process.env[name] ?? "")
@@ -24,6 +33,8 @@ export const serverConfig = {
   healthRateLimit: Number(process.env.API_HEALTH_RATE_LIMIT ?? 60),
   readRateLimit: Number(process.env.API_READ_RATE_LIMIT ?? 120),
   mutationRateLimit: Number(process.env.API_MUTATION_RATE_LIMIT ?? 30),
+  rateLimitStore: configuredRateLimitStore as "memory" | "postgres",
+  rateLimitStoreRetryMs: Number(process.env.API_RATE_LIMIT_STORE_RETRY_MS ?? 5_000),
 };
 
 for (const [name, value] of Object.entries(serverConfig)) {
