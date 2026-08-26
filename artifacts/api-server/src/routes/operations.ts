@@ -1,7 +1,7 @@
 import { Router, type IRouter, type Request } from "express";
 import { and, asc, desc, eq, ilike, or, sql } from "drizzle-orm";
+import { db, residentsTable, paymentsTable, housesTable, applicationsTable, documentsTable, operationsTable, auditEventsTable } from "@workspace/db";
 import { GetDashboardResponse, CreateResidentBody, UpdateResidentBody, CreatePaymentBody, ListActivityResponse } from "@workspace/api-zod";
-import { db, residentsTable, paymentsTable, housesTable, applicationsTable, documentsTable, documentHistoryTable, operationsTable, auditEventsTable, insertDocumentSchema } from "@workspace/db";
 
 const router: IRouter = Router();
 const today = () => new Date().toISOString().slice(0, 10);
@@ -94,28 +94,24 @@ router.get("/activity", async (_req, res): Promise<void> => {
 
 router.get("/residents", async (req, res): Promise<void> => {
   const search = typeof req.query.search === "string" ? req.query.search : "";
-  const status = parsed.data.paidDate ? "paid" : (new Date(parsed.data.dueDate).getTime() + 5 * 86400000 < Date.now() ? "overdue" : "due");
-  const filters = role === "resident"
-    ? and(eq(documentsTable.visibility, "resident"), Number.isInteger(residentId) ? eq(documentsTable.residentId, residentId) : sql`false`)
-    : undefined;
+  const status = typeof req.query.status === "string" ? req.query.status : "all";
+  const filters = [];
   if (status !== "all") filters.push(eq(residentsTable.status, status));
   if (search) filters.push(or(ilike(residentsTable.name, `%${search}%`), ilike(residentsTable.email, `%${search}%`), ilike(residentsTable.home, `%${search}%`)));
-  const rows = await reportRows(reportType);
-  res.json(rows.map(({ payment, residentName }) => ({ ...payment, residentName, amount: Number(payment.amount) })));
+  const rows = await db.select().from(residentsTable).where(filters.length ? and(...filters) : undefined).orderBy(asc(residentsTable.name));
+  res.json(rows.map(asResident));
 });
 
-router.post("/payments", async (req, res): Promise<void> => {
-  const parsed = insertDocumentSchema.safeParse({ ...req.body, status: "uploaded" });
-  if (!parsed.success || !parsed.data.objectPath || (parsed.data.visibility === "resident" && !parsed.data.residentId)) { res.status(400).json({ error: "Document metadata, object path, and a resident are required for shared documents" }); return; }
-router.post("/operations", async (req, res): Promise<void> => { const [created] = await db.insert(operationsTable).values(req.body).returning(); await audit("Operation logged", "operation", created.id); res.status(201).json(created); });
-  await db.insert(documentHistoryTable).values({ documentId: created.id, action: "uploaded", actor: req.header("x-user-id") ?? "staff", objectPath: created.objectPath });
-  await audit("Document uploaded", "document", created.id, { category: created.category });
-  res.status(201).json(created);
+router.post("/residents", async (req, res): Promise<void> => {
+  const parsed = CreateResidentBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  const [created] = await db.insert(residentsTable).values({ ...parsed.data, nextPaymentDate: parsed.data.moveInDate }).returning();
+  await audit("Resident added", "resident", created.id);
+  res.status(201).json(asResident(created));
 });
-router.get("/documents/:id/history", async (req, res): Promise<void> => {
+
+router.get("/residents/:id", async (req, res): Promise<void> => {
   const id = Number(req.params.id);
-
-  const [current] = await db.select().from(documentsTable).where(eq(documentsTable.id, id));
   const [row] = await db.select().from(residentsTable).where(eq(residentsTable.id, id));
   if (!row) { res.status(404).json({ error: "Resident not found" }); return; }
   res.json(asResident(row));
@@ -123,35 +119,29 @@ router.get("/documents/:id/history", async (req, res): Promise<void> => {
 
 router.patch("/residents/:id", async (req, res): Promise<void> => {
   const id = Number(req.params.id);
-
-  const [current] = await db.select().from(documentsTable).where(eq(documentsTable.id, id));
-  const parsed = insertDocumentSchema.safeParse({ ...req.body, status: "uploaded" });
+  const parsed = UpdateResidentBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-  const [updated] = await db.update(documentsTable).set({ ...changes, sharedAt: nextVisibility === "resident" && current.visibility !== "resident" ? new Date() : current.sharedAt, updatedAt: new Date() }).where(eq(documentsTable.id, id)).returning();
-
-  const role = req.query.role === "resident" ? "resident" : "staff";
-
-  const replacement = Boolean(changes.objectPath);
+  const [updated] = await db.update(residentsTable).set({ ...parsed.data, updatedAt: new Date() }).where(eq(residentsTable.id, id)).returning();
   if (!updated) { res.status(404).json({ error: "Resident not found" }); return; }
   await audit("Resident updated", "resident", id);
   res.json(asResident(updated));
 });
 
 router.get("/payments", async (req, res): Promise<void> => {
-  const residentId = Number(req.query.residentId);
-  const status = parsed.data.paidDate ? "paid" : (new Date(parsed.data.dueDate).getTime() + 5 * 86400000 < Date.now() ? "overdue" : "due");
+  const residentId = req.query.residentId ? Number(req.query.residentId) : undefined;
+  const status = typeof req.query.status === "string" ? req.query.status : "all";
   const conditions = [];
   if (residentId) conditions.push(eq(paymentsTable.residentId, residentId));
   if (status !== "all") conditions.push(eq(paymentsTable.status, status));
-  const rows = await reportRows(reportType);
+  const rows = await db.select({ payment: paymentsTable, residentName: residentsTable.name }).from(paymentsTable).innerJoin(residentsTable, eq(paymentsTable.residentId, residentsTable.id)).where(conditions.length ? and(...conditions) : undefined).orderBy(desc(paymentsTable.dueDate));
   res.json(rows.map(({ payment, residentName }) => ({ ...payment, residentName, amount: Number(payment.amount) })));
 });
 
 router.post("/payments", async (req, res): Promise<void> => {
-  const parsed = insertDocumentSchema.safeParse({ ...req.body, status: "uploaded" });
+  const parsed = CreatePaymentBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const status = parsed.data.paidDate ? "paid" : (new Date(parsed.data.dueDate).getTime() + 5 * 86400000 < Date.now() ? "overdue" : "due");
-router.post("/operations", async (req, res): Promise<void> => { const [created] = await db.insert(operationsTable).values(req.body).returning(); await audit("Operation logged", "operation", created.id); res.status(201).json(created); });
+  const [created] = await db.insert(paymentsTable).values({ residentId: parsed.data.residentId, amount: String(parsed.data.amount), dueDate: parsed.data.dueDate, paidDate: parsed.data.paidDate, method: parsed.data.method, status } as any).returning();
   const [resident] = await db.select({ name: residentsTable.name }).from(residentsTable).where(eq(residentsTable.id, created.residentId));
   await audit("Payment recorded", "payment", created.id, { amount: parsed.data.amount, method: parsed.data.method });
   res.status(201).json({ ...created, residentName: resident?.name ?? "Unknown resident", amount: Number(created.amount) });
@@ -165,17 +155,20 @@ router.get("/houses", async (_req, res): Promise<void> => {
 
 router.get("/applications", async (_req, res): Promise<void> => { res.json(await db.select().from(applicationsTable).orderBy(desc(applicationsTable.createdAt))); });
 router.post("/applications", async (req, res): Promise<void> => {
-router.post("/operations", async (req, res): Promise<void> => { const [created] = await db.insert(operationsTable).values(req.body).returning(); await audit("Operation logged", "operation", created.id); res.status(201).json(created); });
+  const [created] = await db.insert(applicationsTable).values(req.body).returning();
   await audit("Application submitted", "application", created.id);
   res.status(201).json(created);
 });
 router.patch("/applications/:id", async (req, res): Promise<void> => {
-  const [updated] = await db.update(documentsTable).set({ ...changes, sharedAt: nextVisibility === "resident" && current.visibility !== "resident" ? new Date() : current.sharedAt, updatedAt: new Date() }).where(eq(documentsTable.id, id)).returning();
+  const [updated] = await db.update(applicationsTable).set({ ...req.body, updatedAt: new Date() }).where(eq(applicationsTable.id, Number(req.params.id))).returning();
+  if (!updated) { res.status(404).json({ error: "Application not found" }); return; }
+  await audit(`Application ${req.body.status ?? "updated"}`, "application", updated.id, req.body.exceptionReason);
+  res.json(updated);
+});
 
-  const role = req.query.role === "resident" ? "resident" : "staff";
-
-  const replacement = Boolean(changes.objectPath);
-router.post("/operations", async (req, res): Promise<void> => { const [created] = await db.insert(operationsTable).values(req.body).returning(); await audit("Operation logged", "operation", created.id); res.status(201).json(created); });
+router.get("/documents", async (_req, res): Promise<void> => { res.json(await db.select().from(documentsTable).orderBy(desc(documentsTable.createdAt))); });
+router.post("/documents", async (req, res): Promise<void> => { const [created] = await db.insert(documentsTable).values(req.body).returning(); await audit("Document added", "document", created.id); res.status(201).json(created); });
+router.get("/operations", async (_req, res): Promise<void> => { res.json(await db.select().from(operationsTable).orderBy(asc(operationsTable.scheduledDate), desc(operationsTable.createdAt))); });
 router.post("/operations", async (req, res): Promise<void> => { const [created] = await db.insert(operationsTable).values(req.body).returning(); await audit("Operation logged", "operation", created.id); res.status(201).json(created); });
 router.get("/reports/summary", async (_req, res): Promise<void> => {
   const [residents, payments, applications, documents, events] = await Promise.all([db.select().from(residentsTable), db.select().from(paymentsTable), db.select().from(applicationsTable), db.select().from(documentsTable), db.select().from(auditEventsTable)]);
@@ -197,9 +190,3 @@ router.get("/reports/:reportType/export", async (req, res): Promise<void> => {
 });
 
 export default router;
-
-  const changes = Object.fromEntries(allowed.filter((key) => typeof req.body[key] === "string").map((key) => [key, req.body[key]]));
-
-  const allowed = ["title", "category", "visibility", "status", "objectPath", "fileName", "contentType", "fileSize"] as const;
-
-  const nextVisibility = changes.visibility as string | undefined;
