@@ -71,19 +71,7 @@ const isInteger = (value: number) => Number.isInteger(value)
 const isCalendarDate = (value: unknown) => 
 {
 
-  if (typeof value !== "string" || !/^\d
-{
-4
-}
--\d
-{
-2
-}
--\d
-{
-2
-}
-$/.test(value)) return false
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
 ;
 
   const [year, month, day] = value.split("-").map(Number)
@@ -127,11 +115,7 @@ const safeActor = (req: Request): string =>
   const actor = req.res?.locals.actorId ?? req.res?.locals.principal?.sub
 ;
 
-  return typeof actor === "string" && /^[a-zA-Z0-9._:@-]
-{
-1,128
-}
-$/.test(actor)
+  return typeof actor === "string" && /^[a-zA-Z0-9._:@-]{1,128}$/.test(actor)
     ? actor
     : "unattributed"
 ;
@@ -188,9 +172,7 @@ const csvCell = (value: unknown) =>
   const text = value == null ? "" : String(value)
 ;
 
-  return /[",\n\r]/.test(text) ? `"$
-{
-text.replace(/"/g, '""')}"` : text;
+  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 };
 const toCsv = (rows: ReportRow[]) => {
   if (!rows.length) return "";
@@ -201,69 +183,21 @@ const toCsv = (rows: ReportRow[]) => {
 // A deliberately small, dependency-free PDF writer keeps exports available in the API
 // service without making report generation depend on a browser or binary package.
 const toPdf = (title: string, rows: ReportRow[]) => {
-  const lines = [title, `Generated $
-{
-new Date().toISOString()
-}
-`, "", ...rows.map((row) => Object.entries(row).map(([key, value]) => `$
-{
-key
-}
-: $
-{
-value ?? ""
-}
-`).join(" | "))];
+  const lines = [title, `Generated ${new Date().toISOString()}`, "", ...rows.map((row) => Object.entries(row).map(([key, value]) => `${key}: ${value ?? ""}`).join(" | "))];
   const escapePdf = (line: string) => line.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)").slice(0, 115);
-  const stream = ["BT", "/F1 9 Tf", "45 770 Td", ...lines.flatMap((line, index) => [index ? "0 -13 Td" : "", `($
-{
-escapePdf(line)
-}
-) Tj`]), "ET"].filter(Boolean).join("\n");
+  const stream = ["BT", "/F1 9 Tf", "45 770 Td", ...lines.flatMap((line, index) => [index ? "0 -13 Td" : "", `(${escapePdf(line)}) Tj`]), "ET"].filter(Boolean).join("\n");
   const objects = [
     "<< /Type /Catalog /Pages 2 0 R >>",
     "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
     "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-    `<< /Length $
-{
-stream.length
-}
- >>\nstream\n$
-{
-stream
-}
-\nendstream`,
+    `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
   ];
   let pdf = "%PDF-1.4\n";
   const offsets = [0];
-  objects.forEach((object, index) => { offsets[index + 1] = pdf.length; pdf += `$
-{
-index + 1
-}
- 0 obj\n$
-{
-object
-}
-\nendobj\n`; });
+  objects.forEach((object, index) => { offsets[index + 1] = pdf.length; pdf += `${index + 1} 0 obj\n${object}\nendobj\n`; });
   const xref = pdf.length;
-  pdf += `xref\n0 $
-{
-objects.length + 1
-}
-\n0000000000 65535 f \n$
-{
-offsets.slice(1).map((offset) => `${String(offset).padStart(10, "0")} 00000 n `).join("\n")
-}
-\ntrailer\n<< /Size $
-{
-objects.length + 1
-}
- /Root 1 0 R >>\nstartxref\n$
-{
-xref
-}
-\n%%EOF`;
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.slice(1).map((offset) => `${String(offset).padStart(10, "0")} 00000 n `).join("\n")}\ntrailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
   return Buffer.from(pdf, "binary");
 };
 const reportRows = async (type: ReportType): Promise<ReportRow[]> => {
@@ -331,15 +265,7 @@ router.get("/activity", async (_req, res): Promise<void> => {
       (event.entityType === "payment" && event.entityId !== null && visiblePaymentIds.has(event.entityId)));
   }
   events = events.slice(0, 12);
-  const activities = events.map((e) => ({ id: e.id, type: e.entityType === "payment" ? "payment" : e.entityType === "resident" ? "resident" : "note", title: e.action, detail: `$
-{
-e.entityType
-}
-$
-{
-e.entityId ? ` #${e.entityId}` : ""
-}
-`, timestamp: e.createdAt.toISOString() }));
+  const activities = events.map((e) => ({ id: e.id, type: e.entityType === "payment" ? "payment" : e.entityType === "resident" ? "resident" : "note", title: e.action, detail: `${e.entityType}${e.entityId ? ` #${e.entityId}` : ""}`, timestamp: e.createdAt.toISOString() }));
   res.json(ListActivityResponse.parse(activities));
   await audit(_req, "Activity viewed", "audit");
 });
