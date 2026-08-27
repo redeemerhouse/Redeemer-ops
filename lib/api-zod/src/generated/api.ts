@@ -20,13 +20,53 @@ export const HealthCheckResponse = zod.object({
 /**
  * @summary Get operations dashboard
  */
+export const getDashboardQueryMonthRegExp = new RegExp('^[0-9]{4}-(0[1-9]|1[0-2])$');
+
+
+export const GetDashboardQueryParams = zod.object({
+  "month": zod.coerce.string().regex(getDashboardQueryMonthRegExp).optional().describe('Calendar month used for monthly totals, in YYYY-MM format. Defaults to the current UTC month.')
+})
+
 export const GetDashboardResponse = zod.object({
   "activeResidents": zod.number(),
   "bedsAvailable": zod.number(),
   "paymentsDue": zod.number(),
   "paymentsCollected": zod.number(),
   "occupancyRate": zod.number(),
-  "statusCounts": zod.record(zod.string(), zod.number()).optional()
+  "statusCounts": zod.record(zod.string(), zod.number()).optional(),
+  "period": zod.object({
+  "month": zod.string(),
+  "startsOn": zod.coerce.date(),
+  "endsOn": zod.coerce.date()
+}),
+  "capacity": zod.object({
+  "totalBeds": zod.number(),
+  "occupiedBeds": zod.number(),
+  "bedsAvailable": zod.number(),
+  "occupancyRate": zod.number()
+}),
+  "income": zod.object({
+  "rentCollected": zod.number(),
+  "otherIncome": zod.number(),
+  "totalReceived": zod.number()
+}),
+  "expenses": zod.object({
+  "total": zod.number(),
+  "categories": zod.array(zod.object({
+  "category": zod.enum(['housing', 'utilities', 'food', 'transportation', 'programming', 'payroll', 'other']),
+  "amount": zod.number()
+}))
+}),
+  "meetings": zod.object({
+  "meetingsLogged": zod.number(),
+  "womenAttended": zod.number(),
+  "womenEligible": zod.number(),
+  "attendanceRate": zod.number().nullable()
+}),
+  "progress": zod.object({
+  "newMoveIns": zod.number(),
+  "completedOperations": zod.number()
+})
 })
 
 
@@ -247,6 +287,270 @@ export const ListActivityResponseItem = zod.object({
   "timestamp": zod.string()
 })
 export const ListActivityResponse = zod.array(ListActivityResponseItem)
+
+
+/**
+ * @summary List houses available to the signed-in user
+ */
+export const listHousesResponseIdMultipleOf = 1;
+
+export const listHousesResponseFamilyCapacityMin = 0;
+export const listHousesResponseFamilyCapacityMultipleOf = 1;
+
+export const listHousesResponseIndividualWeeklyMin = 0;
+
+export const listHousesResponseFamilyWeeklyMin = 0;
+
+export const listHousesResponseIndividualMonthlyMin = 0;
+
+export const listHousesResponseFamilyMonthlyMin = 0;
+
+export const listHousesResponseOccupancyMin = 0;
+export const listHousesResponseOccupancyMultipleOf = 1;
+
+
+
+export const ListHousesResponseItem = zod.object({
+  "id": zod.number().min(1).multipleOf(listHousesResponseIdMultipleOf),
+  "name": zod.string(),
+  "address": zod.string(),
+  "managerName": zod.string().nullable(),
+  "familyCapacity": zod.number().min(listHousesResponseFamilyCapacityMin).multipleOf(listHousesResponseFamilyCapacityMultipleOf),
+  "individualWeekly": zod.number().min(listHousesResponseIndividualWeeklyMin),
+  "familyWeekly": zod.number().min(listHousesResponseFamilyWeeklyMin),
+  "individualMonthly": zod.number().min(listHousesResponseIndividualMonthlyMin),
+  "familyMonthly": zod.number().min(listHousesResponseFamilyMonthlyMin),
+  "active": zod.boolean(),
+  "occupancy": zod.number().min(listHousesResponseOccupancyMin).multipleOf(listHousesResponseOccupancyMultipleOf)
+})
+export const ListHousesResponse = zod.array(ListHousesResponseItem)
+
+
+/**
+ * @summary List expense records
+ */
+export const listExpensesQueryMonthRegExp = new RegExp('^[0-9]{4}-(0[1-9]|1[0-2])$');
+
+
+export const ListExpensesQueryParams = zod.object({
+  "month": zod.coerce.string().regex(listExpensesQueryMonthRegExp).optional().describe('Calendar month used for monthly totals, in YYYY-MM format. Defaults to the current UTC month.')
+})
+
+export const listExpensesResponseIdMultipleOf = 1;
+
+export const listExpensesResponseHouseIdMultipleOf = 1;
+
+export const listExpensesResponseDescriptionMax = 1000;
+
+
+
+export const ListExpensesResponseItem = zod.object({
+  "id": zod.number().min(1).multipleOf(listExpensesResponseIdMultipleOf),
+  "amount": zod.number(),
+  "expenseDate": zod.coerce.date(),
+  "category": zod.enum(['housing', 'utilities', 'food', 'transportation', 'programming', 'payroll', 'other']),
+  "houseId": zod.number().min(1).multipleOf(listExpensesResponseHouseIdMultipleOf).nullable(),
+  "description": zod.string().max(listExpensesResponseDescriptionMax).nullable(),
+  "createdAt": zod.coerce.date()
+})
+export const ListExpensesResponse = zod.array(ListExpensesResponseItem)
+
+
+/**
+ * @summary Record an expense
+ */
+export const createExpenseBodyAmountMax = 11;
+
+
+export const createExpenseBodyAmountRegExp = new RegExp('^(0|[1-9][0-9]{0,7})(\\.[0-9]{1,2})?$');
+export const createExpenseBodyHouseIdMultipleOf = 1;
+
+export const createExpenseBodyDescriptionMax = 1000;
+
+
+
+export const CreateExpenseBody = zod.object({
+  "amount": zod.string().min(1).max(createExpenseBodyAmountMax).regex(createExpenseBodyAmountRegExp),
+  "expenseDate": zod.coerce.date(),
+  "category": zod.enum(['housing', 'utilities', 'food', 'transportation', 'programming', 'payroll', 'other']),
+  "houseId": zod.number().min(1).multipleOf(createExpenseBodyHouseIdMultipleOf).optional(),
+  "description": zod.string().max(createExpenseBodyDescriptionMax).optional()
+})
+
+export const createExpenseResponseIdMultipleOf = 1;
+
+export const createExpenseResponseHouseIdMultipleOf = 1;
+
+export const createExpenseResponseDescriptionMax = 1000;
+
+
+
+export const CreateExpenseResponse = zod.object({
+  "id": zod.number().min(1).multipleOf(createExpenseResponseIdMultipleOf),
+  "amount": zod.number(),
+  "expenseDate": zod.coerce.date(),
+  "category": zod.enum(['housing', 'utilities', 'food', 'transportation', 'programming', 'payroll', 'other']),
+  "houseId": zod.number().min(1).multipleOf(createExpenseResponseHouseIdMultipleOf).nullable(),
+  "description": zod.string().max(createExpenseResponseDescriptionMax).nullable(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary List categorized non-rent income
+ */
+export const listIncomeQueryMonthRegExp = new RegExp('^[0-9]{4}-(0[1-9]|1[0-2])$');
+
+
+export const ListIncomeQueryParams = zod.object({
+  "month": zod.coerce.string().regex(listIncomeQueryMonthRegExp).optional().describe('Calendar month used for monthly totals, in YYYY-MM format. Defaults to the current UTC month.')
+})
+
+export const listIncomeResponseIdMultipleOf = 1;
+
+export const listIncomeResponseHouseIdMultipleOf = 1;
+
+export const listIncomeResponseDescriptionMax = 1000;
+
+
+
+export const ListIncomeResponseItem = zod.object({
+  "id": zod.number().min(1).multipleOf(listIncomeResponseIdMultipleOf),
+  "amount": zod.number(),
+  "receivedDate": zod.coerce.date(),
+  "category": zod.enum(['admission_fee', 'program_fee', 'grant', 'other']),
+  "houseId": zod.number().min(1).multipleOf(listIncomeResponseHouseIdMultipleOf).nullable(),
+  "description": zod.string().max(listIncomeResponseDescriptionMax).nullable(),
+  "createdAt": zod.coerce.date()
+})
+export const ListIncomeResponse = zod.array(ListIncomeResponseItem)
+
+
+/**
+ * @summary Record categorized non-rent income
+ */
+export const createIncomeBodyAmountMax = 11;
+
+
+export const createIncomeBodyAmountRegExp = new RegExp('^(0|[1-9][0-9]{0,7})(\\.[0-9]{1,2})?$');
+export const createIncomeBodyHouseIdMultipleOf = 1;
+
+export const createIncomeBodyDescriptionMax = 1000;
+
+
+
+export const CreateIncomeBody = zod.object({
+  "amount": zod.string().min(1).max(createIncomeBodyAmountMax).regex(createIncomeBodyAmountRegExp),
+  "receivedDate": zod.coerce.date(),
+  "category": zod.enum(['admission_fee', 'program_fee', 'grant', 'other']),
+  "houseId": zod.number().min(1).multipleOf(createIncomeBodyHouseIdMultipleOf).optional(),
+  "description": zod.string().max(createIncomeBodyDescriptionMax).optional()
+})
+
+export const createIncomeResponseIdMultipleOf = 1;
+
+export const createIncomeResponseHouseIdMultipleOf = 1;
+
+export const createIncomeResponseDescriptionMax = 1000;
+
+
+
+export const CreateIncomeResponse = zod.object({
+  "id": zod.number().min(1).multipleOf(createIncomeResponseIdMultipleOf),
+  "amount": zod.number(),
+  "receivedDate": zod.coerce.date(),
+  "category": zod.enum(['admission_fee', 'program_fee', 'grant', 'other']),
+  "houseId": zod.number().min(1).multipleOf(createIncomeResponseHouseIdMultipleOf).nullable(),
+  "description": zod.string().max(createIncomeResponseDescriptionMax).nullable(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary List aggregate meeting attendance records
+ */
+export const listMeetingAttendanceQueryMonthRegExp = new RegExp('^[0-9]{4}-(0[1-9]|1[0-2])$');
+
+
+export const ListMeetingAttendanceQueryParams = zod.object({
+  "month": zod.coerce.string().regex(listMeetingAttendanceQueryMonthRegExp).optional().describe('Calendar month used for monthly totals, in YYYY-MM format. Defaults to the current UTC month.')
+})
+
+export const listMeetingAttendanceResponseIdMultipleOf = 1;
+
+export const listMeetingAttendanceResponseHouseIdMultipleOf = 1;
+
+export const listMeetingAttendanceResponseWomenAttendedMin = 0;
+export const listMeetingAttendanceResponseWomenAttendedMultipleOf = 1;
+
+export const listMeetingAttendanceResponseWomenEligibleMin = 0;
+export const listMeetingAttendanceResponseWomenEligibleMultipleOf = 1;
+
+export const listMeetingAttendanceResponseNotesMax = 1000;
+
+
+
+export const ListMeetingAttendanceResponseItem = zod.object({
+  "id": zod.number().min(1).multipleOf(listMeetingAttendanceResponseIdMultipleOf),
+  "meetingType": zod.enum(['recovery_meeting', 'house_meeting', 'life_skills', 'case_management', 'other']),
+  "meetingDate": zod.coerce.date(),
+  "houseId": zod.number().min(1).multipleOf(listMeetingAttendanceResponseHouseIdMultipleOf).nullable(),
+  "womenAttended": zod.number().min(listMeetingAttendanceResponseWomenAttendedMin).multipleOf(listMeetingAttendanceResponseWomenAttendedMultipleOf),
+  "womenEligible": zod.number().min(listMeetingAttendanceResponseWomenEligibleMin).multipleOf(listMeetingAttendanceResponseWomenEligibleMultipleOf),
+  "notes": zod.string().max(listMeetingAttendanceResponseNotesMax).nullable(),
+  "createdAt": zod.coerce.date()
+})
+export const ListMeetingAttendanceResponse = zod.array(ListMeetingAttendanceResponseItem)
+
+
+/**
+ * @summary Record aggregate meeting attendance
+ */
+export const createMeetingAttendanceBodyHouseIdMultipleOf = 1;
+
+export const createMeetingAttendanceBodyWomenAttendedMin = 0;
+export const createMeetingAttendanceBodyWomenAttendedMultipleOf = 1;
+
+export const createMeetingAttendanceBodyWomenEligibleMin = 0;
+export const createMeetingAttendanceBodyWomenEligibleMultipleOf = 1;
+
+export const createMeetingAttendanceBodyNotesMax = 1000;
+
+
+
+export const CreateMeetingAttendanceBody = zod.object({
+  "meetingType": zod.enum(['recovery_meeting', 'house_meeting', 'life_skills', 'case_management', 'other']),
+  "meetingDate": zod.coerce.date(),
+  "houseId": zod.number().min(1).multipleOf(createMeetingAttendanceBodyHouseIdMultipleOf).optional(),
+  "womenAttended": zod.number().min(createMeetingAttendanceBodyWomenAttendedMin).multipleOf(createMeetingAttendanceBodyWomenAttendedMultipleOf),
+  "womenEligible": zod.number().min(createMeetingAttendanceBodyWomenEligibleMin).multipleOf(createMeetingAttendanceBodyWomenEligibleMultipleOf),
+  "notes": zod.string().max(createMeetingAttendanceBodyNotesMax).optional()
+})
+
+export const createMeetingAttendanceResponseIdMultipleOf = 1;
+
+export const createMeetingAttendanceResponseHouseIdMultipleOf = 1;
+
+export const createMeetingAttendanceResponseWomenAttendedMin = 0;
+export const createMeetingAttendanceResponseWomenAttendedMultipleOf = 1;
+
+export const createMeetingAttendanceResponseWomenEligibleMin = 0;
+export const createMeetingAttendanceResponseWomenEligibleMultipleOf = 1;
+
+export const createMeetingAttendanceResponseNotesMax = 1000;
+
+
+
+export const CreateMeetingAttendanceResponse = zod.object({
+  "id": zod.number().min(1).multipleOf(createMeetingAttendanceResponseIdMultipleOf),
+  "meetingType": zod.enum(['recovery_meeting', 'house_meeting', 'life_skills', 'case_management', 'other']),
+  "meetingDate": zod.coerce.date(),
+  "houseId": zod.number().min(1).multipleOf(createMeetingAttendanceResponseHouseIdMultipleOf).nullable(),
+  "womenAttended": zod.number().min(createMeetingAttendanceResponseWomenAttendedMin).multipleOf(createMeetingAttendanceResponseWomenAttendedMultipleOf),
+  "womenEligible": zod.number().min(createMeetingAttendanceResponseWomenEligibleMin).multipleOf(createMeetingAttendanceResponseWomenEligibleMultipleOf),
+  "notes": zod.string().max(createMeetingAttendanceResponseNotesMax).nullable(),
+  "createdAt": zod.coerce.date()
+})
 
 
 /**

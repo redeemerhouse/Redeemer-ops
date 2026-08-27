@@ -7,14 +7,14 @@ import
 
 import 
 {
- and, asc, desc, eq, getTableColumns, ilike, inArray, or, sql 
+ and, asc, desc, eq, getTableColumns, gte, ilike, inArray, lt, or, sql 
 }
  from "drizzle-orm"
 ;
 
 import 
 {
- db, residentsTable, paymentsTable, housesTable, applicationsTable, documentsTable, documentHistoryTable, operationsTable, auditEventsTable, insertDocumentSchema 
+  db, residentsTable, paymentsTable, housesTable, applicationsTable, documentsTable, documentHistoryTable, operationsTable, auditEventsTable, insertDocumentSchema, expensesTable, incomeRecordsTable, meetingAttendanceTable
 }
  from "@workspace/db"
 ;
@@ -23,6 +23,7 @@ import
 {
 
   GetDashboardResponse,
+  GetDashboardQueryParams,
   CreateResidentBody,
   UpdateResidentBody,
   CreatePaymentBody,
@@ -32,6 +33,18 @@ import
   ListPaymentsQueryParams,
   ListPaymentsResponse,
   ListResidentsQueryParams,
+  ListExpensesQueryParams,
+  ListExpensesResponse,
+  CreateExpenseBody,
+  CreateExpenseResponse,
+  ListIncomeQueryParams,
+  ListIncomeResponse,
+  CreateIncomeBody,
+  CreateIncomeResponse,
+  ListMeetingAttendanceQueryParams,
+  ListMeetingAttendanceResponse,
+  CreateMeetingAttendanceBody,
+  CreateMeetingAttendanceResponse,
 }
  from "@workspace/api-zod"
 ;
@@ -88,6 +101,57 @@ const isCalendarDate = (value: unknown) =>
 
 const sqlDate = (value: Date) => value.toISOString().slice(0, 10)
 ;
+
+type MonthBounds = {
+  month: string;
+  startsOn: string;
+  endsOn: string;
+}
+
+const monthBounds = (month: string | undefined): MonthBounds | null => {
+  const selectedMonth = month ?? today().slice(0, 7);
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(selectedMonth)) return null;
+  const [year, monthNumber] = selectedMonth.split("-").map(Number);
+  return {
+    month: selectedMonth,
+    startsOn: `${selectedMonth}-01`,
+    endsOn: sqlDate(new Date(Date.UTC(year, monthNumber, 1))),
+  };
+};
+
+const isInMonth = (value: string | null, period: MonthBounds): boolean =>
+  Boolean(value && value >= period.startsOn && value < period.endsOn);
+
+const asExpense = (expense: typeof expensesTable.$inferSelect) => ({
+  id: expense.id,
+  amount: Number(expense.amount),
+  expenseDate: expense.expenseDate,
+  category: expense.category,
+  houseId: expense.houseId,
+  description: expense.description,
+  createdAt: expense.createdAt,
+});
+
+const asIncome = (income: typeof incomeRecordsTable.$inferSelect) => ({
+  id: income.id,
+  amount: Number(income.amount),
+  receivedDate: income.receivedDate,
+  category: income.category,
+  houseId: income.houseId,
+  description: income.description,
+  createdAt: income.createdAt,
+});
+
+const asMeetingAttendance = (meeting: typeof meetingAttendanceTable.$inferSelect) => ({
+  id: meeting.id,
+  meetingType: meeting.meetingType,
+  meetingDate: meeting.meetingDate,
+  houseId: meeting.houseId,
+  womenAttended: meeting.womenAttended,
+  womenEligible: meeting.womenEligible,
+  notes: meeting.notes,
+  createdAt: meeting.createdAt,
+});
 
 const asResident = (r: typeof residentsTable.$inferSelect, principal?: Principal) => (
 {
@@ -225,9 +289,13 @@ const reportRows = async (type: ReportType): Promise<ReportRow[]> => {
   return events.map((event) => ({ id: event.id, action: event.action, entityType: event.entityType, entityId: event.entityId, actor: event.actor, timestamp: event.createdAt.toISOString() }));
 };
 
-router.get("/dashboard", async (_req, res): Promise<void> => {
+router.get("/dashboard", async (req, res): Promise<void> => {
   const principal = getPrincipal(res);
-  if (!authorize(principal, "dashboard:read")) { problem(_req, res, 403); return; }
+  if (!authorize(principal, "dashboard:read")) { problem(req, res, 403); return; }
+  const parsedQuery = GetDashboardQueryParams.strict().safeParse(req.query);
+  if (!parsedQuery.success) { res.status(400).json({ error: "Invalid overview month." }); return; }
+  const period = monthBounds(parsedQuery.data.month);
+  if (!period) { res.status(400).json({ error: "Invalid overview month." }); return; }
   const residentFilter = !isAdministrator(principal) && principal.role === "house_manager"
     ? inArray(residentsTable.home, principal.houseNames)
     : undefined;
@@ -235,20 +303,64 @@ router.get("/dashboard", async (_req, res): Promise<void> => {
   const payments = isAdministrator(principal)
     ? await db.select(getTableColumns(paymentsTable)).from(paymentsTable).where(organizationScope)
     : (await db.select({ payment: paymentsTable }).from(paymentsTable).innerJoin(residentsTable, eq(paymentsTable.residentId, residentsTable.id)).where(residentFilter)).map(({ payment }) => payment);
-  const active = residents.filter((r) => r.status === "active");
   const houses = await db.select(getTableColumns(housesTable)).from(housesTable).where(
     principal.role === "house_manager" ? inArray(housesTable.name, principal.houseNames) : undefined,
   );
+  const scopedHouseIds = houses.map((house) => house.id);
+  const monthlyExpenses = isAdministrator(principal)
+    ? await db.select().from(expensesTable).where(and(gte(expensesTable.expenseDate, period.startsOn), lt(expensesTable.expenseDate, period.endsOn)))
+    : scopedHouseIds.length
+      ? await db.select().from(expensesTable).where(and(gte(expensesTable.expenseDate, period.startsOn), lt(expensesTable.expenseDate, period.endsOn), inArray(expensesTable.houseId, scopedHouseIds)))
+      : [];
+  const monthlyIncome = isAdministrator(principal)
+    ? await db.select().from(incomeRecordsTable).where(and(gte(incomeRecordsTable.receivedDate, period.startsOn), lt(incomeRecordsTable.receivedDate, period.endsOn)))
+    : scopedHouseIds.length
+      ? await db.select().from(incomeRecordsTable).where(and(gte(incomeRecordsTable.receivedDate, period.startsOn), lt(incomeRecordsTable.receivedDate, period.endsOn), inArray(incomeRecordsTable.houseId, scopedHouseIds)))
+      : [];
+  const monthlyMeetings = isAdministrator(principal)
+    ? await db.select().from(meetingAttendanceTable).where(and(gte(meetingAttendanceTable.meetingDate, period.startsOn), lt(meetingAttendanceTable.meetingDate, period.endsOn)))
+    : scopedHouseIds.length
+      ? await db.select().from(meetingAttendanceTable).where(and(gte(meetingAttendanceTable.meetingDate, period.startsOn), lt(meetingAttendanceTable.meetingDate, period.endsOn), inArray(meetingAttendanceTable.houseId, scopedHouseIds)))
+      : [];
+  const visibleResidentIds = residents.map((resident) => resident.id);
+  const visibleOperations = isAdministrator(principal)
+    ? await db.select(getTableColumns(operationsTable)).from(operationsTable).where(organizationScope)
+    : visibleResidentIds.length
+      ? await db.select(getTableColumns(operationsTable)).from(operationsTable).where(inArray(operationsTable.residentId, visibleResidentIds))
+      : [];
+  const active = residents.filter((resident) => resident.status === "active");
   const occupied = active.length;
-  const capacity = houses.reduce((sum, h) => sum + (h.familyCapacity || 0), 0) || 32;
-  const due = payments.filter((p) => p.status !== "paid").length;
+  const capacity = houses.filter((house) => house.active).reduce((sum, house) => sum + house.familyCapacity, 0);
+  const due = payments.filter((payment) => payment.status !== "paid").length;
+  const rentCollected = payments.filter((payment) => payment.status === "paid" && isInMonth(payment.paidDate, period)).reduce((sum, payment) => sum + Number(payment.amount), 0);
+  const otherIncome = monthlyIncome.reduce((sum, income) => sum + Number(income.amount), 0);
+  const expenseCategories = ["housing", "utilities", "food", "transportation", "programming", "payroll", "other"]
+    .map((category) => ({
+      category,
+      amount: monthlyExpenses.filter((expense) => expense.category === category).reduce((sum, expense) => sum + Number(expense.amount), 0),
+    }))
+    .filter((category) => category.amount > 0);
+  const womenAttended = monthlyMeetings.reduce((sum, meeting) => sum + meeting.womenAttended, 0);
+  const womenEligible = monthlyMeetings.reduce((sum, meeting) => sum + meeting.womenEligible, 0);
+  const occupancyRate = capacity ? Math.min((occupied / capacity) * 100, 100) : 0;
   res.json(GetDashboardResponse.parse({
-    activeResidents: occupied, bedsAvailable: Math.max(capacity - occupied, 0), paymentsDue: due,
-    paymentsCollected: payments.filter((p) => p.status === "paid").reduce((s, p) => s + Number(p.amount), 0),
-    occupancyRate: Math.min((occupied / capacity) * 100, 100),
-    statusCounts: residents.reduce<Record<string, number>>((a, r) => ({ ...a, [r.status]: (a[r.status] || 0) + 1 }), {}),
+    activeResidents: occupied,
+    bedsAvailable: Math.max(capacity - occupied, 0),
+    paymentsDue: due,
+    paymentsCollected: rentCollected,
+    occupancyRate,
+    statusCounts: residents.reduce<Record<string, number>>((counts, resident) => ({ ...counts, [resident.status]: (counts[resident.status] || 0) + 1 }), {}),
+    period,
+    capacity: { totalBeds: capacity, occupiedBeds: occupied, bedsAvailable: Math.max(capacity - occupied, 0), occupancyRate },
+    income: { rentCollected, otherIncome, totalReceived: rentCollected + otherIncome },
+    expenses: { total: monthlyExpenses.reduce((sum, expense) => sum + Number(expense.amount), 0), categories: expenseCategories },
+    meetings: { meetingsLogged: monthlyMeetings.length, womenAttended, womenEligible, attendanceRate: womenEligible ? Math.round((womenAttended / womenEligible) * 1000) / 10 : null },
+    progress: {
+      newMoveIns: residents.filter((resident) => isInMonth(resident.moveInDate, period)).length,
+      completedOperations: visibleOperations.filter((operation) => operation.status === "completed" && isInMonth(operation.scheduledDate, period)).length,
+    },
   }));
-  await audit(_req, "Dashboard viewed", "dashboard");
+  await audit(req, "Dashboard viewed", "dashboard", undefined, { month: period.month });
 });
 
 router.get("/activity", async (_req, res): Promise<void> => {
@@ -402,15 +514,7 @@ router.post("/payments", async (req, res): Promise<void> => {
     if (status === "paid") {
       await tx.update(residentsTable)
         .set({
-          balance: sql`GREATEST($
-{
-residentsTable.balance
-}
- - $
-{
-parsed.data.amount
-}
-, 0)`,
+          balance: sql`GREATEST(${residentsTable.balance} - ${parsed.data.amount}, 0)`,
           updatedAt: new Date(),
         })
         .where(eq(residentsTable.id, resident.id));
@@ -428,6 +532,114 @@ parsed.data.amount
     status: created.status,
     method: created.method,
   }));
+});
+
+router.get("/expenses", async (req, res): Promise<void> => {
+  const principal = getPrincipal(res);
+  if (!authorize(principal, "expense:list")) { problem(req, res, 403); return; }
+  const parsedQuery = ListExpensesQueryParams.strict().safeParse(req.query);
+  if (!parsedQuery.success) { res.status(400).json({ error: "Invalid expense month." }); return; }
+  const period = monthBounds(parsedQuery.data.month);
+  if (!period) { res.status(400).json({ error: "Invalid expense month." }); return; }
+  const rows = await db.select().from(expensesTable)
+    .where(and(gte(expensesTable.expenseDate, period.startsOn), lt(expensesTable.expenseDate, period.endsOn)))
+    .orderBy(desc(expensesTable.expenseDate), desc(expensesTable.createdAt));
+  res.json(ListExpensesResponse.parse(rows.map(asExpense)));
+  await audit(req, "Expense list viewed", "expense", undefined, { month: period.month });
+});
+
+router.post("/expenses", async (req, res): Promise<void> => {
+  const principal = getPrincipal(res);
+  if (!authorize(principal, "expense:create")) { problem(req, res, 403); return; }
+  const parsed = CreateExpenseBody.strict().safeParse(req.body);
+  const rawBody = req.body as Record<string, unknown>;
+  if (!parsed.success || !isCalendarDate(rawBody.expenseDate)) { problem(req, res, 400); return; }
+  if (parsed.data.houseId !== undefined && !isInteger(parsed.data.houseId)) { problem(req, res, 400); return; }
+  if (parsed.data.houseId !== undefined) {
+    const [house] = await db.select({ id: housesTable.id }).from(housesTable).where(eq(housesTable.id, parsed.data.houseId));
+    if (!house) { problem(req, res, 404); return; }
+  }
+  const [created] = await db.insert(expensesTable).values({
+    ...parsed.data,
+    expenseDate: sqlDate(parsed.data.expenseDate),
+    createdBy: safeActor(req),
+  }).returning();
+  await audit(req, "Expense recorded", "expense", created.id, { category: created.category, amount: Number(created.amount) });
+  res.status(201).json(CreateExpenseResponse.parse(asExpense(created)));
+});
+
+router.get("/income", async (req, res): Promise<void> => {
+  const principal = getPrincipal(res);
+  if (!authorize(principal, "income:list")) { problem(req, res, 403); return; }
+  const parsedQuery = ListIncomeQueryParams.strict().safeParse(req.query);
+  if (!parsedQuery.success) { res.status(400).json({ error: "Invalid income month." }); return; }
+  const period = monthBounds(parsedQuery.data.month);
+  if (!period) { res.status(400).json({ error: "Invalid income month." }); return; }
+  const rows = await db.select().from(incomeRecordsTable)
+    .where(and(gte(incomeRecordsTable.receivedDate, period.startsOn), lt(incomeRecordsTable.receivedDate, period.endsOn)))
+    .orderBy(desc(incomeRecordsTable.receivedDate), desc(incomeRecordsTable.createdAt));
+  res.json(ListIncomeResponse.parse(rows.map(asIncome)));
+  await audit(req, "Income list viewed", "income", undefined, { month: period.month });
+});
+
+router.post("/income", async (req, res): Promise<void> => {
+  const principal = getPrincipal(res);
+  if (!authorize(principal, "income:create")) { problem(req, res, 403); return; }
+  const parsed = CreateIncomeBody.strict().safeParse(req.body);
+  const rawBody = req.body as Record<string, unknown>;
+  if (!parsed.success || !isCalendarDate(rawBody.receivedDate)) { problem(req, res, 400); return; }
+  if (parsed.data.houseId !== undefined && !isInteger(parsed.data.houseId)) { problem(req, res, 400); return; }
+  if (parsed.data.houseId !== undefined) {
+    const [house] = await db.select({ id: housesTable.id }).from(housesTable).where(eq(housesTable.id, parsed.data.houseId));
+    if (!house) { problem(req, res, 404); return; }
+  }
+  const [created] = await db.insert(incomeRecordsTable).values({
+    ...parsed.data,
+    receivedDate: sqlDate(parsed.data.receivedDate),
+    createdBy: safeActor(req),
+  }).returning();
+  await audit(req, "Income recorded", "income", created.id, { category: created.category, amount: Number(created.amount) });
+  res.status(201).json(CreateIncomeResponse.parse(asIncome(created)));
+});
+
+router.get("/meetings", async (req, res): Promise<void> => {
+  const principal = getPrincipal(res);
+  if (!authorize(principal, "meeting:list")) { problem(req, res, 403); return; }
+  const parsedQuery = ListMeetingAttendanceQueryParams.strict().safeParse(req.query);
+  if (!parsedQuery.success) { res.status(400).json({ error: "Invalid meeting month." }); return; }
+  const period = monthBounds(parsedQuery.data.month);
+  if (!period) { res.status(400).json({ error: "Invalid meeting month." }); return; }
+  const rows = isAdministrator(principal)
+    ? await db.select().from(meetingAttendanceTable).where(and(gte(meetingAttendanceTable.meetingDate, period.startsOn), lt(meetingAttendanceTable.meetingDate, period.endsOn))).orderBy(desc(meetingAttendanceTable.meetingDate))
+    : await db.select({ id: housesTable.id }).from(housesTable).where(inArray(housesTable.name, principal.houseNames)).then(async (houses) =>
+      houses.length
+        ? db.select().from(meetingAttendanceTable).where(and(gte(meetingAttendanceTable.meetingDate, period.startsOn), lt(meetingAttendanceTable.meetingDate, period.endsOn), inArray(meetingAttendanceTable.houseId, houses.map((house) => house.id)))).orderBy(desc(meetingAttendanceTable.meetingDate))
+        : [],
+    );
+  res.json(ListMeetingAttendanceResponse.parse(rows.map(asMeetingAttendance)));
+  await audit(req, "Meeting attendance viewed", "meeting_attendance", undefined, { month: period.month });
+});
+
+router.post("/meetings", async (req, res): Promise<void> => {
+  const principal = getPrincipal(res);
+  const parsed = CreateMeetingAttendanceBody.strict().safeParse(req.body);
+  const rawBody = req.body as Record<string, unknown>;
+  if (!parsed.success || !isCalendarDate(rawBody.meetingDate) || !isInteger(parsed.data.womenAttended) || !isInteger(parsed.data.womenEligible) || parsed.data.womenAttended > parsed.data.womenEligible) {
+    problem(req, res, 400); return;
+  }
+  if (parsed.data.houseId !== undefined && !isInteger(parsed.data.houseId)) { problem(req, res, 400); return; }
+  const [house] = parsed.data.houseId === undefined
+    ? []
+    : await db.select({ id: housesTable.id, name: housesTable.name }).from(housesTable).where(eq(housesTable.id, parsed.data.houseId));
+  if (parsed.data.houseId !== undefined && !house) { problem(req, res, 404); return; }
+  if (!authorize(principal, "meeting:create", { houseName: house?.name })) { problem(req, res, 403); return; }
+  const [created] = await db.insert(meetingAttendanceTable).values({
+    ...parsed.data,
+    meetingDate: sqlDate(parsed.data.meetingDate),
+    createdBy: safeActor(req),
+  }).returning();
+  await audit(req, "Meeting attendance recorded", "meeting_attendance", created.id, { meetingType: created.meetingType, womenAttended: created.womenAttended, womenEligible: created.womenEligible });
+  res.status(201).json(CreateMeetingAttendanceResponse.parse(asMeetingAttendance(created)));
 });
 
 router.get("/houses", async (_req, res): Promise<void> => {

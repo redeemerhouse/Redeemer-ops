@@ -5,6 +5,12 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { DashboardCapacity } from './dashboardCapacity';
+import type { DashboardExpenses } from './dashboardExpenses';
+import type { DashboardIncome } from './dashboardIncome';
+import type { DashboardMeetings } from './dashboardMeetings';
+import type { DashboardPeriod } from './dashboardPeriod';
+import type { DashboardProgress } from './dashboardProgress';
 import type { DashboardStatusCounts } from './dashboardStatusCounts';
 
 export interface Dashboard {
@@ -14,4 +20,10 @@ export interface Dashboard {
   paymentsCollected: number;
   occupancyRate: number;
   statusCounts?: DashboardStatusCounts;
+  period: DashboardPeriod;
+  capacity: DashboardCapacity;
+  income: DashboardIncome;
+  expenses: DashboardExpenses;
+  meetings: DashboardMeetings;
+  progress: DashboardProgress;
 }

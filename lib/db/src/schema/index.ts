@@ -20,4 +20,6 @@
 export * from "./residents";
 export * from "./payments";
 export * from "./operations";
+export * from "./financials";
+export * from "./meeting-attendance";
 export * from "./retention";

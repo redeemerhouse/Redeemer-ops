@@ -18,6 +18,12 @@ tags:
     description: Resident records
   - name: payments
     description: Resident payment records
+  - name: finances
+    description: Organization financial records
+  - name: meetings
+    description: Program meeting attendance
+  - name: houses
+    description: Recovery housing locations
 paths:
   /healthz:
     get:
@@ -40,6 +46,8 @@ paths:
       summary: Get operations dashboard
       security:
         - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Month"
       responses:
         "200":
           description: Dashboard summary
@@ -199,6 +207,137 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Activity"
+  /houses:
+    get:
+      operationId: listHouses
+      tags: [houses]
+      summary: List houses available to the signed-in user
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Housing locations in the caller's allowed scope
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/House"
+  /expenses:
+    get:
+      operationId: listExpenses
+      tags: [finances]
+      summary: List expense records
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Month"
+      responses:
+        "200":
+          description: Expense records for the selected month
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Expense"
+        "403": { description: Administrator access required }
+    post:
+      operationId: createExpense
+      tags: [finances]
+      summary: Record an expense
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExpenseInput"
+      responses:
+        "201":
+          description: Expense recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Expense"
+        "403": { description: Administrator access required }
+  /income:
+    get:
+      operationId: listIncome
+      tags: [finances]
+      summary: List categorized non-rent income
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Month"
+      responses:
+        "200":
+          description: Categorized income records for the selected month
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/IncomeRecord"
+        "403": { description: Administrator access required }
+    post:
+      operationId: createIncome
+      tags: [finances]
+      summary: Record categorized non-rent income
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IncomeInput"
+      responses:
+        "201":
+          description: Income recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IncomeRecord"
+        "403": { description: Administrator access required }
+  /meetings:
+    get:
+      operationId: listMeetingAttendance
+      tags: [meetings]
+      summary: List aggregate meeting attendance records
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Month"
+      responses:
+        "200":
+          description: Attendance records for the selected month
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MeetingAttendance"
+    post:
+      operationId: createMeetingAttendance
+      tags: [meetings]
+      summary: Record aggregate meeting attendance
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MeetingAttendanceInput"
+      responses:
+        "201":
+          description: Meeting attendance recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MeetingAttendance"
   /reports/{reportType}/export:
     get:
       operationId: exportReport
@@ -244,6 +383,14 @@ components:
         multipleOf: 1
         minimum: 1
         maximum: 2147483647
+    Month:
+      name: month
+      in: query
+      required: false
+      description: Calendar month used for monthly totals, in YYYY-MM format. Defaults to the current UTC month.
+      schema:
+        type: string
+        pattern: '^[0-9]{4}-(0[1-9]|1[0-2])$'
   schemas:
     HealthStatus:
       type: object
@@ -254,7 +401,7 @@ components:
         - status
     Dashboard:
       type: object
-      required: [activeResidents, bedsAvailable, paymentsDue, paymentsCollected, occupancyRate]
+      required: [activeResidents, bedsAvailable, paymentsDue, paymentsCollected, occupancyRate, period, capacity, income, expenses, meetings, progress]
       properties:
         activeResidents: { type: number }
         bedsAvailable: { type: number }
@@ -264,6 +411,145 @@ components:
         statusCounts:
           type: object
           additionalProperties: { type: number }
+        period:
+          type: object
+          required: [month, startsOn, endsOn]
+          properties:
+            month: { type: string }
+            startsOn: { type: string, format: date }
+            endsOn: { type: string, format: date }
+        capacity:
+          type: object
+          required: [totalBeds, occupiedBeds, bedsAvailable, occupancyRate]
+          properties:
+            totalBeds: { type: number }
+            occupiedBeds: { type: number }
+            bedsAvailable: { type: number }
+            occupancyRate: { type: number }
+        income:
+          type: object
+          required: [rentCollected, otherIncome, totalReceived]
+          properties:
+            rentCollected: { type: number }
+            otherIncome: { type: number }
+            totalReceived: { type: number }
+        expenses:
+          type: object
+          required: [total, categories]
+          properties:
+            total: { type: number }
+            categories:
+              type: array
+              items:
+                $ref: "#/components/schemas/ExpenseCategoryTotal"
+        meetings:
+          type: object
+          required: [meetingsLogged, womenAttended, womenEligible, attendanceRate]
+          properties:
+            meetingsLogged: { type: number }
+            womenAttended: { type: number }
+            womenEligible: { type: number }
+            attendanceRate: { type: ["number", "null"] }
+        progress:
+          type: object
+          required: [newMoveIns, completedOperations]
+          properties:
+            newMoveIns: { type: number }
+            completedOperations: { type: number }
+    ExpenseCategoryTotal:
+      type: object
+      required: [category, amount]
+      properties:
+        category: { type: string, enum: [housing, utilities, food, transportation, programming, payroll, other] }
+        amount: { type: number }
+    Expense:
+      type: object
+      required: [id, amount, expenseDate, category, houseId, description, createdAt]
+      properties:
+        id: { type: number, multipleOf: 1, minimum: 1 }
+        amount: { type: number }
+        expenseDate: { type: string, format: date }
+        category: { type: string, enum: [housing, utilities, food, transportation, programming, payroll, other] }
+        houseId: { type: ["number", "null"], multipleOf: 1, minimum: 1 }
+        description: { type: ["string", "null"], maxLength: 1000 }
+        createdAt: { type: string, format: date-time }
+    ExpenseInput:
+      type: object
+      additionalProperties: false
+      required: [amount, expenseDate, category]
+      properties:
+        amount:
+          type: string
+          minLength: 1
+          maxLength: 11
+          pattern: '^(0|[1-9][0-9]{0,7})(\.[0-9]{1,2})?$'
+        expenseDate: { type: string, format: date }
+        category: { type: string, enum: [housing, utilities, food, transportation, programming, payroll, other] }
+        houseId: { type: number, multipleOf: 1, minimum: 1 }
+        description: { type: string, maxLength: 1000 }
+    IncomeRecord:
+      type: object
+      required: [id, amount, receivedDate, category, houseId, description, createdAt]
+      properties:
+        id: { type: number, multipleOf: 1, minimum: 1 }
+        amount: { type: number }
+        receivedDate: { type: string, format: date }
+        category: { type: string, enum: [admission_fee, program_fee, grant, other] }
+        houseId: { type: ["number", "null"], multipleOf: 1, minimum: 1 }
+        description: { type: ["string", "null"], maxLength: 1000 }
+        createdAt: { type: string, format: date-time }
+    IncomeInput:
+      type: object
+      additionalProperties: false
+      required: [amount, receivedDate, category]
+      properties:
+        amount:
+          type: string
+          minLength: 1
+          maxLength: 11
+          pattern: '^(0|[1-9][0-9]{0,7})(\.[0-9]{1,2})?$'
+        receivedDate: { type: string, format: date }
+        category: { type: string, enum: [admission_fee, program_fee, grant, other] }
+        houseId: { type: number, multipleOf: 1, minimum: 1 }
+        description: { type: string, maxLength: 1000 }
+    MeetingAttendance:
+      type: object
+      required: [id, meetingType, meetingDate, houseId, womenAttended, womenEligible, notes, createdAt]
+      properties:
+        id: { type: number, multipleOf: 1, minimum: 1 }
+        meetingType: { type: string, enum: [recovery_meeting, house_meeting, life_skills, case_management, other] }
+        meetingDate: { type: string, format: date }
+        houseId: { type: ["number", "null"], multipleOf: 1, minimum: 1 }
+        womenAttended: { type: number, multipleOf: 1, minimum: 0 }
+        womenEligible: { type: number, multipleOf: 1, minimum: 0 }
+        notes: { type: ["string", "null"], maxLength: 1000 }
+        createdAt: { type: string, format: date-time }
+    MeetingAttendanceInput:
+      type: object
+      additionalProperties: false
+      required: [meetingType, meetingDate, womenAttended, womenEligible]
+      properties:
+        meetingType: { type: string, enum: [recovery_meeting, house_meeting, life_skills, case_management, other] }
+        meetingDate: { type: string, format: date }
+        houseId: { type: number, multipleOf: 1, minimum: 1 }
+        womenAttended: { type: number, multipleOf: 1, minimum: 0 }
+        womenEligible: { type: number, multipleOf: 1, minimum: 0 }
+        notes: { type: string, maxLength: 1000 }
+    House:
+      type: object
+      required: [id, name, address, managerName, familyCapacity, individualWeekly, familyWeekly, individualMonthly, familyMonthly, active, occupancy]
+      properties:
+        id: { type: number, multipleOf: 1, minimum: 1 }
+        name: { type: string }
+        address: { type: string }
+        managerName: { type: ["string", "null"] }
+        familyCapacity: { type: number, multipleOf: 1, minimum: 0 }
+        individualWeekly: { type: number, minimum: 0 }
+        familyWeekly: { type: number, minimum: 0 }
+        individualMonthly: { type: number, minimum: 0 }
+        familyMonthly: { type: number, minimum: 0 }
+        active: { type: boolean }
+        occupancy: { type: number, multipleOf: 1, minimum: 0 }
     Resident:
       type: object
       required: [id, name, email, phone, home, moveInDate, status, balance, nextPaymentDate]

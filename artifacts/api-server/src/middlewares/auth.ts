@@ -26,6 +26,12 @@ export type Permission =
   | "resident:update"
   | "payment:list"
   | "payment:create"
+  | "expense:list"
+  | "expense:create"
+  | "income:list"
+  | "income:create"
+  | "meeting:list"
+  | "meeting:create"
   | "house:list"
   | "report:read"
   | "report:export";
@@ -197,6 +203,12 @@ export function authorize(principal: Principal, permission: Permission, context:
     return isAdmin || isManager || isResident;
   }
   if (permission === "payment:create") {
+    return (isAdmin || isManager) && (!context.houseName || hasHouseScope(principal, context.houseName));
+  }
+  if (permission === "expense:list" || permission === "expense:create" || permission === "income:list" || permission === "income:create") {
+    return isAdmin;
+  }
+  if (permission === "meeting:list" || permission === "meeting:create") {
     return (isAdmin || isManager) && (!context.houseName || hasHouseScope(principal, context.houseName));
   }
   if (permission === "house:list") return isAdmin || isManager || isResident;

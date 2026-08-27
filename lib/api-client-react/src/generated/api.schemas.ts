@@ -11,6 +11,61 @@ export interface HealthStatus {
 
 export type DashboardStatusCounts = {[key: string]: number};
 
+export type DashboardPeriod = {
+  month: string;
+  startsOn: string;
+  endsOn: string;
+};
+
+export type DashboardCapacity = {
+  totalBeds: number;
+  occupiedBeds: number;
+  bedsAvailable: number;
+  occupancyRate: number;
+};
+
+export type DashboardIncome = {
+  rentCollected: number;
+  otherIncome: number;
+  totalReceived: number;
+};
+
+export type ExpenseCategoryTotalCategory = typeof ExpenseCategoryTotalCategory[keyof typeof ExpenseCategoryTotalCategory];
+
+
+export const ExpenseCategoryTotalCategory = {
+  housing: 'housing',
+  utilities: 'utilities',
+  food: 'food',
+  transportation: 'transportation',
+  programming: 'programming',
+  payroll: 'payroll',
+  other: 'other',
+} as const;
+
+export interface ExpenseCategoryTotal {
+  category: ExpenseCategoryTotalCategory;
+  amount: number;
+}
+
+export type DashboardExpenses = {
+  total: number;
+  categories: ExpenseCategoryTotal[];
+};
+
+export type DashboardMeetings = {
+  meetingsLogged: number;
+  womenAttended: number;
+  womenEligible: number;
+  /** @nullable */
+  attendanceRate: number | null;
+};
+
+export type DashboardProgress = {
+  newMoveIns: number;
+  completedOperations: number;
+};
+
 export interface Dashboard {
   activeResidents: number;
   bedsAvailable: number;
@@ -18,6 +73,205 @@ export interface Dashboard {
   paymentsCollected: number;
   occupancyRate: number;
   statusCounts?: DashboardStatusCounts;
+  period: DashboardPeriod;
+  capacity: DashboardCapacity;
+  income: DashboardIncome;
+  expenses: DashboardExpenses;
+  meetings: DashboardMeetings;
+  progress: DashboardProgress;
+}
+
+export type ExpenseCategory = typeof ExpenseCategory[keyof typeof ExpenseCategory];
+
+
+export const ExpenseCategory = {
+  housing: 'housing',
+  utilities: 'utilities',
+  food: 'food',
+  transportation: 'transportation',
+  programming: 'programming',
+  payroll: 'payroll',
+  other: 'other',
+} as const;
+
+export interface Expense {
+  /** @minimum 1 */
+  id: number;
+  amount: number;
+  expenseDate: string;
+  category: ExpenseCategory;
+  /**
+     * @minimum 1
+     * @nullable
+     */
+  houseId: number | null;
+  /**
+     * @maxLength 1000
+     * @nullable
+     */
+  description: string | null;
+  createdAt: string;
+}
+
+export type ExpenseInputCategory = typeof ExpenseInputCategory[keyof typeof ExpenseInputCategory];
+
+
+export const ExpenseInputCategory = {
+  housing: 'housing',
+  utilities: 'utilities',
+  food: 'food',
+  transportation: 'transportation',
+  programming: 'programming',
+  payroll: 'payroll',
+  other: 'other',
+} as const;
+
+export interface ExpenseInput {
+  /**
+     * @minLength 1
+     * @maxLength 11
+     * @pattern ^(0|[1-9][0-9]{0,7})(\.[0-9]{1,2})?$
+     */
+  amount: string;
+  expenseDate: string;
+  category: ExpenseInputCategory;
+  /** @minimum 1 */
+  houseId?: number;
+  /** @maxLength 1000 */
+  description?: string;
+}
+
+export type IncomeRecordCategory = typeof IncomeRecordCategory[keyof typeof IncomeRecordCategory];
+
+
+export const IncomeRecordCategory = {
+  admission_fee: 'admission_fee',
+  program_fee: 'program_fee',
+  grant: 'grant',
+  other: 'other',
+} as const;
+
+export interface IncomeRecord {
+  /** @minimum 1 */
+  id: number;
+  amount: number;
+  receivedDate: string;
+  category: IncomeRecordCategory;
+  /**
+     * @minimum 1
+     * @nullable
+     */
+  houseId: number | null;
+  /**
+     * @maxLength 1000
+     * @nullable
+     */
+  description: string | null;
+  createdAt: string;
+}
+
+export type IncomeInputCategory = typeof IncomeInputCategory[keyof typeof IncomeInputCategory];
+
+
+export const IncomeInputCategory = {
+  admission_fee: 'admission_fee',
+  program_fee: 'program_fee',
+  grant: 'grant',
+  other: 'other',
+} as const;
+
+export interface IncomeInput {
+  /**
+     * @minLength 1
+     * @maxLength 11
+     * @pattern ^(0|[1-9][0-9]{0,7})(\.[0-9]{1,2})?$
+     */
+  amount: string;
+  receivedDate: string;
+  category: IncomeInputCategory;
+  /** @minimum 1 */
+  houseId?: number;
+  /** @maxLength 1000 */
+  description?: string;
+}
+
+export type MeetingAttendanceMeetingType = typeof MeetingAttendanceMeetingType[keyof typeof MeetingAttendanceMeetingType];
+
+
+export const MeetingAttendanceMeetingType = {
+  recovery_meeting: 'recovery_meeting',
+  house_meeting: 'house_meeting',
+  life_skills: 'life_skills',
+  case_management: 'case_management',
+  other: 'other',
+} as const;
+
+export interface MeetingAttendance {
+  /** @minimum 1 */
+  id: number;
+  meetingType: MeetingAttendanceMeetingType;
+  meetingDate: string;
+  /**
+     * @minimum 1
+     * @nullable
+     */
+  houseId: number | null;
+  /** @minimum 0 */
+  womenAttended: number;
+  /** @minimum 0 */
+  womenEligible: number;
+  /**
+     * @maxLength 1000
+     * @nullable
+     */
+  notes: string | null;
+  createdAt: string;
+}
+
+export type MeetingAttendanceInputMeetingType = typeof MeetingAttendanceInputMeetingType[keyof typeof MeetingAttendanceInputMeetingType];
+
+
+export const MeetingAttendanceInputMeetingType = {
+  recovery_meeting: 'recovery_meeting',
+  house_meeting: 'house_meeting',
+  life_skills: 'life_skills',
+  case_management: 'case_management',
+  other: 'other',
+} as const;
+
+export interface MeetingAttendanceInput {
+  meetingType: MeetingAttendanceInputMeetingType;
+  meetingDate: string;
+  /** @minimum 1 */
+  houseId?: number;
+  /** @minimum 0 */
+  womenAttended: number;
+  /** @minimum 0 */
+  womenEligible: number;
+  /** @maxLength 1000 */
+  notes?: string;
+}
+
+export interface House {
+  /** @minimum 1 */
+  id: number;
+  name: string;
+  address: string;
+  /** @nullable */
+  managerName: string | null;
+  /** @minimum 0 */
+  familyCapacity: number;
+  /** @minimum 0 */
+  individualWeekly: number;
+  /** @minimum 0 */
+  familyWeekly: number;
+  /** @minimum 0 */
+  individualMonthly: number;
+  /** @minimum 0 */
+  familyMonthly: number;
+  active: boolean;
+  /** @minimum 0 */
+  occupancy: number;
 }
 
 export type ResidentStatus = typeof ResidentStatus[keyof typeof ResidentStatus];
@@ -156,6 +410,19 @@ export interface Activity {
   timestamp: string;
 }
 
+/**
+ * Calendar month used for monthly totals, in YYYY-MM format. Defaults to the current UTC month.
+ */
+export type MonthParameter = string;
+
+export type GetDashboardParams = {
+/**
+ * Calendar month used for monthly totals, in YYYY-MM format. Defaults to the current UTC month.
+ * @pattern ^[0-9]{4}-(0[1-9]|1[0-2])$
+ */
+month?: MonthParameter;
+};
+
 export type ListResidentsParams = {
 search?: string;
 status?: ListResidentsStatus;
@@ -189,6 +456,30 @@ export const ListPaymentsStatus = {
   due: 'due',
   overdue: 'overdue',
 } as const;
+
+export type ListExpensesParams = {
+/**
+ * Calendar month used for monthly totals, in YYYY-MM format. Defaults to the current UTC month.
+ * @pattern ^[0-9]{4}-(0[1-9]|1[0-2])$
+ */
+month?: MonthParameter;
+};
+
+export type ListIncomeParams = {
+/**
+ * Calendar month used for monthly totals, in YYYY-MM format. Defaults to the current UTC month.
+ * @pattern ^[0-9]{4}-(0[1-9]|1[0-2])$
+ */
+month?: MonthParameter;
+};
+
+export type ListMeetingAttendanceParams = {
+/**
+ * Calendar month used for monthly totals, in YYYY-MM format. Defaults to the current UTC month.
+ * @pattern ^[0-9]{4}-(0[1-9]|1[0-2])$
+ */
+month?: MonthParameter;
+};
 
 export type ExportReportParams = {
 format: ExportReportFormat;
