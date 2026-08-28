@@ -23,6 +23,24 @@ test("serves a month-aware overview contract and validates months", { skip: !can
   assert.equal(typeof data.expenses.total, "number");
   assert.ok(Array.isArray(data.expenses.categories));
   assert.equal(typeof data.meetings.meetingsLogged, "number");
+  assert.match(data.week.startsOn, /^\d{4}-\d{2}-\d{2}(T|$)/);
+  assert.match(data.week.endsOn, /^\d{4}-\d{2}-\d{2}(T|$)/);
+  assert.equal(typeof data.weeklyMeetings.meetingsLogged, "number");
+  assert.equal(typeof data.weeklyMeetings.womenAttended, "number");
+  assert.equal(typeof data.weeklyMeetings.womenEligible, "number");
+  assert.ok(data.weeklyMeetings.attendanceRate === null || typeof data.weeklyMeetings.attendanceRate === "number");
+  assert.ok(["pass", "warning", "error"].includes(data.dataQuality.overall));
+  assert.deepEqual(data.dataQuality.checks.map((check) => check.name), ["Freshness", "Non-negative values", "Internal consistency"]);
+  const freshnessCheck = data.dataQuality.checks.find((check) => check.name === "Freshness");
+  assert.ok(freshnessCheck);
+  if (data.weeklyMeetings.meetingsLogged === 0) {
+    assert.ok(["stale", "incomplete"].includes(freshnessCheck.code));
+  }
+  for (const check of data.dataQuality.checks) {
+    assert.ok(["pass", "warning", "error"].includes(check.status));
+    assert.ok(check.code === null || typeof check.code === "string");
+    assert.equal(typeof check.message, "string");
+  }
   assert.ok(Array.isArray(data.weeklyAttendance));
   assert.equal(data.weeklyAttendance[0].weekStart.slice(0, 10), "2026-08-01");
   assert.equal(data.weeklyAttendance.at(-1).weekEnd.slice(0, 10), "2026-08-31");
@@ -46,11 +64,12 @@ test("serves a month-aware overview contract and validates months", { skip: !can
   }
   assert.equal(typeof data.dataQuality.issueCount, "number");
   assert.deepEqual(
-    data.dataQuality.checks.map((check) => check.key),
+    data.dataQuality.recordChecks.map((check) => check.key),
     ["resident-contact", "house-assignments", "payment-dates", "meeting-denominators"],
   );
   assert.equal(
-    data.dataQuality.checks.reduce((sum, check) => sum + check.issueCount, 0),
+    data.dataQuality.recordChecks.reduce((sum, check) => sum + check.issueCount, 0)
+      + data.dataQuality.checks.reduce((sum, check) => sum + check.issueCount, 0),
     data.dataQuality.issueCount,
   );
   assert.equal(typeof data.progress.newMoveIns, "number");

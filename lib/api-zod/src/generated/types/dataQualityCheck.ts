@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { DataQualityCheckSeverity } from './dataQualityCheckSeverity';
+import type { DataQualityCheckStatus } from './dataQualityCheckStatus';
 
 export interface DataQualityCheck {
   key: string;
@@ -13,4 +14,9 @@ export interface DataQualityCheck {
   description: string;
   issueCount: number;
   severity: DataQualityCheckSeverity;
+  name: string;
+  status: DataQualityCheckStatus;
+  /** @nullable */
+  code: string | null;
+  message: string;
 }

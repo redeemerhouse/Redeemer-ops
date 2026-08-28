@@ -1,4 +1,4 @@
-import { ArrowUpRight, BedDouble, CalendarRange, CircleCheck, CircleDollarSign, ClipboardList, CreditCard, TriangleAlert, UsersRound, Plus, TrendingUp } from 'lucide-react';
+import { AlertTriangle, ArrowUpRight, BedDouble, CalendarRange, CheckCircle2, CircleCheck, CircleDollarSign, ClipboardList, CreditCard, Plus, TrendingUp, TriangleAlert, UsersRound } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'wouter';
 import { 
@@ -16,9 +16,14 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import { AppShell } from '@/components/app-shell';
 import { QueryState, StatusBadge, useDisclosure, Modal, Field, SelectField, SubmitButton } from '@/components/ui-primitives';
-
 const money = (value: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value);
 const date = (value: string) => new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(value));
+
+const weekRange = (startsOn: string, endsOn: string) => {
+  const lastDay = new Date(`${endsOn}T00:00:00Z`);
+  lastDay.setUTCDate(lastDay.getUTCDate() - 1);
+  return `${date(startsOn)} – ${date(lastDay.toISOString())}`;
+};
 const calendarDate = (value: string) => new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(new Date(value));
 
 export default function Dashboard() {
@@ -76,6 +81,58 @@ export default function Dashboard() {
                 <Metric icon={<CircleDollarSign size={18} />} label="Income Received" value={money(d.income.totalReceived)} note={`${money(d.income.rentCollected)} rent · ${money(d.income.otherIncome)} other`} tone="navy" />
                 <Metric icon={<CreditCard size={18} />} label="Expenses Logged" value={money(d.expenses.total)} note="Total for this month" tone="magenta" />
                 <Metric icon={<UsersRound size={18} />} label="Meeting Attendance" value={d.meetings.attendanceRate !== null ? `${Math.round(d.meetings.attendanceRate)}%` : 'No data'} note={d.meetings.meetingsLogged ? `${d.meetings.womenAttended} women across ${d.meetings.meetingsLogged} meetings` : 'No meetings logged'} tone="blush" />
+              </div>
+
+              <div className="mt-6 grid gap-6 lg:grid-cols-[1.05fr_.95fr]">
+                <section data-testid="card-weekly-attendance" className="paper-card animate-enter-delay overflow-hidden">
+                  <div className="border-b border-[hsl(var(--border))] px-6 py-5">
+                    <div className="section-kicker">Current week · {weekRange(d.week.startsOn, d.week.endsOn)}</div>
+                    <h2 className="display-serif mt-1 text-2xl">Meetings attended this week</h2>
+                    <p className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">Attendance is kept separate from the selected month.</p>
+                  </div>
+                  {d.weeklyMeetings.meetingsLogged ? (
+                    <div className="flex items-end justify-between gap-4 px-6 py-6">
+                      <div>
+                        <div data-testid="text-weekly-attendance" className="text-4xl font-extrabold tracking-tight">{d.weeklyMeetings.womenAttended}</div>
+                        <div className="mt-1 text-sm font-bold">women attended</div>
+                        <div className="mt-2 text-xs text-[hsl(var(--muted-foreground))]">{d.weeklyMeetings.meetingsLogged} meeting{d.weeklyMeetings.meetingsLogged === 1 ? '' : 's'} logged · {d.weeklyMeetings.womenEligible} eligible check-ins</div>
+                      </div>
+                      <div className="rounded-2xl bg-[hsl(var(--accent))] px-4 py-3 text-right">
+                        <div className="section-kicker">Weekly rate</div>
+                        <div data-testid="text-weekly-attendance-rate" className="mt-1 text-2xl font-extrabold">{d.weeklyMeetings.attendanceRate === null ? 'No data' : `${Math.round(d.weeklyMeetings.attendanceRate)}%`}</div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div data-testid="weekly-attendance-empty" role="status" className="px-6 py-8">
+                      <div className="rounded-2xl border border-dashed border-[hsl(var(--border))] bg-[hsl(var(--secondary)/.45)] px-5 py-5">
+                        <div className="text-sm font-extrabold">No meetings logged this week.</div>
+                        <p className="mt-1 text-xs leading-relaxed text-[hsl(var(--muted-foreground))]">Weekly attendance is not recorded as zero until a meeting is logged.</p>
+                      </div>
+                    </div>
+                  )}
+                </section>
+
+                <section data-testid="card-data-quality" className="paper-card animate-enter-delay overflow-hidden">
+                  <div className="border-b border-[hsl(var(--border))] px-6 py-5">
+                    <div className="section-kicker">Before you act</div>
+                    <div className="flex items-start justify-between gap-3">
+                      <h2 className="display-serif mt-1 text-2xl">Data quality</h2>
+                      <span data-testid="data-quality-overall" className={`mt-1 rounded-full px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[.08em] ${d.dataQuality.overall === 'pass' ? 'bg-[hsl(161_40%_88%)] text-[hsl(169_42%_27%)]' : d.dataQuality.overall === 'warning' ? 'bg-[hsl(38_66%_88%)] text-[hsl(31_70%_34%)]' : 'bg-[hsl(9_63%_90%)] text-[hsl(7_58%_42%)]'}`}>{d.dataQuality.overall === 'pass' ? 'All clear' : d.dataQuality.overall === 'warning' ? 'Review' : 'Action needed'}</span>
+                    </div>
+                    <p className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">Checks explain when a value may need review.</p>
+                  </div>
+                  <div data-testid="data-quality-checks" role={d.dataQuality.overall === 'error' ? 'alert' : 'status'} className="divide-y divide-[hsl(var(--border))]">
+                    {d.dataQuality.checks.map((check) => (
+                      <div data-testid={`data-quality-${check.name.toLowerCase().replaceAll(' ', '-')}`} key={check.name} className="flex gap-3 px-6 py-4">
+                        {check.status === 'pass' ? <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-[hsl(169_42%_27%)]" /> : <AlertTriangle size={18} className={`mt-0.5 shrink-0 ${check.status === 'error' ? 'text-[hsl(var(--destructive))]' : 'text-[hsl(31_70%_34%)]'}`} />}
+                        <div>
+                          <div className="text-xs font-extrabold">{check.name}</div>
+                          <div className="mt-1 text-xs leading-relaxed text-[hsl(var(--muted-foreground))]">{check.message}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
               </div>
 
               <div className="mt-7 grid gap-6 xl:grid-cols-[1.15fr_.85fr]">

@@ -108,6 +108,11 @@ type MonthBounds = {
   endsOn: string;
 }
 
+type WeekBounds = {
+  startsOn: string;
+  endsOn: string;
+}
+
 const monthBounds = (month: string | undefined): MonthBounds | null => {
   const selectedMonth = month ?? today().slice(0, 7);
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(selectedMonth)) return null;
@@ -125,6 +130,15 @@ const dateOnly = (value: Date) => value.toISOString().slice(0, 10);
 
 const roundRate = (attended: number, eligible: number) => eligible ? Math.round((attended / eligible) * 1000) / 10 : null;
 
+const currentWeekBounds = (reference = new Date()): WeekBounds => {
+  const referenceDay = new Date(Date.UTC(reference.getUTCFullYear(), reference.getUTCMonth(), reference.getUTCDate()));
+  const daysSinceMonday = (referenceDay.getUTCDay() + 6) % 7;
+  const startsOn = new Date(referenceDay);
+  startsOn.setUTCDate(startsOn.getUTCDate() - daysSinceMonday);
+  const endsOn = new Date(startsOn);
+  endsOn.setUTCDate(endsOn.getUTCDate() + 7);
+  return { startsOn: sqlDate(startsOn), endsOn: sqlDate(endsOn) };
+};
 const isInMonth = (value: string | null, period: MonthBounds): boolean =>
   Boolean(value && value >= period.startsOn && value < period.endsOn);
 
@@ -337,6 +351,7 @@ router.get("/dashboard", async (req, res): Promise<void> => {
   if (!parsedQuery.success) { res.status(400).json({ error: "Invalid overview month." }); return; }
   const period = monthBounds(parsedQuery.data.month);
   if (!period) { res.status(400).json({ error: "Invalid overview month." }); return; }
+  const week = currentWeekBounds();
   const residentFilter = !isAdministrator(principal) && principal.role === "house_manager"
     ? inArray(residentsTable.home, principal.houseNames)
     : undefined;
@@ -363,6 +378,16 @@ router.get("/dashboard", async (req, res): Promise<void> => {
     : scopedHouseIds.length
       ? await db.select().from(meetingAttendanceTable).where(and(gte(meetingAttendanceTable.meetingDate, period.startsOn), lt(meetingAttendanceTable.meetingDate, period.endsOn), inArray(meetingAttendanceTable.houseId, scopedHouseIds)))
       : [];
+  const weeklyMeetings = isAdministrator(principal)
+    ? await db.select().from(meetingAttendanceTable).where(and(gte(meetingAttendanceTable.meetingDate, week.startsOn), lt(meetingAttendanceTable.meetingDate, week.endsOn)))
+    : scopedHouseIds.length
+      ? await db.select().from(meetingAttendanceTable).where(and(gte(meetingAttendanceTable.meetingDate, week.startsOn), lt(meetingAttendanceTable.meetingDate, week.endsOn), inArray(meetingAttendanceTable.houseId, scopedHouseIds)))
+      : [];
+  const latestMeeting = isAdministrator(principal)
+    ? (await db.select({ updatedAt: meetingAttendanceTable.updatedAt }).from(meetingAttendanceTable).where(organizationScope).orderBy(desc(meetingAttendanceTable.updatedAt)).limit(1))[0]
+    : scopedHouseIds.length
+      ? (await db.select({ updatedAt: meetingAttendanceTable.updatedAt }).from(meetingAttendanceTable).where(inArray(meetingAttendanceTable.houseId, scopedHouseIds)).orderBy(desc(meetingAttendanceTable.updatedAt)).limit(1))[0]
+      : undefined;
   const visibleResidentIds = residents.map((resident) => resident.id);
   const visibleOperations = isAdministrator(principal)
     ? await db.select(getTableColumns(operationsTable)).from(operationsTable).where(organizationScope)
@@ -380,7 +405,7 @@ router.get("/dashboard", async (req, res): Promise<void> => {
       category,
       amount: monthlyExpenses.filter((expense) => expense.category === category).reduce((sum, expense) => sum + Number(expense.amount), 0),
     }))
-    .filter((category) => category.amount > 0);
+    .filter((category) => category.amount !== 0);
   const womenAttended = monthlyMeetings.reduce((sum, meeting) => sum + meeting.womenAttended, 0);
   const womenEligible = monthlyMeetings.reduce((sum, meeting) => sum + meeting.womenEligible, 0);
   const periodStart = dateAtUtc(period.startsOn);
@@ -433,24 +458,91 @@ router.get("/dashboard", async (req, res): Promise<void> => {
       issueCount: monthlyMeetings.filter((meeting) => meeting.womenEligible === 0).length,
     },
   ].map((check) => ({ ...check, severity: check.issueCount ? "attention" : "clear" as const }));
+  const weeklyWomenAttended = weeklyMeetings.reduce((sum, meeting) => sum + meeting.womenAttended, 0);
+  const weeklyWomenEligible = weeklyMeetings.reduce((sum, meeting) => sum + meeting.womenEligible, 0);
+  const occupancyRate = capacity ? (occupied / capacity) * 100 : 0;
+  const weeklyAttendanceRate = weeklyWomenEligible ? Math.round((weeklyWomenAttended / weeklyWomenEligible) * 1000) / 10 : null;
+  const negativeValues = [
+    capacity,
+    ...residents.map((resident) => Number(resident.balance)),
+    ...payments.map((payment) => Number(payment.amount)),
+    ...monthlyExpenses.map((expense) => Number(expense.amount)),
+    ...monthlyIncome.map((income) => Number(income.amount)),
+    ...monthlyMeetings.flatMap((meeting) => [meeting.womenAttended, meeting.womenEligible]),
+    ...weeklyMeetings.flatMap((meeting) => [meeting.womenAttended, meeting.womenEligible]),
+  ].filter((value) => value < 0);
+  const consistencyIssues: string[] = [];
+  if (occupied > capacity) consistencyIssues.push("occupied beds exceed total capacity");
+  if (womenAttended > womenEligible) consistencyIssues.push("monthly attendance exceeds eligible check-ins");
+  if (weeklyWomenAttended > weeklyWomenEligible) consistencyIssues.push("weekly attendance exceeds eligible check-ins");
+  if (womenEligible === 0 && womenAttended !== 0) consistencyIssues.push("monthly attendance has no eligible check-ins");
+  if (weeklyWomenEligible === 0 && weeklyWomenAttended !== 0) consistencyIssues.push("weekly attendance has no eligible check-ins");
+  const freshnessStatus = weeklyMeetings.length > 0 ? "pass" : "warning";
+  const freshnessCode = weeklyMeetings.length > 0 ? null : latestMeeting ? "stale" : "incomplete";
+  const freshnessMessage = weeklyMeetings.length > 0
+    ? "Attendance has been recorded during the current week."
+    : latestMeeting
+      ? `Stale attendance data: no attendance has been recorded during the current week; the latest attendance update was ${sqlDate(latestMeeting.updatedAt)}.`
+      : "Incomplete attendance data: no attendance is available for the current week, so a zero cannot be confirmed.";
+  const checks = [
+    { name: "Freshness", status: freshnessStatus, code: freshnessCode, message: freshnessMessage },
+    {
+      name: "Non-negative values",
+      status: negativeValues.length ? "error" : "pass",
+      code: negativeValues.length ? "negative" : null,
+      message: negativeValues.length ? "One or more dashboard source values is negative; displayed metrics are not adjusted." : "Dashboard source values are non-negative.",
+    },
+    {
+      name: "Internal consistency",
+      status: consistencyIssues.length ? "error" : "pass",
+      code: consistencyIssues.length ? "inconsistent" : null,
+      message: consistencyIssues.length ? `Review: ${consistencyIssues.join("; ")}.` : "Dashboard totals and attendance relationships reconcile.",
+    },
+  ] as const;
+  const dataQualityOverall = checks.some((check) => check.status === "error")
+    ? "error"
+    : checks.some((check) => check.status === "warning")
+      ? "warning"
+      : "pass";
+  const recordQualityChecks = dataQualityChecks.map((check) => ({
+    ...check,
+    name: check.label,
+    status: check.severity === "attention" ? "warning" as const : "pass" as const,
+    code: check.severity === "attention" ? check.key : null,
+    message: check.severity === "attention" ? `${check.description} Issues found: ${check.issueCount}.` : check.description,
+  }));
+  const detailedQualityChecks = checks.map((check) => ({
+      key: check.code ?? check.name.toLowerCase().replaceAll(" ", "-"),
+      label: check.name,
+      description: check.message,
+      issueCount: check.status === "pass" ? 0 : 1,
+      severity: check.status === "pass" ? "clear" as const : "attention" as const,
+      name: check.name,
+      status: check.status,
+      code: check.code,
+      message: check.message,
+    }));
   const dataQuality = {
-    issueCount: dataQualityChecks.reduce((sum, check) => sum + check.issueCount, 0),
-    checks: dataQualityChecks,
+    overall: dataQualityOverall,
+    issueCount: [...recordQualityChecks, ...detailedQualityChecks].reduce((sum, check) => sum + check.issueCount, 0),
+    checks: detailedQualityChecks,
+    recordChecks: recordQualityChecks,
   };
-  const occupancyRate = capacity ? Math.min((occupied / capacity) * 100, 100) : 0;
   res.json(GetDashboardResponse.parse({
     activeResidents: occupied,
-    bedsAvailable: Math.max(capacity - occupied, 0),
+    bedsAvailable: capacity - occupied,
     paymentsDue: due,
     paymentsCollected: rentCollected,
     occupancyRate,
     statusCounts: residents.reduce<Record<string, number>>((counts, resident) => ({ ...counts, [resident.status]: (counts[resident.status] || 0) + 1 }), {}),
     period,
-    capacity: { totalBeds: capacity, occupiedBeds: occupied, bedsAvailable: Math.max(capacity - occupied, 0), occupancyRate },
+    capacity: { totalBeds: capacity, occupiedBeds: occupied, bedsAvailable: capacity - occupied, occupancyRate },
     income: { rentCollected, otherIncome, totalReceived: rentCollected + otherIncome },
     expenses: { total: monthlyExpenses.reduce((sum, expense) => sum + Number(expense.amount), 0), categories: expenseCategories },
     meetings: { meetingsLogged: monthlyMeetings.length, womenAttended, womenEligible, attendanceRate: roundRate(womenAttended, womenEligible) },
     weeklyAttendance,
+    week,
+    weeklyMeetings: { meetingsLogged: weeklyMeetings.length, womenAttended: weeklyWomenAttended, womenEligible: weeklyWomenEligible, attendanceRate: weeklyAttendanceRate },
     dataQuality,
     progress: {
       newMoveIns: residents.filter((resident) => isInMonth(resident.moveInDate, period)).length,

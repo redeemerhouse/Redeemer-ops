@@ -63,6 +63,10 @@ export const GetDashboardResponse = zod.object({
   "womenEligible": zod.number(),
   "attendanceRate": zod.number().nullable()
 }),
+  "week": zod.object({
+  "startsOn": zod.coerce.date(),
+  "endsOn": zod.coerce.date()
+}),
   "weeklyAttendance": zod.array(zod.object({
   "weekStart": zod.coerce.date(),
   "weekEnd": zod.coerce.date(),
@@ -71,15 +75,37 @@ export const GetDashboardResponse = zod.object({
   "womenEligible": zod.number(),
   "attendanceRate": zod.number().nullable()
 })),
+  "weeklyMeetings": zod.object({
+  "meetingsLogged": zod.number(),
+  "womenAttended": zod.number(),
+  "womenEligible": zod.number(),
+  "attendanceRate": zod.number().nullable()
+}),
   "dataQuality": zod.object({
+  "overall": zod.enum(['pass', 'warning', 'error']),
   "issueCount": zod.number(),
   "checks": zod.array(zod.object({
   "key": zod.string(),
   "label": zod.string(),
   "description": zod.string(),
   "issueCount": zod.number(),
-  "severity": zod.enum(['clear', 'attention'])
-}))
+  "severity": zod.enum(['clear', 'attention']),
+  "name": zod.string(),
+  "status": zod.enum(['pass', 'warning', 'error']),
+  "code": zod.string().nullable(),
+  "message": zod.string()
+})),
+  "recordChecks": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "description": zod.string(),
+  "issueCount": zod.number(),
+  "severity": zod.enum(['clear', 'attention']),
+  "name": zod.string(),
+  "status": zod.enum(['pass', 'warning', 'error']),
+  "code": zod.string().nullable(),
+  "message": zod.string()
+})).optional()
 }),
   "progress": zod.object({
   "newMoveIns": zod.number(),

@@ -53,7 +53,7 @@ export type DashboardExpenses = {
   categories: ExpenseCategoryTotal[];
 };
 
-export type DashboardMeetings = {
+export type DashboardMeetingsProperty = {
   meetingsLogged: number;
   womenAttended: number;
   womenEligible: number;
@@ -66,6 +66,11 @@ export type DashboardProgress = {
   completedOperations: number;
 };
 
+export interface DashboardWeek {
+  startsOn: string;
+  endsOn: string;
+}
+
 export interface WeeklyAttendance {
   weekStart: string;
   weekEnd: string;
@@ -76,6 +81,23 @@ export interface WeeklyAttendance {
   attendanceRate: number | null;
 }
 
+export interface DashboardMeetings {
+  meetingsLogged: number;
+  womenAttended: number;
+  womenEligible: number;
+  /** @nullable */
+  attendanceRate: number | null;
+}
+
+export type DashboardDataQualityOverall = typeof DashboardDataQualityOverall[keyof typeof DashboardDataQualityOverall];
+
+
+export const DashboardDataQualityOverall = {
+  pass: 'pass',
+  warning: 'warning',
+  error: 'error',
+} as const;
+
 export type DataQualityCheckSeverity = typeof DataQualityCheckSeverity[keyof typeof DataQualityCheckSeverity];
 
 
@@ -84,17 +106,33 @@ export const DataQualityCheckSeverity = {
   attention: 'attention',
 } as const;
 
+export type DataQualityCheckStatus = typeof DataQualityCheckStatus[keyof typeof DataQualityCheckStatus];
+
+
+export const DataQualityCheckStatus = {
+  pass: 'pass',
+  warning: 'warning',
+  error: 'error',
+} as const;
+
 export interface DataQualityCheck {
   key: string;
   label: string;
   description: string;
   issueCount: number;
   severity: DataQualityCheckSeverity;
+  name: string;
+  status: DataQualityCheckStatus;
+  /** @nullable */
+  code: string | null;
+  message: string;
 }
 
-export interface DataQualitySummary {
+export interface DashboardDataQuality {
+  overall: DashboardDataQualityOverall;
   issueCount: number;
   checks: DataQualityCheck[];
+  recordChecks?: DataQualityCheck[];
 }
 
 export interface Dashboard {
@@ -108,10 +146,27 @@ export interface Dashboard {
   capacity: DashboardCapacity;
   income: DashboardIncome;
   expenses: DashboardExpenses;
-  meetings: DashboardMeetings;
+  meetings: DashboardMeetingsProperty;
+  week: DashboardWeek;
   weeklyAttendance: WeeklyAttendance[];
-  dataQuality: DataQualitySummary;
+  weeklyMeetings: DashboardMeetings;
+  dataQuality: DashboardDataQuality;
   progress: DashboardProgress;
+}
+
+export type DataQualitySummaryOverall = typeof DataQualitySummaryOverall[keyof typeof DataQualitySummaryOverall];
+
+
+export const DataQualitySummaryOverall = {
+  pass: 'pass',
+  warning: 'warning',
+  error: 'error',
+} as const;
+
+export interface DataQualitySummary {
+  overall: DataQualitySummaryOverall;
+  issueCount: number;
+  checks: DataQualityCheck[];
 }
 
 export type ReportFilters = {

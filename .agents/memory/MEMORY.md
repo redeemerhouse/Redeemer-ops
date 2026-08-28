@@ -1,8 +1,10 @@
 - [Security review baseline](security-review-baseline.md) — treat generated contracts and UI as non-boundaries until server middleware and scoped routes enforce them.
 - [Recovery operations data boundaries](recovery-operations.md) — core operational records persist in PostgreSQL; auth, binary document storage, and approved exports remain separate integration boundaries.
 - [OpenAPI export parameter generation](openapi-orval-params.md) — path-and-query operations can collide in generated Zod params exports; run codegen and library checks together.
+- [OpenAPI merge resolution](openapi-generated-conflicts.md) — resolve the source spec first, then regenerate Orval clients and validators instead of hand-merging generated files.
 - [Redeemer House brand system](redeemer-brand-system.md) — every production page must carry the approved logo, navy/magenta palette, warm oat surfaces, and editorial typography.
 - [Workspace TypeScript builds](workspace-typescript-builds.md) — force-rebuild referenced composite packages when source exports change before trusting downstream typecheck results.
 - [Node strip-types test runner](node-strip-types-tests.md) — built-in TypeScript tests need runtime-independent imports and avoid unsupported parameter-property syntax.
 - [Drizzle migration output](drizzle-migration-workflow.md) — use a package-relative output path with this Drizzle CLI; absolute config paths can be incorrectly prefixed.
 - [Orval and Zod compatibility](orval-zod-runtime.md) — generated date/integer validators must match the workspace’s pinned Zod runtime before changing generator options.
+- [Managed workflow contract validation](dashboard-contract-validation.md) — API integration tests use the shared proxy, and Zod-coerced date fields serialize as ISO timestamps.

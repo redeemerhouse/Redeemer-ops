@@ -6,10 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface DashboardMeetings {
+export type DashboardMeetingsProperty = {
   meetingsLogged: number;
   womenAttended: number;
   womenEligible: number;
   /** @nullable */
   attendanceRate: number | null;
-}
+};

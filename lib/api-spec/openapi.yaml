@@ -525,7 +525,7 @@ components:
         - status
     Dashboard:
       type: object
-      required: [activeResidents, bedsAvailable, paymentsDue, paymentsCollected, occupancyRate, period, capacity, income, expenses, meetings, weeklyAttendance, dataQuality, progress]
+      required: [activeResidents, bedsAvailable, paymentsDue, paymentsCollected, occupancyRate, period, week, capacity, income, expenses, meetings, weeklyAttendance, weeklyMeetings, dataQuality, progress]
       properties:
         activeResidents: { type: number }
         bedsAvailable: { type: number }
@@ -574,12 +574,16 @@ components:
             womenAttended: { type: number }
             womenEligible: { type: number }
             attendanceRate: { type: ["number", "null"] }
+        week:
+          $ref: "#/components/schemas/DashboardWeek"
         weeklyAttendance:
           type: array
           items:
             $ref: "#/components/schemas/WeeklyAttendance"
+        weeklyMeetings:
+          $ref: "#/components/schemas/DashboardMeetings"
         dataQuality:
-          $ref: "#/components/schemas/DataQualitySummary"
+          $ref: "#/components/schemas/DashboardDataQuality"
         progress:
           type: object
           required: [newMoveIns, completedOperations]
@@ -598,8 +602,11 @@ components:
         attendanceRate: { type: ["number", "null"] }
     DataQualitySummary:
       type: object
-      required: [issueCount, checks]
+      required: [overall, issueCount, checks]
       properties:
+        overall:
+          type: string
+          enum: [pass, warning, error]
         issueCount: { type: number }
         checks:
           type: array
@@ -607,7 +614,7 @@ components:
             $ref: "#/components/schemas/DataQualityCheck"
     DataQualityCheck:
       type: object
-      required: [key, label, description, issueCount, severity]
+      required: [key, label, description, issueCount, severity, name, status, code, message]
       properties:
         key: { type: string }
         label: { type: string }
@@ -616,6 +623,42 @@ components:
         severity:
           type: string
           enum: [clear, attention]
+        name: { type: string }
+        status:
+          type: string
+          enum: [pass, warning, error]
+        code: { type: ["string", "null"] }
+        message: { type: string }
+    DashboardWeek:
+      type: object
+      required: [startsOn, endsOn]
+      properties:
+        startsOn: { type: string, format: date }
+        endsOn: { type: string, format: date }
+    DashboardMeetings:
+      type: object
+      required: [meetingsLogged, womenAttended, womenEligible, attendanceRate]
+      properties:
+        meetingsLogged: { type: number }
+        womenAttended: { type: number }
+        womenEligible: { type: number }
+        attendanceRate: { type: ["number", "null"] }
+    DashboardDataQuality:
+      type: object
+      required: [overall, issueCount, checks]
+      properties:
+        overall:
+          type: string
+          enum: [pass, warning, error]
+        issueCount: { type: number }
+        checks:
+          type: array
+          items:
+            $ref: "#/components/schemas/DataQualityCheck"
+        recordChecks:
+          type: array
+          items:
+            $ref: "#/components/schemas/DataQualityCheck"
     Report:
       type: object
       required: [reportType, generatedAt, filters, rows]

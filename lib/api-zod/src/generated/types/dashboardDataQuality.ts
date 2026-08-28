@@ -5,11 +5,12 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { DashboardDataQualityOverall } from './dashboardDataQualityOverall';
 import type { DataQualityCheck } from './dataQualityCheck';
-import type { DataQualitySummaryOverall } from './dataQualitySummaryOverall';
 
-export interface DataQualitySummary {
-  overall: DataQualitySummaryOverall;
+export interface DashboardDataQuality {
+  overall: DashboardDataQualityOverall;
   issueCount: number;
   checks: DataQualityCheck[];
+  recordChecks?: DataQualityCheck[];
 }

@@ -6,13 +6,15 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { DashboardCapacity } from './dashboardCapacity';
+import type { DashboardDataQuality } from './dashboardDataQuality';
 import type { DashboardExpenses } from './dashboardExpenses';
 import type { DashboardIncome } from './dashboardIncome';
 import type { DashboardMeetings } from './dashboardMeetings';
+import type { DashboardMeetingsProperty } from './dashboardMeetingsProperty';
 import type { DashboardPeriod } from './dashboardPeriod';
 import type { DashboardProgress } from './dashboardProgress';
 import type { DashboardStatusCounts } from './dashboardStatusCounts';
-import type { DataQualitySummary } from './dataQualitySummary';
+import type { DashboardWeek } from './dashboardWeek';
 import type { WeeklyAttendance } from './weeklyAttendance';
 
 export interface Dashboard {
@@ -26,8 +28,10 @@ export interface Dashboard {
   capacity: DashboardCapacity;
   income: DashboardIncome;
   expenses: DashboardExpenses;
-  meetings: DashboardMeetings;
+  meetings: DashboardMeetingsProperty;
+  week: DashboardWeek;
   weeklyAttendance: WeeklyAttendance[];
-  dataQuality: DataQualitySummary;
+  weeklyMeetings: DashboardMeetings;
+  dataQuality: DashboardDataQuality;
   progress: DashboardProgress;
 }
