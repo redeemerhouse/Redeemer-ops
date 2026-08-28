@@ -66,6 +66,37 @@ export type DashboardProgress = {
   completedOperations: number;
 };
 
+export interface WeeklyAttendance {
+  weekStart: string;
+  weekEnd: string;
+  meetingsLogged: number;
+  womenAttended: number;
+  womenEligible: number;
+  /** @nullable */
+  attendanceRate: number | null;
+}
+
+export type DataQualityCheckSeverity = typeof DataQualityCheckSeverity[keyof typeof DataQualityCheckSeverity];
+
+
+export const DataQualityCheckSeverity = {
+  clear: 'clear',
+  attention: 'attention',
+} as const;
+
+export interface DataQualityCheck {
+  key: string;
+  label: string;
+  description: string;
+  issueCount: number;
+  severity: DataQualityCheckSeverity;
+}
+
+export interface DataQualitySummary {
+  issueCount: number;
+  checks: DataQualityCheck[];
+}
+
 export interface Dashboard {
   activeResidents: number;
   bedsAvailable: number;
@@ -78,6 +109,8 @@ export interface Dashboard {
   income: DashboardIncome;
   expenses: DashboardExpenses;
   meetings: DashboardMeetings;
+  weeklyAttendance: WeeklyAttendance[];
+  dataQuality: DataQualitySummary;
   progress: DashboardProgress;
 }
 

@@ -1,0 +1,1292 @@
+# Replit Build Prompt: Redeemer House Recovery Housing Resident Management System
+
+Build the foundational framework for a standalone **Redeemer House Recovery Housing Management Application**.
+
+This application is completely separate from Corazon Connect and should have its own database, authentication, permissions, resident records, payment workflows, housing management structure, and reporting framework.
+
+The purpose of the application is to manage residents living in Redeemer House recovery homes and give staff a centralized place to view each resident's housing history, payments, recovery progress, documentation, compliance information, medications, testing, assessments, case notes, and other program activity.
+
+The architecture should be built to support multiple Redeemer House locations and future growth.
+
+Prioritize:
+
+* Database architecture
+* Resident profile structure
+* Multi-house functionality
+* Permissions
+* Audit history
+* Modular reusable components
+* Mobile accessibility
+* Reporting readiness
+* Secure document management
+* Future payment integrations
+
+Do not focus heavily on final visual design yet. Build the framework correctly first.
+
+---
+
+# 1. MASTER RESIDENT PROFILE
+
+Each person enrolled in Redeemer House should have one master Resident Profile.
+
+The Resident Profile should serve as the central record for everything related to that resident.
+
+At the top of the profile, display:
+
+* Resident full name
+* Preferred name
+* Profile photo, optional
+* Unique Resident ID
+* Current Redeemer House location
+* Room assignment
+* Bed assignment
+* Move-in date
+* Current resident status
+* Assigned staff member or case manager
+* Phone
+* Email
+* Emergency contact
+* Current rent amount
+* Current balance
+* Last payment date
+* Most recent UA result
+* Most recent mobile check-in
+* Most recent Recovery Capital Assessment score
+* Current employment status
+* Current recovery phase or program milestone
+* Alerts requiring staff attention
+
+Include quick actions such as:
+
+* Add Case Note
+* Add Recovery Note
+* Record Payment
+* Record UA
+* Upload Document
+* Complete Recovery Capital Assessment
+* Add Medication
+* Record Check-In
+* Add Task
+* Add Alert
+* Record Incident
+* Update Resident Status
+
+Resident status options should include:
+
+* Applicant
+* Pending Review
+* Approved
+* Waitlisted
+* Active Resident
+* Temporarily Away
+* Graduated
+* Successfully Completed
+* Discharged
+* Left Against Program Advice
+* Inactive
+* Alumni
+* Archived
+
+Maintain a history of all resident status changes.
+
+---
+
+# 2. RESIDENT PROFILE TABS
+
+Create a tabbed Resident Profile with the following primary sections:
+
+* Overview
+* Personal Information
+* Documents
+* Mobile Check-In
+* Payments
+* UA Log
+* Medications
+* Recovery Notes
+* Recovery Capital Assessments
+* Case Notes
+* Goals
+* Tasks & Alerts
+* Incidents
+* Program History
+* Discharge / Graduation
+* Alumni Follow-Up
+
+The tab system should work well on desktop and mobile.
+
+---
+
+# 3. OVERVIEW TAB
+
+Create a dashboard-style overview showing the resident's most important information.
+
+Include:
+
+* Current house
+* Room and bed
+* Move-in date
+* Days in program
+* Current status
+* Assigned staff
+* Current rent
+* Current balance
+* Next payment due
+* Last payment
+* Recent UA result
+* Current medications
+* Latest Recovery Capital score
+* Current goals
+* Outstanding tasks
+* Upcoming appointments
+* Recent case note
+* Recent recovery note
+* Recent check-in status
+* Current employment status
+* Active alerts
+
+Create a chronological Resident Activity Timeline.
+
+Examples:
+
+* Application submitted
+* Approved
+* Move-in completed
+* Bed assigned
+* Payment recorded
+* UA completed
+* Recovery assessment completed
+* Case note entered
+* Medication updated
+* Overnight pass approved
+* Incident documented
+* Resident achieved milestone
+* Employment started
+* Resident graduated
+* Resident discharged
+
+---
+
+# 4. PERSONAL INFORMATION TAB
+
+Track core resident information including:
+
+* Legal name
+* Preferred name
+* Date of birth
+* Phone
+* Email
+* Gender
+* Address prior to entry
+* Emergency contacts
+* Relationship to emergency contact
+* Emergency contact phone
+* Marital status
+* Number of children
+* Dependents
+* Veteran status
+* Employment status
+* Employer
+* Income
+* Insurance
+* Transportation access
+* Driver's license status
+* Legal involvement
+* Probation/parole status
+* Court information
+* Recovery support network
+
+Create space for additional configurable demographic fields later.
+
+Do not store highly sensitive information unless it is necessary for program operations.
+
+---
+
+# 5. HOUSING AND BED MANAGEMENT
+
+Redeemer House should support multiple homes.
+
+Create the following hierarchy:
+
+REDEEMER HOUSE
+→ HOUSE / PROPERTY
+→ ROOM
+→ BED
+→ RESIDENT ASSIGNMENT
+
+Each house should contain:
+
+* House name
+* Address
+* House manager
+* Capacity
+* Number of rooms
+* Number of beds
+* Active/inactive status
+
+Each bed should have a status:
+
+* Available
+* Occupied
+* Reserved
+* Maintenance
+* Temporarily Unavailable
+
+Staff should be able to:
+
+* Assign residents to beds
+* Transfer residents between rooms
+* Transfer residents between Redeemer House locations
+* Record move-in
+* Record move-out
+* View occupancy
+* View available beds
+* View historical bed assignments
+
+Never overwrite previous housing assignments.
+
+Maintain a complete housing history.
+
+---
+
+# 6. DOCUMENTS TAB
+
+Create secure document storage for every resident.
+
+Allow staff to:
+
+* Upload documents
+* Preview documents
+* Download documents
+* Rename documents
+* Categorize documents
+* Add notes
+* Enter expiration dates
+* Replace documents while keeping older versions
+* Archive documents
+
+Suggested document categories:
+
+* Application
+* Identification
+* Driver's License
+* Social Security Card
+* Birth Certificate
+* Insurance
+* Employment Verification
+* Income Verification
+* Treatment Documentation
+* Discharge Documentation
+* Court Documentation
+* Probation/Parole Documentation
+* Medication Documentation
+* Medical Documentation
+* Program Agreement
+* Resident Handbook
+* Consent Forms
+* Release of Information
+* Rent Agreement
+* House Rules Agreement
+* Behavioral Agreement
+* Overnight Pass
+* Graduation Documentation
+* Discharge Documentation
+* Other
+
+Track:
+
+* Uploaded date
+* Uploaded by
+* Document type
+* Version
+* Expiration date
+* Confidentiality level
+
+Use soft delete/archive functionality rather than permanent deletion through normal staff workflows.
+
+---
+
+# 7. MOBILE CHECK-IN TAB
+
+Create a mobile-friendly resident check-in system.
+
+Residents should eventually be able to log into a resident portal from their phone.
+
+Check-in information should include:
+
+* Date
+* Check-in time
+* Check-out time when applicable
+* Current location
+* GPS coordinates if location permissions are enabled
+* Assigned Redeemer House
+* Approved location
+* Staff verification
+* Curfew status
+* Overnight pass status
+* Notes
+
+Check-in statuses:
+
+* On Time
+* Late
+* Excused
+* Approved Overnight
+* Missed Check-In
+* Manual Staff Check-In
+
+Design the architecture so future geofencing can determine whether a resident is checking in from an approved Redeemer House location.
+
+Staff dashboard should show:
+
+* Residents checked in
+* Residents not checked in
+* Late residents
+* Approved overnight absences
+* Repeated missed check-ins
+
+Allow program administrators to configure check-in and curfew rules.
+
+Do not automatically discipline residents based solely on software alerts.
+
+---
+
+# 8. PAYMENTS TAB
+
+Create a complete resident payment ledger.
+
+Each resident should have:
+
+* Monthly rent amount
+* Current balance
+* Past-due balance
+* Credits
+* Payment history
+* Upcoming charges
+* Assistance payments
+* Adjustments
+
+Track individual charges:
+
+* Charge date
+* Due date
+* Charge category
+* Amount
+* Description
+* Status
+
+Track individual payments:
+
+* Payment date
+* Amount
+* Payment method
+* Reference/transaction number
+* Applied balance
+* Notes
+* Staff member who recorded payment
+
+Payment categories may include:
+
+* Monthly Rent
+* Partial Rent
+* Deposit
+* Late Fee, if used
+* Rental Assistance
+* Scholarship
+* Third-Party Payment
+* Credit
+* Adjustment
+* Waiver
+* Other
+
+Payment methods:
+
+* ACH
+* Debit Card
+* Credit Card
+* Cash
+* Check
+* Money Order
+* Zelle
+* Venmo
+* Cash App
+* Apple Pay
+* Google Pay
+* External Assistance
+* Other
+
+Build the payment layer so Redeemer House can later integrate with QuickBooks, QuickBooks Payments, or another payment processor without redesigning the resident ledger.
+
+Prepare fields for:
+
+* External Customer ID
+* External Invoice ID
+* External Payment ID
+* Payment Processor Transaction ID
+* Sync status
+* Last sync date
+
+Never store raw credit card numbers, CVV codes, or online banking credentials inside the application.
+
+---
+
+# 9. UA LOG TAB
+
+Create a structured Urinalysis / Drug Screening Log.
+
+Each test should capture:
+
+* Test date
+* Test time
+* Test type
+* Staff member administering test
+* Reason for test
+* Overall result
+* Individual substances tested
+* Individual substance results
+* Confirmation test required
+* Confirmation result
+* Resident acknowledgment
+* Notes
+* Follow-up action
+
+Possible results:
+
+* Negative
+* Positive
+* Inconclusive
+* Refused
+* Unable to Complete
+* Pending Confirmation
+* Excused
+
+Possible substances:
+
+* Alcohol
+* Amphetamines
+* Benzodiazepines
+* Buprenorphine
+* Cocaine
+* Fentanyl
+* Methamphetamine
+* Methadone
+* Opiates
+* Oxycodone
+* THC
+* Other
+
+Allow prescribed medications to be documented alongside the test so staff can appropriately review results.
+
+The software should NOT automatically determine whether a positive test constitutes a violation.
+
+Create chronological testing history and trend views.
+
+Restrict UA information to approved staff roles.
+
+---
+
+# 10. MEDICATIONS TAB
+
+Create a medication tracking section.
+
+This is primarily a medication documentation and coordination tool.
+
+Track:
+
+* Medication name
+* Dosage
+* Frequency
+* Route
+* Prescriber
+* Pharmacy
+* Start date
+* End date
+* Active/inactive status
+* Resident self-administers
+* Medication stored onsite
+* Refill date
+* Notes
+
+Medication categories:
+
+* General Medication
+* Behavioral Health
+* MOUD/MAT
+* PRN
+* Other
+
+Display:
+
+* Current medications
+* Historical medications
+* Medication changes
+* Upcoming refill dates
+* Medication alerts
+
+Maintain a medication change history rather than overwriting previous records.
+
+Restrict access based on staff role.
+
+---
+
+# 11. RECOVERY NOTES TAB
+
+Create Recovery Notes specifically for recovery-focused support.
+
+Recovery Notes should be separate from general case management notes.
+
+Possible topics:
+
+* Recovery coaching
+* Recovery goals
+* 12-step involvement
+* Peer support
+* Sponsor relationships
+* Relapse prevention
+* Recovery barriers
+* Recovery strengths
+* Treatment participation
+* MOUD/MAT engagement
+* Family support
+* Employment
+* Education
+* Transportation
+* Life skills
+* Financial stability
+* Community support
+* Spiritual or personal meaning if voluntarily discussed
+* Personal progress
+* Independent living readiness
+
+Each note should include:
+
+* Date
+* Time
+* Staff member
+* Encounter type
+* Location
+* Duration
+* Topics addressed
+* Resident goals
+* Progress
+* Barriers
+* Resident response
+* Staff intervention
+* Next steps
+* Follow-up date
+
+Note status:
+
+* Draft
+* Final
+* Amended
+
+Once finalized, notes should not be directly overwritten.
+
+Corrections should be made using an amendment system that preserves the original note.
+
+---
+
+# 12. RECOVERY CAPITAL ASSESSMENTS
+
+Create a configurable Recovery Capital Assessment system.
+
+Do not hard-code only one assessment.
+
+Create an Assessment Engine capable of supporting multiple assessments.
+
+Suggested structure:
+
+ASSESSMENT TEMPLATE
+→ SECTIONS
+→ QUESTIONS
+→ ANSWER OPTIONS
+→ SCORING RULES
+→ RESIDENT RESPONSE
+→ DOMAIN SCORES
+→ TOTAL SCORE
+
+Track:
+
+* Assessment type
+* Assessment date
+* Staff member
+* Responses
+* Domain scores
+* Total score
+* Previous score
+* Change over time
+* Resident strengths
+* Resident barriers
+* Recommended interventions
+* Goals created from assessment
+* Follow-up assessment date
+
+Possible Recovery Capital domains:
+
+* Housing Stability
+* Recovery Stability
+* Physical Health
+* Behavioral Health
+* Employment
+* Income
+* Education
+* Family Relationships
+* Social Support
+* Recovery Support Network
+* Transportation
+* Legal Stability
+* Life Skills
+* Community Connection
+* Purpose/Meaning
+
+Allow administrators to change domains and questions later.
+
+Eventually display graphs showing changes in Recovery Capital over time.
+
+---
+
+# 13. CASE NOTES TAB
+
+Create structured case management notes.
+
+Case notes should include:
+
+* Date
+* Time
+* Staff member
+* Contact method
+* Location
+* Duration
+* Need addressed
+* Intervention
+* Referral
+* Outcome
+* Follow-up action
+* Follow-up date
+* Related goal
+* Related task
+* Related document
+
+Contact types:
+
+* In Person
+* Phone
+* Text
+* Email
+* Home Meeting
+* Partner Coordination
+* Court Coordination
+* Treatment Coordination
+* Administrative
+* Other
+
+Allow a staff member to create a task directly from a case note.
+
+Use:
+
+* Draft
+* Final
+* Amended
+
+Preserve original finalized notes.
+
+---
+
+# 14. RESIDENT GOALS
+
+Create a Goal Management section.
+
+Goal categories might include:
+
+* Recovery
+* Employment
+* Education
+* Financial Stability
+* Housing
+* Family
+* Legal
+* Health
+* Behavioral Health
+* Transportation
+* Life Skills
+* Community Support
+* Spiritual/Personal Growth
+* Other
+
+Each goal should include:
+
+* Goal description
+* Category
+* Date created
+* Target completion date
+* Resident priority
+* Assigned staff
+* Action steps
+* Progress
+* Status
+* Completion date
+* Notes
+
+Statuses:
+
+* Not Started
+* In Progress
+* On Hold
+* Completed
+* Discontinued
+
+Goals should be able to connect to Recovery Capital Assessments and case notes.
+
+---
+
+# 15. TASKS AND ALERTS
+
+Create centralized Tasks and Alerts.
+
+Tasks:
+
+* Resident
+* Assigned staff
+* Category
+* Description
+* Priority
+* Due date
+* Status
+* Related record
+* Notes
+
+Task categories might include:
+
+* Rent
+* Employment
+* Recovery
+* Assessment
+* Medication
+* UA
+* Legal
+* Documents
+* Appointment
+* Transportation
+* House Requirement
+* Other
+
+Alerts might include:
+
+* Payment Past Due
+* Missed Check-In
+* Repeated Late Check-In
+* Assessment Due
+* Document Expiring
+* Medication Refill
+* UA Follow-Up
+* Court Date
+* Goal Review Due
+* Program Review Due
+
+Allow staff to acknowledge, resolve, or dismiss alerts with proper permissions.
+
+---
+
+# 16. INCIDENTS
+
+Create an Incident Documentation tab.
+
+Possible incident categories:
+
+* House Rule Concern
+* Behavioral Concern
+* Conflict
+* Safety Concern
+* Medical Emergency
+* Overdose
+* Unauthorized Absence
+* Property Damage
+* Substance Use Concern
+* Law Enforcement Contact
+* Other
+
+Each incident should capture:
+
+* Date
+* Time
+* Location
+* Residents involved
+* Staff involved
+* Incident category
+* Description
+* Immediate actions
+* Notifications
+* Follow-up
+* Outcome
+* Related documents
+* Related case notes
+
+Restrict sensitive incident records appropriately.
+
+---
+
+# 17. PROGRAM MILESTONES
+
+Create a resident milestone system.
+
+Possible milestones:
+
+* 30 Days
+* 60 Days
+* 90 Days
+* Six Months
+* One Year
+* Employment Obtained
+* Driver's License Obtained
+* Vehicle Obtained
+* Education Started
+* Treatment Completed
+* Recovery Milestone
+* Savings Goal Achieved
+* Family Reunification
+* Permanent Housing Secured
+* Program Graduation
+
+Allow administrators to create custom milestone types.
+
+---
+
+# 18. DISCHARGE AND GRADUATION
+
+Create a structured program exit workflow.
+
+Capture:
+
+* Exit date
+* Exit type
+* Graduation status
+* Reason for exit
+* Destination
+* Housing destination
+* Employment status
+* Income status
+* Recovery status
+* Recovery Capital score at exit
+* Outstanding balance
+* Medications at exit
+* Referrals provided
+* Follow-up plan
+* Staff completing discharge
+
+Exit categories might include:
+
+* Successful Graduation
+* Permanent Housing
+* Family Reunification
+* Transfer to Another Recovery Residence
+* Higher Level of Care
+* Treatment
+* Voluntary Exit
+* Administrative Discharge
+* Incarceration
+* Hospitalization
+* Unknown
+* Other
+
+Do not delete the resident when they exit.
+
+Change their status and preserve their complete history.
+
+---
+
+# 19. ALUMNI FOLLOW-UP
+
+Create the framework for alumni engagement.
+
+Track follow-ups at configurable intervals such as:
+
+* 30 Days
+* 90 Days
+* 6 Months
+* 12 Months
+
+Possible follow-up outcomes:
+
+* Housing stability
+* Employment
+* Recovery status
+* Treatment engagement
+* Family reunification
+* Continued peer support
+* Return to services
+* Unable to contact
+
+Allow alumni to remain connected to Redeemer House without being counted as active residents.
+
+---
+
+# 20. STAFF ROLES AND PERMISSIONS
+
+Build granular Role-Based Access Control.
+
+Suggested roles:
+
+* Super Administrator
+* Executive Director
+* Program Director
+* House Manager
+* Case Manager
+* Recovery Coach
+* Peer Support Specialist
+* Finance Staff
+* Intake Coordinator
+* Data / Reporting Staff
+* Read-Only Staff
+
+Permissions should be separated by capability.
+
+Examples:
+
+* View Resident
+* Edit Resident
+* View Documents
+* Upload Documents
+* View Payments
+* Record Payments
+* Adjust Payments
+* View UA
+* Record UA
+* View Medications
+* Edit Medications
+* View Recovery Notes
+* Create Recovery Notes
+* View Case Notes
+* Create Case Notes
+* Complete Assessments
+* Manage Beds
+* Manage Check-Ins
+* Document Incidents
+* Discharge Resident
+* View Reports
+* Export Data
+* View Audit Log
+* Manage Users
+* Manage System Configuration
+
+Follow least-privilege principles.
+
+---
+
+# 21. AUDIT TRAIL
+
+Create a robust audit log.
+
+Track important actions including:
+
+* User
+* Date/time
+* Resident
+* Action
+* Record type
+* Record ID
+* Previous value where appropriate
+* Updated value
+* Device/IP information when appropriate
+
+Audit actions should include:
+
+* Created
+* Viewed where appropriate
+* Updated
+* Archived
+* Downloaded
+* Finalized
+* Amended
+* Payment recorded
+* Payment adjusted
+* UA recorded
+* Assessment completed
+* Resident discharged
+
+Regular users should never be able to alter audit logs.
+
+---
+
+# 22. DATABASE ARCHITECTURE
+
+Do NOT create one giant resident table.
+
+Use normalized relational tables.
+
+Suggested entities:
+
+* users
+* roles
+* permissions
+* residents
+* resident_contacts
+* emergency_contacts
+* houses
+* rooms
+* beds
+* bed_assignments
+* resident_status_history
+* applications
+* enrollments
+* resident_documents
+* document_versions
+* mobile_checkins
+* resident_charges
+* resident_payments
+* payment_allocations
+* ua_tests
+* ua_test_results
+* medications
+* medication_history
+* recovery_notes
+* case_notes
+* assessment_templates
+* assessment_sections
+* assessment_questions
+* assessment_options
+* resident_assessments
+* assessment_responses
+* assessment_scores
+* resident_goals
+* resident_tasks
+* resident_alerts
+* incidents
+* overnight_passes
+* appointments
+* referrals
+* program_milestones
+* discharge_records
+* alumni_followups
+* audit_logs
+
+All activity should connect back to the resident through a unique Resident ID.
+
+Use foreign keys, created_at, updated_at, created_by, and status fields consistently.
+
+---
+
+# 23. REPORTING FRAMEWORK
+
+Build the database so future reporting can easily calculate:
+
+* Number of active residents
+* Number of houses
+* Total beds
+* Occupied beds
+* Available beds
+* Occupancy percentage
+* New admissions
+* Graduations
+* Discharges
+* Successful completion rate
+* Average length of stay
+* Rent billed
+* Rent collected
+* Outstanding balances
+* Rental assistance
+* Payment compliance
+* UA tests completed
+* UA outcomes
+* Recovery Capital improvement
+* Case management contacts
+* Recovery coaching contacts
+* Employment outcomes
+* Income changes
+* Education outcomes
+* Treatment engagement
+* MOUD participation
+* Permanent housing outcomes
+* Family reunification outcomes
+* Alumni outcomes
+
+Use structured fields whenever possible rather than relying on narrative notes for reporting.
+
+---
+
+# 24. MOBILE-FIRST CONSIDERATIONS
+
+Staff and residents may frequently interact with this application from phones.
+
+Staff mobile actions should make it easy to:
+
+* Find a resident
+* Add a case note
+* Add a recovery note
+* Record a UA
+* Record a payment
+* Review check-in status
+* Upload a document
+* Complete an assessment
+* Add a task
+* Document an incident
+
+Resident-facing mobile functionality should eventually allow:
+
+* Check in
+* View balance
+* Make payment
+* View payment history
+* View upcoming requirements
+* View tasks
+* View appointments
+* Request an overnight pass
+* Upload requested documents
+* Complete selected assessments
+* Update limited contact information
+
+Residents should NOT have access to internal staff notes, UA documentation, incident records, or other restricted information unless explicitly configured.
+
+---
+
+# 25. SECURITY
+
+Treat all resident information as confidential.
+
+Implement:
+
+* Secure authentication
+* Role-based permissions
+* Session protections
+* Encryption in transit
+* Encryption at rest where appropriate
+* Secure file storage
+* Audit logging
+* Soft deletion
+* User access history
+* Strong password requirements
+* MFA-ready architecture
+* Least-privilege access
+
+Do not expose resident records through public URLs.
+
+Do not store raw payment card or banking credentials.
+
+Highly sensitive information such as medication records, UA results, recovery notes, and legal information should have additional access controls.
+
+---
+
+# 26. SYSTEM CONFIGURATION
+
+Create an administrator Settings area so Redeemer House can change program rules without requiring code changes.
+
+Configurable settings should eventually include:
+
+* House locations
+* Rooms and beds
+* Monthly rent amounts
+* Resident statuses
+* Payment types
+* Payment methods
+* UA test panels
+* Assessment templates
+* Goal categories
+* Task categories
+* Incident categories
+* Document categories
+* Milestone types
+* Check-in requirements
+* Curfew times
+* Overnight pass rules
+* Alumni follow-up intervals
+* Staff permissions
+
+Avoid hard-coding program rules whenever possible.
+
+---
+
+# 27. DEVELOPMENT ORDER
+
+Build this project in phases.
+
+PHASE 1 — ARCHITECTURE
+
+Before building the complete UI:
+
+1. Review the existing Redeemer House Replit project if one exists.
+2. Design the database schema.
+3. Define relationships.
+4. Define user roles and permissions.
+5. Define resident lifecycle.
+6. Define housing/bed structure.
+7. Define audit requirements.
+8. Create database migrations.
+
+PHASE 2 — CORE APPLICATION
+
+Build:
+
+1. Authentication
+2. Staff dashboard
+3. Resident directory
+4. Resident Profile shell
+5. Houses / Rooms / Beds
+6. Resident enrollment
+7. Documents
+8. Case notes
+9. Recovery notes
+10. Tasks and alerts
+
+PHASE 3 — PROGRAM OPERATIONS
+
+Add:
+
+1. Payments
+2. Mobile check-ins
+3. UA log
+4. Medication tracking
+5. Recovery Capital Assessments
+6. Goals
+7. Incidents
+8. Overnight passes
+9. Milestones
+
+PHASE 4 — OUTCOMES AND REPORTING
+
+Add:
+
+1. Graduation/discharge workflows
+2. Alumni tracking
+3. Program dashboards
+4. Financial reporting
+5. Outcome reporting
+6. Export capabilities
+
+PHASE 5 — FUTURE INTEGRATIONS
+
+Prepare architecture for:
+
+* QuickBooks
+* QuickBooks Payments
+* Online payment processing
+* SMS notifications
+* Email notifications
+* GPS/geofencing
+* Digital signatures
+* Resident mobile portal
+* Automated reminders
+* Accounting reconciliation
+
+Do not implement external integrations until the core architecture is stable.
+
+---
+
+# FINAL DEVELOPMENT REQUIREMENT
+
+Before generating large amounts of application code, provide a **Redeemer House System Architecture Summary** showing:
+
+1. Proposed database tables
+2. Relationships between tables
+3. Resident lifecycle
+4. House / room / bed architecture
+5. Role and permission structure
+6. Resident Profile tab architecture
+7. Payment architecture
+8. Assessment architecture
+9. Audit trail approach
+10. Security approach
+11. Which components should be reusable
+12. Recommended implementation phases
+
+Then build the foundation based on that architecture.
+
+The goal is to create a scalable, professional recovery housing management platform for Redeemer House that can support multiple residences, growing resident volume, financial operations, recovery documentation, outcome measurement, and future resident-facing mobile services without requiring the application to be rebuilt as the organization grows.

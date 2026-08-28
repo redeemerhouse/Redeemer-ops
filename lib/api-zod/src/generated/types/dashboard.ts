@@ -12,6 +12,8 @@ import type { DashboardMeetings } from './dashboardMeetings';
 import type { DashboardPeriod } from './dashboardPeriod';
 import type { DashboardProgress } from './dashboardProgress';
 import type { DashboardStatusCounts } from './dashboardStatusCounts';
+import type { DataQualitySummary } from './dataQualitySummary';
+import type { WeeklyAttendance } from './weeklyAttendance';
 
 export interface Dashboard {
   activeResidents: number;
@@ -25,5 +27,7 @@ export interface Dashboard {
   income: DashboardIncome;
   expenses: DashboardExpenses;
   meetings: DashboardMeetings;
+  weeklyAttendance: WeeklyAttendance[];
+  dataQuality: DataQualitySummary;
   progress: DashboardProgress;
 }

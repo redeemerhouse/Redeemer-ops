@@ -63,6 +63,24 @@ export const GetDashboardResponse = zod.object({
   "womenEligible": zod.number(),
   "attendanceRate": zod.number().nullable()
 }),
+  "weeklyAttendance": zod.array(zod.object({
+  "weekStart": zod.coerce.date(),
+  "weekEnd": zod.coerce.date(),
+  "meetingsLogged": zod.number(),
+  "womenAttended": zod.number(),
+  "womenEligible": zod.number(),
+  "attendanceRate": zod.number().nullable()
+})),
+  "dataQuality": zod.object({
+  "issueCount": zod.number(),
+  "checks": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "description": zod.string(),
+  "issueCount": zod.number(),
+  "severity": zod.enum(['clear', 'attention'])
+}))
+}),
   "progress": zod.object({
   "newMoveIns": zod.number(),
   "completedOperations": zod.number()

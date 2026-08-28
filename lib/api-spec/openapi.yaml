@@ -525,7 +525,7 @@ components:
         - status
     Dashboard:
       type: object
-      required: [activeResidents, bedsAvailable, paymentsDue, paymentsCollected, occupancyRate, period, capacity, income, expenses, meetings, progress]
+      required: [activeResidents, bedsAvailable, paymentsDue, paymentsCollected, occupancyRate, period, capacity, income, expenses, meetings, weeklyAttendance, dataQuality, progress]
       properties:
         activeResidents: { type: number }
         bedsAvailable: { type: number }
@@ -574,12 +574,48 @@ components:
             womenAttended: { type: number }
             womenEligible: { type: number }
             attendanceRate: { type: ["number", "null"] }
+        weeklyAttendance:
+          type: array
+          items:
+            $ref: "#/components/schemas/WeeklyAttendance"
+        dataQuality:
+          $ref: "#/components/schemas/DataQualitySummary"
         progress:
           type: object
           required: [newMoveIns, completedOperations]
           properties:
             newMoveIns: { type: number }
             completedOperations: { type: number }
+    WeeklyAttendance:
+      type: object
+      required: [weekStart, weekEnd, meetingsLogged, womenAttended, womenEligible, attendanceRate]
+      properties:
+        weekStart: { type: string, format: date }
+        weekEnd: { type: string, format: date }
+        meetingsLogged: { type: number }
+        womenAttended: { type: number }
+        womenEligible: { type: number }
+        attendanceRate: { type: ["number", "null"] }
+    DataQualitySummary:
+      type: object
+      required: [issueCount, checks]
+      properties:
+        issueCount: { type: number }
+        checks:
+          type: array
+          items:
+            $ref: "#/components/schemas/DataQualityCheck"
+    DataQualityCheck:
+      type: object
+      required: [key, label, description, issueCount, severity]
+      properties:
+        key: { type: string }
+        label: { type: string }
+        description: { type: string }
+        issueCount: { type: number }
+        severity:
+          type: string
+          enum: [clear, attention]
     Report:
       type: object
       required: [reportType, generatedAt, filters, rows]

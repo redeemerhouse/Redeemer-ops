@@ -119,6 +119,12 @@ const monthBounds = (month: string | undefined): MonthBounds | null => {
   };
 };
 
+const dateAtUtc = (date: string) => new Date(`${date}T00:00:00.000Z`);
+
+const dateOnly = (value: Date) => value.toISOString().slice(0, 10);
+
+const roundRate = (attended: number, eligible: number) => eligible ? Math.round((attended / eligible) * 1000) / 10 : null;
+
 const isInMonth = (value: string | null, period: MonthBounds): boolean =>
   Boolean(value && value >= period.startsOn && value < period.endsOn);
 
@@ -377,6 +383,60 @@ router.get("/dashboard", async (req, res): Promise<void> => {
     .filter((category) => category.amount > 0);
   const womenAttended = monthlyMeetings.reduce((sum, meeting) => sum + meeting.womenAttended, 0);
   const womenEligible = monthlyMeetings.reduce((sum, meeting) => sum + meeting.womenEligible, 0);
+  const periodStart = dateAtUtc(period.startsOn);
+  const periodEnd = dateAtUtc(period.endsOn);
+  const weeklyAttendance = [];
+  for (let cursor = new Date(periodStart); cursor < periodEnd;) {
+    const next = new Date(cursor);
+    next.setUTCDate(next.getUTCDate() + 7);
+    if (next > periodEnd) next.setTime(periodEnd.getTime());
+    const weekStart = dateOnly(cursor);
+    const weekEndExclusive = dateOnly(next);
+    const weekMeetings = monthlyMeetings.filter((meeting) => meeting.meetingDate >= weekStart && meeting.meetingDate < weekEndExclusive);
+    const weekAttended = weekMeetings.reduce((sum, meeting) => sum + meeting.womenAttended, 0);
+    const weekEligible = weekMeetings.reduce((sum, meeting) => sum + meeting.womenEligible, 0);
+    weeklyAttendance.push({
+      weekStart,
+      weekEnd: dateOnly(new Date(next.getTime() - 86400000)),
+      meetingsLogged: weekMeetings.length,
+      womenAttended: weekAttended,
+      womenEligible: weekEligible,
+      attendanceRate: roundRate(weekAttended, weekEligible),
+    });
+    cursor = next;
+  }
+  const knownHouseNames = new Set(houses.map((house) => house.name));
+  const activeOrPendingResidents = residents.filter((resident) => resident.status !== "exited");
+  const dataQualityChecks = [
+    {
+      key: "resident-contact",
+      label: "Resident contact details",
+      description: "Active and pending residents should have both a phone number and email address.",
+      issueCount: activeOrPendingResidents.filter((resident) => !resident.phone.trim() || !resident.email.trim()).length,
+    },
+    {
+      key: "house-assignments",
+      label: "House assignments",
+      description: "Active and pending residents should point to a known house.",
+      issueCount: activeOrPendingResidents.filter((resident) => !resident.home.trim() || !knownHouseNames.has(resident.home)).length,
+    },
+    {
+      key: "payment-dates",
+      label: "Payment dates",
+      description: "A payment’s paid date should not be earlier than its due date.",
+      issueCount: payments.filter((payment) => Boolean(payment.paidDate) && payment.paidDate! < payment.dueDate).length,
+    },
+    {
+      key: "meeting-denominators",
+      label: "Meeting denominators",
+      description: "Logged meetings need an eligible-women count before attendance can be interpreted.",
+      issueCount: monthlyMeetings.filter((meeting) => meeting.womenEligible === 0).length,
+    },
+  ].map((check) => ({ ...check, severity: check.issueCount ? "attention" : "clear" as const }));
+  const dataQuality = {
+    issueCount: dataQualityChecks.reduce((sum, check) => sum + check.issueCount, 0),
+    checks: dataQualityChecks,
+  };
   const occupancyRate = capacity ? Math.min((occupied / capacity) * 100, 100) : 0;
   res.json(GetDashboardResponse.parse({
     activeResidents: occupied,
@@ -389,7 +449,9 @@ router.get("/dashboard", async (req, res): Promise<void> => {
     capacity: { totalBeds: capacity, occupiedBeds: occupied, bedsAvailable: Math.max(capacity - occupied, 0), occupancyRate },
     income: { rentCollected, otherIncome, totalReceived: rentCollected + otherIncome },
     expenses: { total: monthlyExpenses.reduce((sum, expense) => sum + Number(expense.amount), 0), categories: expenseCategories },
-    meetings: { meetingsLogged: monthlyMeetings.length, womenAttended, womenEligible, attendanceRate: womenEligible ? Math.round((womenAttended / womenEligible) * 1000) / 10 : null },
+    meetings: { meetingsLogged: monthlyMeetings.length, womenAttended, womenEligible, attendanceRate: roundRate(womenAttended, womenEligible) },
+    weeklyAttendance,
+    dataQuality,
     progress: {
       newMoveIns: residents.filter((resident) => isInMonth(resident.moveInDate, period)).length,
       completedOperations: visibleOperations.filter((operation) => operation.status === "completed" && isInMonth(operation.scheduledDate, period)).length,
