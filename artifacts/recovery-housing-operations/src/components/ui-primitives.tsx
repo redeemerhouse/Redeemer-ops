@@ -8,9 +8,9 @@ export function StatusBadge({ status }: { status: string }) {
 
 export function Skeleton({ className = '' }: { className?: string }) { return <div className={`animate-pulse rounded-lg bg-[hsl(var(--muted))] ${className}`} />; }
 
-export function QueryState({ loading, error, retry, children }: { loading?: boolean; error?: boolean; retry?: () => void; children: ReactNode }) {
+export function QueryState({ loading, error, retry, errorDetail, children }: { loading?: boolean; error?: boolean; retry?: () => void; errorDetail?: string; children: ReactNode }) {
   if (loading) return <div className="space-y-4 py-2"><Skeleton className="h-20 w-full" /><Skeleton className="h-32 w-full" /><Skeleton className="h-32 w-full" /></div>;
-  if (error) return <div data-testid="status-error" className="paper-card flex flex-col items-center justify-center gap-3 py-16 text-center"><AlertCircle className="text-[hsl(var(--destructive))]" size={28} /><p className="font-bold">We couldn't load this view.</p><p className="text-sm text-[hsl(var(--muted-foreground))]">Try again in a moment.</p>{retry && <button data-testid="button-retry" onClick={retry} className="rounded-lg bg-[hsl(var(--primary))] px-4 py-2 text-xs font-bold text-[hsl(var(--primary-foreground))]">Retry</button>}</div>;
+  if (error) return <div data-testid="status-error" className="paper-card flex flex-col items-center justify-center gap-3 py-16 text-center"><AlertCircle className="text-[hsl(var(--destructive))]" size={28} /><p className="font-bold">We couldn't load this view.</p><p className="max-w-md text-sm text-[hsl(var(--muted-foreground))]">{errorDetail || 'Try again in a moment.'}</p>{retry && <button data-testid="button-retry" onClick={retry} className="rounded-lg bg-[hsl(var(--primary))] px-4 py-2 text-xs font-bold text-[hsl(var(--primary-foreground))]">Retry</button>}</div>;
   return <>{children}</>;
 }
 

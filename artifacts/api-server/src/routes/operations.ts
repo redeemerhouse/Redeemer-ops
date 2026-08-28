@@ -176,7 +176,7 @@ const AUDIT_RETENTION_YEARS = 7
 const safeActor = (req: Request): string => 
 {
 
-  const actor = req.res?.locals.actorId ?? req.res?.locals.principal?.sub
+  const actor = req.res?.locals.actorId
 ;
 
   return typeof actor === "string" && /^[a-zA-Z0-9._:@-]{1,128}$/.test(actor)
@@ -230,6 +230,12 @@ type ReportType = typeof reportTypes[number]
 type ReportRow = Record<string, string | number | boolean | null>
 ;
 
+type ReportFilters = {
+  house?: string;
+  from?: string;
+  to?: string;
+};
+
 const csvCell = (value: unknown) => 
 {
 
@@ -264,29 +270,58 @@ const toPdf = (title: string, rows: ReportRow[]) => {
   pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.slice(1).map((offset) => `${String(offset).padStart(10, "0")} 00000 n `).join("\n")}\ntrailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
   return Buffer.from(pdf, "binary");
 };
-const reportRows = async (type: ReportType): Promise<ReportRow[]> => {
+const reportRows = async (type: ReportType, principal: Principal, filters: ReportFilters = {}): Promise<ReportRow[]> => {
   const [residents, payments, houses, applications, documents, events] = await Promise.all([
     db.select(getTableColumns(residentsTable)).from(residentsTable).where(organizationScope), db.select(getTableColumns(paymentsTable)).from(paymentsTable).where(organizationScope), db.select(getTableColumns(housesTable)).from(housesTable).where(organizationScope),
     db.select(getTableColumns(applicationsTable)).from(applicationsTable).where(organizationScope), db.select(getTableColumns(documentsTable)).from(documentsTable).where(organizationScope), db.select(getTableColumns(auditEventsTable)).from(auditEventsTable).where(organizationScope),
   ]);
+  const allowedHouseNames = principal.role === "house_manager" ? new Set(principal.houseNames) : null;
+  const houseName = filters.house?.trim();
+  const residentRows = residents.filter((resident) =>
+    (!allowedHouseNames || allowedHouseNames.has(resident.home)) &&
+    (!houseName || resident.home === houseName) &&
+    (!filters.from || resident.moveInDate >= filters.from) &&
+    (!filters.to || resident.moveInDate <= filters.to),
+  );
+  const residentIds = new Set(residentRows.map((resident) => resident.id));
+  const scopedPayments = payments.filter((payment) =>
+    residentIds.has(payment.residentId) &&
+    (!filters.from || payment.dueDate >= filters.from) &&
+    (!filters.to || payment.dueDate <= filters.to),
+  );
+  const scopedApplications = applications.filter((application) => {
+    const applicationHouse = houses.find((house) => house.id === application.preferredHouseId)?.name;
+    return (!allowedHouseNames || (applicationHouse && allowedHouseNames.has(applicationHouse))) &&
+      (!houseName || applicationHouse === houseName) &&
+      (!filters.from || application.createdAt.toISOString().slice(0, 10) >= filters.from) &&
+      (!filters.to || application.createdAt.toISOString().slice(0, 10) <= filters.to);
+  });
+  const scopedDocuments = documents.filter((document) =>
+    residentIds.has(document.residentId ?? -1) || (isAdministrator(principal) && document.residentId === null),
+  );
+  const scopedEvents = events.filter((event) =>
+    isAdministrator(principal)
+      ? true
+      : event.entityType === "resident" && event.entityId !== null && residentIds.has(event.entityId),
+  );
   if (type === "occupancy") {
-    return houses.map((house) => ({ house: house.name, address: house.address, occupied: residents.filter((r) => r.home === house.name && r.status === "active").length, capacity: house.familyCapacity, available: Math.max(house.familyCapacity - residents.filter((r) => r.home === house.name && r.status === "active").length, 0) }));
+    return houses.filter((house) => (!allowedHouseNames || allowedHouseNames.has(house.name)) && (!houseName || house.name === houseName)).map((house) => ({ house: house.name, address: house.address, occupied: residentRows.filter((r) => r.home === house.name && r.status === "active").length, capacity: house.familyCapacity, available: Math.max(house.familyCapacity - residentRows.filter((r) => r.home === house.name && r.status === "active").length, 0) }));
   }
-  if (type === "roster") return residents.map((r) => ({ id: r.id, name: r.name, home: r.home, status: r.status, moveInDate: r.moveInDate, balance: Number(r.balance) }));
+  if (type === "roster") return residentRows.map((r) => ({ id: r.id, name: r.name, home: r.home, status: r.status, moveInDate: r.moveInDate, balance: Number(r.balance) }));
   if (type === "payments") {
-    return payments.map((payment) => ({ id: payment.id, resident: residents.find((r) => r.id === payment.residentId)?.name ?? "Unknown", amount: Number(payment.amount), dueDate: payment.dueDate, paidDate: payment.paidDate, status: payment.status, method: payment.method }));
+    return scopedPayments.map((payment) => ({ id: payment.id, resident: residentRows.find((r) => r.id === payment.residentId)?.name ?? "Unknown", amount: Number(payment.amount), dueDate: payment.dueDate, paidDate: payment.paidDate, status: payment.status, method: payment.method }));
   }
   if (type === "revenue") {
-    const paid = payments.filter((p) => p.status === "paid");
-    return [{ paidPayments: paid.length, collected: paid.reduce((sum, p) => sum + Number(p.amount), 0), outstanding: payments.filter((p) => p.status !== "paid").reduce((sum, p) => sum + Number(p.amount), 0) }];
+    const paid = scopedPayments.filter((p) => p.status === "paid");
+    return [{ paidPayments: paid.length, collected: paid.reduce((sum, p) => sum + Number(p.amount), 0), outstanding: scopedPayments.filter((p) => p.status !== "paid").reduce((sum, p) => sum + Number(p.amount), 0) }];
   }
   if (type === "compliance") {
-    return [{ residents: residents.length, activeResidents: residents.filter((r) => r.status === "active").length, applications: applications.length, signedApplications: applications.filter((a) => a.signedAcknowledgment).length, documents: documents.length, approvedDocuments: documents.filter((d) => d.status === "approved").length }];
+    return [{ residents: residentRows.length, activeResidents: residentRows.filter((r) => r.status === "active").length, applications: scopedApplications.length, signedApplications: scopedApplications.filter((a) => a.signedAcknowledgment).length, documents: scopedDocuments.length, approvedDocuments: scopedDocuments.filter((d) => d.status === "approved").length }];
   }
   if (type === "referral") {
-    return applications.map((application) => ({ applicationId: application.id, applicant: application.applicantName, source: application.source, status: application.status, createdAt: application.createdAt.toISOString() }));
+    return scopedApplications.map((application) => ({ applicationId: application.id, applicant: application.applicantName, source: application.source, status: application.status, createdAt: application.createdAt.toISOString() }));
   }
-  return events.map((event) => ({ id: event.id, action: event.action, entityType: event.entityType, entityId: event.entityId, actor: event.actor, timestamp: event.createdAt.toISOString() }));
+  return scopedEvents.map((event) => ({ id: event.id, action: event.action, entityType: event.entityType, entityId: event.entityId, actor: event.actor, timestamp: event.createdAt.toISOString() }));
 };
 
 router.get("/dashboard", async (req, res): Promise<void> => {
@@ -874,37 +909,39 @@ router.get("/reports/summary", async (_req, res): Promise<void> => {
   res.json({ generatedAt: new Date().toISOString(), occupancy: { active: residents.filter((r) => r.status === "active").length, total: residents.length }, payments: { collected: payments.filter((p) => p.status === "paid").reduce((s, p) => s + Number(p.amount), 0), overdue: payments.filter((p) => p.status === "overdue").length }, applications: applications.length, documents: documents.length, auditEvents: events.length });
   await audit(_req, "Report summary viewed", "report");
 });
+const reportFilters = (req: Request): ReportFilters | null => {
+  const value = (name: "house" | "from" | "to") => typeof req.query[name] === "string" ? req.query[name] as string : undefined;
+  const from = value("from");
+  const to = value("to");
+  if ((from && !isCalendarDate(from)) || (to && !isCalendarDate(to)) || (from && to && from > to)) return null;
+  return { house: value("house"), from, to };
+};
+router.get("/reports/:reportType", async (req, res): Promise<void> => {
+  const principal = getPrincipal(res);
+  if (!authorize(principal, "report:read")) { problem(req, res, 403); return; }
+  const reportType = req.params.reportType as ReportType;
+  const filters = reportFilters(req);
+  if (!reportTypes.includes(reportType) || !filters) { problem(req, res, 400); return; }
+  const rows = await reportRows(reportType, principal, filters);
+  if (!rows.length) { problem(req, res, 404); return; }
+  await audit(req, "Report viewed", "report", undefined, { reportType, house: filters.house ?? null, from: filters.from ?? null, to: filters.to ?? null });
+  res.json({ reportType, generatedAt: new Date().toISOString(), filters, rows });
+});
 router.get("/reports/:reportType/export", async (req, res): Promise<void> => {
   const principal = getPrincipal(res);
   if (!authorize(principal, "report:export")) { problem(req, res, 403); return; }
   const reportType = req.params.reportType as ReportType;
   const format = req.query.format === "pdf" ? "pdf" : req.query.format === "csv" ? "csv" : null;
   if (!reportTypes.includes(reportType) || !format) { problem(req, res, 400); return; }
-  const rows = await reportRows(reportType);
+  const filters = reportFilters(req);
+  if (!filters) { problem(req, res, 400); return; }
+  const rows = await reportRows(reportType, principal, filters);
   if (!rows.length) { problem(req, res, 404); return; }
   await audit(req, "Report exported", "report", undefined, { reportType, format });
-  const filename = `$
-{
-reportType
-}
--report.$
-{
-format
-}
-`;
-  res.setHeader("Content-Disposition", `attachment
-;
- filename="${filename}"`);
+  const filename = `${reportType}-report.${format}`;
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
   if (format === "csv") { res.type("text/csv").send(toCsv(rows)); return; }
-  res.type("application/pdf").send(toPdf(`$
-{
-reportType[0].toUpperCase()
-}
-$
-{
-reportType.slice(1)
-}
- report`, rows));
+  res.type("application/pdf").send(toPdf(`${reportType[0].toUpperCase()}${reportType.slice(1)} report`, rows));
 });
 
 export default router;

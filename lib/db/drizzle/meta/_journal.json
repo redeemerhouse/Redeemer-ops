@@ -15,6 +15,13 @@
       "when": 1787846656007,
       "tag": "0001_jazzy_bedlam",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787858675446,
+      "tag": "0002_tricky_demogoblin",
+      "breakpoints": true
     }
   ]
 }

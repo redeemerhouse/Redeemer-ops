@@ -81,6 +81,59 @@ export interface Dashboard {
   progress: DashboardProgress;
 }
 
+export type ReportFilters = {
+  /** @nullable */
+  house?: string | null;
+  /** @nullable */
+  from?: string | null;
+  /** @nullable */
+  to?: string | null;
+};
+
+export type ReportRowsItem = { [key: string]: unknown };
+
+export interface Report {
+  reportType: string;
+  generatedAt: string;
+  filters: ReportFilters;
+  rows: ReportRowsItem[];
+}
+
+export type ResidentImportPreviewRowsItemSourceData = {[key: string]: string};
+
+export type ResidentImportPreviewRowsItemNormalizedData = { [key: string]: unknown };
+
+export type ResidentImportPreviewRowsItem = {
+  rowNumber: number;
+  sourceData: ResidentImportPreviewRowsItemSourceData;
+  normalizedData: ResidentImportPreviewRowsItemNormalizedData;
+  errors: string[];
+  valid: boolean;
+};
+
+export type ResidentImportPreviewSummary = {
+  total: number;
+  valid: number;
+  failed: number;
+};
+
+export interface ResidentImportPreview {
+  batchId: number;
+  sourceFilename: string;
+  identityRule: string;
+  columns: string[];
+  rows: ResidentImportPreviewRowsItem[];
+  summary: ResidentImportPreviewSummary;
+}
+
+export interface ResidentImportResult {
+  batchId: number;
+  status: string;
+  importedResidentIds: number[];
+  imported: number;
+  skipped: number;
+}
+
 export type ExpenseCategory = typeof ExpenseCategory[keyof typeof ExpenseCategory];
 
 
@@ -438,6 +491,39 @@ export const ListResidentsStatus = {
   exited: 'exited',
 } as const;
 
+export type DownloadResidentImportTemplateParams = {
+format: DownloadResidentImportTemplateFormat;
+};
+
+export type DownloadResidentImportTemplateFormat = typeof DownloadResidentImportTemplateFormat[keyof typeof DownloadResidentImportTemplateFormat];
+
+
+export const DownloadResidentImportTemplateFormat = {
+  csv: 'csv',
+  xlsx: 'xlsx',
+} as const;
+
+export type PreviewResidentImportBody = {
+  /**
+     * @minLength 1
+     * @maxLength 255
+     */
+  filename: string;
+  /**
+     * @minLength 1
+     * @maxLength 1400000
+     */
+  contentBase64: string;
+};
+
+export type ConfirmResidentImportBody = {
+  /**
+     * @minItems 1
+     * @items.minimum 2
+     */
+  approvedRowNumbers: number[];
+};
+
 export type ListPaymentsParams = {
 /**
  * @minimum 1
@@ -492,4 +578,13 @@ export const ExportReportFormat = {
   csv: 'csv',
   pdf: 'pdf',
 } as const;
+
+export type GetReportParams = {
+/**
+ * @maxLength 256
+ */
+house?: string;
+from?: string;
+to?: string;
+};
 

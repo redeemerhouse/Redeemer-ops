@@ -93,6 +93,31 @@ export const auditEventsTable = pgTable("audit_events", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const residentImportBatchesTable = pgTable("resident_import_batches", {
+  id: serial("id").primaryKey(),
+  sourceFilename: text("source_filename").notNull(),
+  actor: text("actor").notNull(),
+  status: text("status").notNull().default("preview"),
+  totalRows: integer("total_rows").notNull(),
+  validRows: integer("valid_rows").notNull().default(0),
+  importedRows: integer("imported_rows").notNull().default(0),
+  failedRows: integer("failed_rows").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+});
+
+export const residentImportRowsTable = pgTable("resident_import_rows", {
+  id: serial("id").primaryKey(),
+  batchId: integer("batch_id").notNull(),
+  rowNumber: integer("row_number").notNull(),
+  sourceData: jsonb("source_data").notNull(),
+  normalizedData: jsonb("normalized_data"),
+  outcome: text("outcome").notNull().default("failed"),
+  errors: jsonb("errors").notNull().default([]),
+  residentId: integer("resident_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const insertHouseSchema = createInsertSchema(housesTable).omit({ id: true });
 export const insertApplicationSchema = createInsertSchema(applicationsTable).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertDocumentSchema = createInsertSchema(documentsTable).omit({ id: true, createdAt: true, updatedAt: true, sharedAt: true });

@@ -34,7 +34,8 @@ export type Permission =
   | "meeting:create"
   | "house:list"
   | "report:read"
-  | "report:export";
+  | "report:export"
+  | "resident:import";
 
 type AuthorizationContext = {
   houseName?: string;
@@ -186,6 +187,7 @@ export function authorize(principal: Principal, permission: Permission, context:
     return isAdmin || isManager;
   }
   if (permission === "report:export") return isAdmin;
+  if (permission === "resident:import") return isAdmin || isManager;
   if (permission === "resident:list") return isAdmin || isManager || isResident;
   if (permission === "resident:create") {
     return (isAdmin || isManager) && (!context.targetHouseName || hasHouseScope(principal, context.targetHouseName));

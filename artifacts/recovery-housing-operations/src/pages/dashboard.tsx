@@ -23,7 +23,7 @@ const date = (value: string) => new Intl.DateTimeFormat('en-US', { month: 'short
 export default function Dashboard() {
   const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
   
-  const dashboard = useGetDashboard({ month });
+  const dashboard = useGetDashboard({ month }, { query: { queryKey: getGetDashboardQueryKey({ month }), retry: false } });
   const activity = useListActivity();
   const residents = useListResidents({ status: 'all' });
   const queryClient = useQueryClient();
@@ -33,6 +33,12 @@ export default function Dashboard() {
   const meetingModal = useDisclosure();
 
   const d = dashboard.data;
+  const dashboardError = dashboard.error as { status?: number } | null;
+  const dashboardErrorDetail = dashboardError?.status === 401
+    ? 'Your signed-in session is missing or expired. Sign in again to load live resident and financial metrics.'
+    : dashboardError?.status === 403
+      ? 'Your role is not permitted to view this dashboard.'
+      : undefined;
   const recentResidents = (residents.data ?? []).filter((resident) => resident.status !== 'exited').slice(0, 4);
 
   const todayFormatted = new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).format(new Date());
@@ -61,7 +67,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <QueryState loading={dashboard.isLoading} error={dashboard.isError} retry={() => queryClient.invalidateQueries({ queryKey: getGetDashboardQueryKey({ month }) })}>
+        <QueryState loading={dashboard.isLoading} error={dashboard.isError} errorDetail={dashboardErrorDetail} retry={() => queryClient.invalidateQueries({ queryKey: getGetDashboardQueryKey({ month }) })}>
           {d && (
             <>
               <div className="mt-9 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

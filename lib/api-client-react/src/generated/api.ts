@@ -21,11 +21,14 @@ import type {
 
 import type {
   Activity,
+  ConfirmResidentImportBody,
   Dashboard,
+  DownloadResidentImportTemplateParams,
   Expense,
   ExpenseInput,
   ExportReportParams,
   GetDashboardParams,
+  GetReportParams,
   HealthStatus,
   House,
   IncomeInput,
@@ -39,7 +42,11 @@ import type {
   MeetingAttendanceInput,
   Payment,
   PaymentInput,
+  PreviewResidentImportBody,
+  Report,
   Resident,
+  ResidentImportPreview,
+  ResidentImportResult,
   ResidentInput,
   ResidentUpdate
 } from './api.schemas';
@@ -535,6 +542,233 @@ export const useUpdateResident = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getUpdateResidentMutationOptions(options));
+    }
+
+export const getDownloadResidentImportTemplateUrl = (params: DownloadResidentImportTemplateParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/residents/import/template?${stringifiedParams}` : `/api/residents/import/template`
+}
+
+/**
+ * @summary Download a resident import template
+ */
+export const downloadResidentImportTemplate = async (params: DownloadResidentImportTemplateParams, options?: Parameters<typeof customFetch>[1]): Promise<string | Blob> => {
+
+  return customFetch<string | Blob>(getDownloadResidentImportTemplateUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getDownloadResidentImportTemplateQueryKey = (params?: DownloadResidentImportTemplateParams,) => {
+    return [
+    `/api/residents/import/template`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getDownloadResidentImportTemplateQueryOptions = <TData = Awaited<ReturnType<typeof downloadResidentImportTemplate>>, TError = ErrorType<void>>(params: DownloadResidentImportTemplateParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof downloadResidentImportTemplate>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getDownloadResidentImportTemplateQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof downloadResidentImportTemplate>>> = ({ signal }) => downloadResidentImportTemplate(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof downloadResidentImportTemplate>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type DownloadResidentImportTemplateQueryResult = NonNullable<Awaited<ReturnType<typeof downloadResidentImportTemplate>>>
+export type DownloadResidentImportTemplateQueryError = ErrorType<void>
+
+
+/**
+ * @summary Download a resident import template
+ */
+
+export function useDownloadResidentImportTemplate<TData = Awaited<ReturnType<typeof downloadResidentImportTemplate>>, TError = ErrorType<void>>(
+ params: DownloadResidentImportTemplateParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof downloadResidentImportTemplate>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getDownloadResidentImportTemplateQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getPreviewResidentImportUrl = () => {
+
+
+
+
+  return `/api/residents/import/preview`
+}
+
+/**
+ * @summary Parse and validate a resident import without saving residents
+ */
+export const previewResidentImport = async (previewResidentImportBody: PreviewResidentImportBody, options?: Parameters<typeof customFetch>[1]): Promise<ResidentImportPreview> => {
+
+  return customFetch<ResidentImportPreview>(getPreviewResidentImportUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(previewResidentImportBody)
+  }
+);}
+
+
+
+
+
+export const getPreviewResidentImportMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewResidentImport>>, TError,{data: BodyType<PreviewResidentImportBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof previewResidentImport>>, TError,{data: BodyType<PreviewResidentImportBody>}, TContext> => {
+
+const mutationKey = ['previewResidentImport'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof previewResidentImport>>, {data: BodyType<PreviewResidentImportBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  previewResidentImport(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PreviewResidentImportMutationResult = NonNullable<Awaited<ReturnType<typeof previewResidentImport>>>
+    export type PreviewResidentImportMutationBody = BodyType<PreviewResidentImportBody>
+    export type PreviewResidentImportMutationError = ErrorType<void>
+
+    /**
+ * @summary Parse and validate a resident import without saving residents
+ */
+export const usePreviewResidentImport = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewResidentImport>>, TError,{data: BodyType<PreviewResidentImportBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof previewResidentImport>>,
+        TError,
+        {data: BodyType<PreviewResidentImportBody>},
+        TContext
+      > => {
+      return useMutation(getPreviewResidentImportMutationOptions(options));
+    }
+
+export const getConfirmResidentImportUrl = (batchId: number,) => {
+
+
+
+
+  return `/api/residents/import/${batchId}/confirm`
+}
+
+/**
+ * @summary Explicitly confirm valid resident import rows
+ */
+export const confirmResidentImport = async (batchId: number,
+    confirmResidentImportBody: ConfirmResidentImportBody, options?: Parameters<typeof customFetch>[1]): Promise<ResidentImportResult> => {
+
+  return customFetch<ResidentImportResult>(getConfirmResidentImportUrl(batchId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(confirmResidentImportBody)
+  }
+);}
+
+
+
+
+
+export const getConfirmResidentImportMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof confirmResidentImport>>, TError,{batchId: number;data: BodyType<ConfirmResidentImportBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof confirmResidentImport>>, TError,{batchId: number;data: BodyType<ConfirmResidentImportBody>}, TContext> => {
+
+const mutationKey = ['confirmResidentImport'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof confirmResidentImport>>, {batchId: number;data: BodyType<ConfirmResidentImportBody>}> = (props) => {
+          const {batchId,data} = props ?? {};
+
+          return  confirmResidentImport(batchId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ConfirmResidentImportMutationResult = NonNullable<Awaited<ReturnType<typeof confirmResidentImport>>>
+    export type ConfirmResidentImportMutationBody = BodyType<ConfirmResidentImportBody>
+    export type ConfirmResidentImportMutationError = ErrorType<void>
+
+    /**
+ * @summary Explicitly confirm valid resident import rows
+ */
+export const useConfirmResidentImport = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof confirmResidentImport>>, TError,{batchId: number;data: BodyType<ConfirmResidentImportBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof confirmResidentImport>>,
+        TError,
+        {batchId: number;data: BodyType<ConfirmResidentImportBody>},
+        TContext
+      > => {
+      return useMutation(getConfirmResidentImportMutationOptions(options));
     }
 
 export const getListPaymentsUrl = (params?: ListPaymentsParams,) => {
@@ -1389,6 +1623,95 @@ export function useExportReport<TData = Awaited<ReturnType<typeof exportReport>>
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getExportReportQueryOptions(reportType,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetReportUrl = (reportType: 'occupancy' | 'roster' | 'payments' | 'revenue' | 'compliance' | 'referral' | 'audit',
+    params?: GetReportParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/reports/${reportType}?${stringifiedParams}` : `/api/reports/${reportType}`
+}
+
+/**
+ * @summary View a scoped operational report
+ */
+export const getReport = async (reportType: 'occupancy' | 'roster' | 'payments' | 'revenue' | 'compliance' | 'referral' | 'audit',
+    params?: GetReportParams, options?: Parameters<typeof customFetch>[1]): Promise<Report> => {
+
+  return customFetch<Report>(getGetReportUrl(reportType,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetReportQueryKey = (reportType: 'occupancy' | 'roster' | 'payments' | 'revenue' | 'compliance' | 'referral' | 'audit',
+    params?: GetReportParams,) => {
+    return [
+    `/api/reports/${reportType}`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetReportQueryOptions = <TData = Awaited<ReturnType<typeof getReport>>, TError = ErrorType<void>>(reportType: 'occupancy' | 'roster' | 'payments' | 'revenue' | 'compliance' | 'referral' | 'audit',
+    params?: GetReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetReportQueryKey(reportType,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getReport>>> = ({ signal }) => getReport(reportType,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: reportType !== null && reportType !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getReport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetReportQueryResult = NonNullable<Awaited<ReturnType<typeof getReport>>>
+export type GetReportQueryError = ErrorType<void>
+
+
+/**
+ * @summary View a scoped operational report
+ */
+
+export function useGetReport<TData = Awaited<ReturnType<typeof getReport>>, TError = ErrorType<void>>(
+ reportType: 'occupancy' | 'roster' | 'payments' | 'revenue' | 'compliance' | 'referral' | 'audit',
+    params?: GetReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetReportQueryOptions(reportType,params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

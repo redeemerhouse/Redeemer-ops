@@ -189,6 +189,102 @@ export const UpdateResidentResponse = zod.object({
 
 
 /**
+ * @summary Download a resident import template
+ */
+export const DownloadResidentImportTemplateQueryParams = zod.object({
+  "format": zod.enum(['csv', 'xlsx'])
+})
+
+export const DownloadResidentImportTemplateResponse = zod.unknown()
+
+
+/**
+ * @summary Parse and validate a resident import without saving residents
+ */
+export const previewResidentImportBodyFilenameMax = 255;
+
+export const previewResidentImportBodyContentBase64Max = 1400000;
+
+
+
+export const PreviewResidentImportBody = zod.object({
+  "filename": zod.string().min(1).max(previewResidentImportBodyFilenameMax),
+  "contentBase64": zod.string().min(1).max(previewResidentImportBodyContentBase64Max)
+})
+
+export const previewResidentImportResponseBatchIdMultipleOf = 1;
+
+export const previewResidentImportResponseRowsItemRowNumberMultipleOf = 1;
+
+export const previewResidentImportResponseSummaryTotalMultipleOf = 1;
+
+export const previewResidentImportResponseSummaryValidMultipleOf = 1;
+
+export const previewResidentImportResponseSummaryFailedMultipleOf = 1;
+
+
+
+export const PreviewResidentImportResponse = zod.object({
+  "batchId": zod.number().multipleOf(previewResidentImportResponseBatchIdMultipleOf),
+  "sourceFilename": zod.string(),
+  "identityRule": zod.string(),
+  "columns": zod.array(zod.string()),
+  "rows": zod.array(zod.object({
+  "rowNumber": zod.number().multipleOf(previewResidentImportResponseRowsItemRowNumberMultipleOf),
+  "sourceData": zod.record(zod.string(), zod.string()),
+  "normalizedData": zod.record(zod.string(), zod.unknown()),
+  "errors": zod.array(zod.string()),
+  "valid": zod.boolean()
+})),
+  "summary": zod.object({
+  "total": zod.number().multipleOf(previewResidentImportResponseSummaryTotalMultipleOf),
+  "valid": zod.number().multipleOf(previewResidentImportResponseSummaryValidMultipleOf),
+  "failed": zod.number().multipleOf(previewResidentImportResponseSummaryFailedMultipleOf)
+})
+})
+
+
+/**
+ * @summary Explicitly confirm valid resident import rows
+ */
+export const confirmResidentImportPathBatchIdMultipleOf = 1;
+
+
+
+export const ConfirmResidentImportParams = zod.object({
+  "batchId": zod.coerce.number().min(1).multipleOf(confirmResidentImportPathBatchIdMultipleOf)
+})
+
+export const confirmResidentImportBodyApprovedRowNumbersItemMin = 2;
+export const confirmResidentImportBodyApprovedRowNumbersItemMultipleOf = 1;
+
+
+
+
+export const ConfirmResidentImportBody = zod.object({
+  "approvedRowNumbers": zod.array(zod.number().min(confirmResidentImportBodyApprovedRowNumbersItemMin).multipleOf(confirmResidentImportBodyApprovedRowNumbersItemMultipleOf)).min(1)
+})
+
+export const confirmResidentImportResponseBatchIdMultipleOf = 1;
+
+export const confirmResidentImportResponseImportedResidentIdsItemMultipleOf = 1;
+
+export const confirmResidentImportResponseImportedMultipleOf = 1;
+
+export const confirmResidentImportResponseSkippedMultipleOf = 1;
+
+
+
+export const ConfirmResidentImportResponse = zod.object({
+  "batchId": zod.number().multipleOf(confirmResidentImportResponseBatchIdMultipleOf),
+  "status": zod.string(),
+  "importedResidentIds": zod.array(zod.number().multipleOf(confirmResidentImportResponseImportedResidentIdsItemMultipleOf)),
+  "imported": zod.number().multipleOf(confirmResidentImportResponseImportedMultipleOf),
+  "skipped": zod.number().multipleOf(confirmResidentImportResponseSkippedMultipleOf)
+})
+
+
+/**
  * @summary List payments
  */
 export const listPaymentsQueryResidentIdMax = 2147483647;
@@ -566,5 +662,34 @@ export const ExportReportQueryParams = zod.object({
 })
 
 export const ExportReportResponse = zod.unknown()
+
+
+/**
+ * @summary View a scoped operational report
+ */
+export const GetReportParams = zod.object({
+  "reportType": zod.enum(['occupancy', 'roster', 'payments', 'revenue', 'compliance', 'referral', 'audit'])
+})
+
+export const getReportQueryHouseMax = 256;
+
+
+
+export const GetReportQueryParams = zod.object({
+  "house": zod.coerce.string().max(getReportQueryHouseMax).optional(),
+  "from": zod.date().optional(),
+  "to": zod.date().optional()
+})
+
+export const GetReportResponse = zod.object({
+  "reportType": zod.string(),
+  "generatedAt": zod.coerce.date(),
+  "filters": zod.object({
+  "house": zod.string().nullish(),
+  "from": zod.coerce.date().nullish(),
+  "to": zod.coerce.date().nullish()
+}),
+  "rows": zod.array(zod.record(zod.string(), zod.unknown()))
+})
 
 
