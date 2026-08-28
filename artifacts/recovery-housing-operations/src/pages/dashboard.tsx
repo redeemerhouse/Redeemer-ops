@@ -1,4 +1,4 @@
-import { ArrowUpRight, BedDouble, CircleDollarSign, ClipboardList, CreditCard, UsersRound, Plus, TrendingUp } from 'lucide-react';
+import { ArrowUpRight, BedDouble, CalendarRange, CircleCheck, CircleDollarSign, ClipboardList, CreditCard, TriangleAlert, UsersRound, Plus, TrendingUp } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'wouter';
 import { 
@@ -19,6 +19,7 @@ import { QueryState, StatusBadge, useDisclosure, Modal, Field, SelectField, Subm
 
 const money = (value: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value);
 const date = (value: string) => new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(value));
+const calendarDate = (value: string) => new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(new Date(value));
 
 export default function Dashboard() {
   const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
@@ -79,6 +80,47 @@ export default function Dashboard() {
 
               <div className="mt-7 grid gap-6 xl:grid-cols-[1.15fr_.85fr]">
                 <div className="space-y-6">
+                  <section className="paper-card animate-enter-delay overflow-hidden" data-testid="panel-weekly-attendance">
+                    <div className="flex flex-col gap-2 border-b border-[hsl(var(--border))] px-6 py-5 sm:flex-row sm:items-end sm:justify-between">
+                      <div>
+                        <div className="section-kicker">Monthly trend</div>
+                        <h2 className="display-serif mt-1 text-2xl">Weekly attendance</h2>
+                      </div>
+                      <div className="text-xs text-[hsl(var(--muted-foreground))]">Attended ÷ eligible women</div>
+                    </div>
+                    {d.weeklyAttendance.some((week) => week.meetingsLogged > 0) ? (
+                      <div className="grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-3">
+                        {d.weeklyAttendance.map((week, index) => (
+                          <div key={week.weekStart} data-testid={`weekly-attendance-${index + 1}`} className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--secondary)/.3)] p-4">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-2 text-xs font-extrabold">
+                                <CalendarRange size={15} className="text-[hsl(var(--primary))]" />
+                                Week {index + 1}
+                              </div>
+                              <span className="text-[10px] font-bold text-[hsl(var(--muted-foreground))]">{calendarDate(week.weekStart)}–{calendarDate(week.weekEnd)}</span>
+                            </div>
+                            <div className="mt-5 flex items-end justify-between gap-3">
+                              <div className="text-2xl font-extrabold">{week.attendanceRate !== null ? `${Math.round(week.attendanceRate)}%` : 'No data'}</div>
+                              <div className="text-right text-[10px] leading-relaxed text-[hsl(var(--muted-foreground))]">
+                                {week.meetingsLogged} {week.meetingsLogged === 1 ? 'meeting' : 'meetings'}<br />
+                                {week.womenAttended} of {week.womenEligible}
+                              </div>
+                            </div>
+                            <div className="mt-3 h-2 overflow-hidden rounded-full bg-[hsl(var(--border))]" aria-label={`Week ${index + 1} attendance rate`}>
+                              <div className="h-full rounded-full bg-[hsl(var(--primary))]" style={{ width: `${Math.min(week.attendanceRate ?? 0, 100)}%` }} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="px-6 py-12 text-center">
+                        <CalendarRange size={24} className="mx-auto text-[hsl(var(--muted-foreground))]" />
+                        <div className="mt-3 text-sm font-extrabold">No weekly attendance yet</div>
+                        <p className="mx-auto mt-1 max-w-sm text-xs leading-relaxed text-[hsl(var(--muted-foreground))]">Log a meeting with attended and eligible counts to start the weekly trend for this month.</p>
+                      </div>
+                    )}
+                  </section>
+
                   <section className="paper-card animate-enter-delay overflow-hidden">
                     <div className="border-b border-[hsl(var(--border))] px-6 py-5">
                       <div className="section-kicker">Authorized staff</div>
@@ -182,6 +224,34 @@ export default function Dashboard() {
                 </div>
 
                 <div className="space-y-6">
+                  <section className="paper-card animate-enter-delay-2 overflow-hidden" data-testid="panel-data-quality">
+                    <div className="flex items-start justify-between gap-4 border-b border-[hsl(var(--border))] px-6 py-5">
+                      <div>
+                        <div className="section-kicker">Data quality</div>
+                        <h2 className="display-serif mt-1 text-2xl">Records to review</h2>
+                      </div>
+                      <span className={`rounded-full px-3 py-1 text-[10px] font-extrabold uppercase tracking-wide ${d.dataQuality.issueCount ? 'bg-[hsl(38_66%_88%)] text-[hsl(31_70%_34%)]' : 'bg-[hsl(161_40%_88%)] text-[hsl(169_42%_27%)]'}`}>
+                        {d.dataQuality.issueCount ? `${d.dataQuality.issueCount} to review` : 'All clear'}
+                      </span>
+                    </div>
+                    <div className="divide-y divide-[hsl(var(--border))]">
+                      {d.dataQuality.checks.map((check) => (
+                        <div key={check.key} data-testid={`data-quality-${check.key}`} className="flex gap-3 px-6 py-4">
+                          <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${check.severity === 'clear' ? 'bg-[hsl(161_40%_88%)] text-[hsl(169_42%_27%)]' : 'bg-[hsl(38_66%_88%)] text-[hsl(31_70%_34%)]'}`}>
+                            {check.severity === 'clear' ? <CircleCheck size={16} /> : <TriangleAlert size={16} />}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="text-xs font-extrabold">{check.label}</div>
+                              <div className="text-xs font-extrabold">{check.issueCount ? check.issueCount : 'Clear'}</div>
+                            </div>
+                            <p className="mt-1 text-[11px] leading-relaxed text-[hsl(var(--muted-foreground))]">{check.description}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+
                   <section className="paper-card animate-enter-delay-2 overflow-hidden">
                     <div className="border-b border-[hsl(var(--border))] px-6 py-5">
                       <div className="section-kicker">House log</div>
