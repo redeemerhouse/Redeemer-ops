@@ -35,7 +35,11 @@ export type Permission =
   | "house:list"
   | "report:read"
   | "report:export"
-  | "resident:import";
+  | "resident:import"
+  | "assessment:read"
+  | "assessment:create"
+  | "assessment:update"
+  | "assessment:submit";
 
 type AuthorizationContext = {
   houseName?: string;
@@ -214,6 +218,12 @@ export function authorize(principal: Principal, permission: Permission, context:
     return (isAdmin || isManager) && (!context.houseName || hasHouseScope(principal, context.houseName));
   }
   if (permission === "house:list") return isAdmin || isManager || isResident;
+  if (permission === "assessment:read" || permission === "assessment:create" || permission === "assessment:update" || permission === "assessment:submit") {
+    if (context.houseName && !hasHouseScope(principal, context.houseName)) return false;
+    if (context.residentId !== undefined && isResident && context.residentId !== principal.residentId) return false;
+    if (permission === "assessment:read") return isAdmin || isManager || isResident;
+    return isAdmin || isManager || isResident;
+  }
   return false;
 }
 

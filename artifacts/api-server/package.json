@@ -13,6 +13,7 @@
     "test:security": "node --test test/security-controls.test.mjs",
     "test:documents": "node --test test/document-sharing.test.mjs",
     "test:overview": "node --test test/overview-metrics.test.mjs",
+    "test:assessments": "node --test test/assessments.test.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

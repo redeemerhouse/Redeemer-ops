@@ -2,8 +2,8 @@ import { AlertCircle, Check, ChevronDown, LoaderCircle, X } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 
 export function StatusBadge({ status }: { status: string }) {
-  const labels: Record<string, string> = { active: 'Active', pending: 'Pending', exited: 'Exited', paid: 'Paid', due: 'Due', overdue: 'Overdue' };
-  return <span data-testid={`status-${status}`} className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[.08em] ${status === 'active' || status === 'paid' ? 'bg-[hsl(161_40%_88%)] text-[hsl(169_42%_27%)]' : status === 'pending' || status === 'due' ? 'bg-[hsl(38_66%_88%)] text-[hsl(31_70%_34%)]' : 'bg-[hsl(9_63%_90%)] text-[hsl(7_58%_42%)]'}`}><span className="h-1.5 w-1.5 rounded-full bg-current" />{labels[status] ?? status}</span>;
+  const labels: Record<string, string> = { active: 'Active', pending: 'Pending', exited: 'Exited', paid: 'Paid', due: 'Due', overdue: 'Overdue', draft: 'Draft', submitted: 'Submitted' };
+  return <span data-testid={`status-${status}`} className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[.08em] ${status === 'active' || status === 'paid' || status === 'submitted' ? 'bg-[hsl(161_40%_88%)] text-[hsl(169_42%_27%)]' : status === 'pending' || status === 'due' || status === 'draft' ? 'bg-[hsl(38_66%_88%)] text-[hsl(31_70%_34%)]' : 'bg-[hsl(9_63%_90%)] text-[hsl(7_58%_42%)]'}`}><span className="h-1.5 w-1.5 rounded-full bg-current" />{labels[status] ?? status}</span>;
 }
 
 export function Skeleton({ className = '' }: { className?: string }) { return <div className={`animate-pulse rounded-lg bg-[hsl(var(--muted))] ${className}`} />; }

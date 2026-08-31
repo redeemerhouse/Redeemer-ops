@@ -1,7 +1,127 @@
-import { db, housesTable, residentsTable, paymentsTable, operationsTable, auditEventsTable } from "@workspace/db";
-import { count } from "drizzle-orm";
+import { db, housesTable, residentsTable, paymentsTable, operationsTable, auditEventsTable, assessmentTemplatesTable } from "@workspace/db";
+import { count, eq } from "drizzle-orm";
+
+const assessmentTemplateSeeds = [
+  {
+    slug: "recovery-wellness-assessment",
+    title: "Recovery Wellness Assessment",
+    description: "A private check-in to help the care team understand how recovery is progressing and where support is needed.",
+    category: "resident",
+    audience: "resident",
+    sensitivity: "sensitive",
+    version: 1,
+    schema: [
+      { id: "wellness", title: "Wellness check-in", instructions: "Answer honestly. Your responses are shared only with authorized recovery staff.", fields: [
+        { id: "checkInDate", label: "Check-in date", type: "date", required: true, sensitive: false },
+        { id: "overallWellness", label: "How are you feeling overall today?", type: "select", required: true, sensitive: true, options: ["Great", "Good", "Okay", "Struggling", "In crisis"] },
+        { id: "wellnessNotes", label: "Tell us more about how you are doing", type: "long_text", required: false, sensitive: true, helpText: "Share what feels important, including wins or concerns." },
+        { id: "needsSupport", label: "Would you like someone from the team to follow up?", type: "yes_no", required: true, sensitive: true },
+        { id: "supportAreas", label: "What would be helpful right now?", type: "checklist", required: false, sensitive: true, options: ["A conversation", "Recovery meeting support", "Treatment coordination", "Medication support", "Employment or education support", "Something else"] },
+      ] },
+      { id: "safety", title: "Safety and support", instructions: "This section helps us respond to immediate needs.", fields: [
+        { id: "safeToday", label: "Do you feel safe where you are today?", type: "yes_no", required: true, sensitive: true },
+        { id: "safetyPlan", label: "What helps you stay connected to your recovery?", type: "long_text", required: true, sensitive: true },
+        { id: "acknowledgment", label: "I have answered these questions truthfully.", type: "acknowledgment", required: true, sensitive: false, helpText: "Type your full name to acknowledge." },
+      ] },
+    ],
+  },
+  {
+    slug: "weekly-accountability",
+    title: "Weekly Accountability",
+    description: "A short weekly reflection on commitments, meetings, and the next step in your recovery.",
+    category: "resident",
+    audience: "resident",
+    sensitivity: "sensitive",
+    version: 1,
+    schema: [
+      { id: "week", title: "This week", instructions: "Reflect on the past seven days.", fields: [
+        { id: "weekEnding", label: "Week ending", type: "date", required: true, sensitive: false },
+        { id: "meetings", label: "Which supports did you use this week?", type: "checklist", required: true, sensitive: true, options: ["House meeting", "Recovery meeting", "Counseling or treatment", "Sponsor or mentor", "Peer support"] },
+        { id: "commitments", label: "What commitments did you complete?", type: "long_text", required: true, sensitive: true },
+        { id: "challenges", label: "What was challenging?", type: "long_text", required: false, sensitive: true },
+        { id: "nextStep", label: "What is your next step?", type: "short_text", required: true, sensitive: true },
+      ] },
+      { id: "review", title: "Team review", instructions: "Your house team can use this to plan a helpful follow-up.", fields: [
+        { id: "followUp", label: "Would you like a check-in this week?", type: "yes_no", required: true, sensitive: true },
+        { id: "signature", label: "Resident acknowledgment", type: "acknowledgment", required: true, sensitive: false, helpText: "Type your full name." },
+      ] },
+    ],
+  },
+  {
+    slug: "application",
+    title: "Application",
+    description: "The Redeemer House application for prospective residents, including household, referral, and recovery information.",
+    category: "resident",
+    audience: "resident",
+    sensitivity: "sensitive",
+    version: 1,
+    schema: [
+      { id: "about", title: "About you", instructions: "Please provide current information so our team can prepare for your application.", fields: [
+        { id: "preferredName", label: "Preferred name", type: "short_text", required: true, sensitive: false },
+        { id: "dateOfBirth", label: "Date of birth", type: "date", required: true, sensitive: true },
+        { id: "phone", label: "Phone number", type: "short_text", required: true, sensitive: true },
+        { id: "email", label: "Email address", type: "short_text", required: true, sensitive: true },
+        { id: "familyMembers", label: "Household members", type: "repeating_group", required: false, sensitive: true, itemFields: [
+          { id: "name", label: "Name", type: "short_text", required: true, sensitive: true },
+          { id: "relationship", label: "Relationship", type: "short_text", required: true, sensitive: true },
+        ] },
+      ] },
+      { id: "recovery", title: "Recovery history", instructions: "These questions help us understand the support that will serve you best.", fields: [
+        { id: "referralSource", label: "How did you hear about Redeemer House?", type: "select", required: true, sensitive: false, options: ["Recovery program", "Friend or family", "Website or social media", "Community partner", "Other"] },
+        { id: "treatmentHistory", label: "Tell us about your treatment or recovery history.", type: "long_text", required: true, sensitive: true },
+        { id: "currentSupport", label: "What support are you currently connected to?", type: "long_text", required: false, sensitive: true },
+        { id: "applicationAgreement", label: "I understand that submitting this application does not guarantee placement.", type: "acknowledgment", required: true, sensitive: false, helpText: "Type your full name." },
+      ] },
+    ],
+  },
+  {
+    slug: "child-safety-training",
+    title: "Redeemer House Childcare Volunteers Child Safety Training Pamphlet",
+    description: "Staff and volunteer training acknowledgment for safe childcare practices.",
+    category: "staff_volunteer",
+    audience: "staff",
+    sensitivity: "restricted",
+    version: 1,
+    schema: [
+      { id: "training", title: "Child safety training", instructions: "Review the training materials before completing this record. This restricted record is visible only to authorized staff.", fields: [
+        { id: "trainingDate", label: "Training date", type: "date", required: true, sensitive: true },
+        { id: "topicsReviewed", label: "Topics reviewed", type: "checklist", required: true, sensitive: true, options: ["Supervision and ratios", "Boundaries and appropriate contact", "Recognizing and reporting concerns", "Emergency procedures", "Check-in and check-out"] },
+        { id: "questions", label: "Questions or follow-up needed", type: "long_text", required: false, sensitive: true },
+        { id: "trainingAcknowledgment", label: "I completed and understood this child safety training.", type: "acknowledgment", required: true, sensitive: true, helpText: "Type your full name." },
+      ] },
+    ],
+  },
+  {
+    slug: "volunteer-application-agreement",
+    title: "Redeemer House Volunteer Application & Agreement",
+    description: "Volunteer application and service agreement for the Redeemer House team.",
+    category: "staff_volunteer",
+    audience: "staff",
+    sensitivity: "restricted",
+    version: 1,
+    schema: [
+      { id: "volunteer", title: "Volunteer application", instructions: "This restricted form is for staff and approved volunteers.", fields: [
+        { id: "fullName", label: "Full name", type: "short_text", required: true, sensitive: true },
+        { id: "availability", label: "Preferred service times", type: "checklist", required: true, sensitive: false, options: ["Weekday mornings", "Weekday evenings", "Saturday", "Sunday"] },
+        { id: "interests", label: "How would you like to serve?", type: "checklist", required: true, sensitive: false, options: ["Childcare", "House support", "Mentoring", "Events", "Administrative support", "Other"] },
+        { id: "experience", label: "Relevant experience", type: "long_text", required: false, sensitive: true },
+        { id: "agreement", label: "I agree to follow Redeemer House policies and protect resident privacy.", type: "acknowledgment", required: true, sensitive: true, helpText: "Type your full name." },
+      ] },
+    ],
+  },
+] as const;
+
+async function ensureAssessmentTemplates(): Promise<void> {
+  for (const template of assessmentTemplateSeeds) {
+    const [existing] = await db.select({ id: assessmentTemplatesTable.id })
+      .from(assessmentTemplatesTable)
+      .where(eq(assessmentTemplatesTable.slug, template.slug));
+    if (!existing) await db.insert(assessmentTemplatesTable).values(template);
+  }
+}
 
 export async function seedPilotData(): Promise<void> {
+  await ensureAssessmentTemplates();
   const [{ value }] = await db.select({ value: count() }).from(housesTable);
   if (Number(value) > 0) return;
   const houses = await db.insert(housesTable).values([

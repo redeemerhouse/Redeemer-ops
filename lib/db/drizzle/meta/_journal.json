@@ -22,6 +22,13 @@
       "when": 1787858675446,
       "tag": "0002_tricky_demogoblin",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1787928023230,
+      "tag": "0003_yielding_johnny_storm",
+      "breakpoints": true
     }
   ]
 }

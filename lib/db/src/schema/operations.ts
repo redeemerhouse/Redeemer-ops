@@ -118,12 +118,49 @@ export const residentImportRowsTable = pgTable("resident_import_rows", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const assessmentTemplatesTable = pgTable("assessment_templates", {
+  id: serial("id").primaryKey(),
+  slug: text("slug").notNull().unique(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  category: text("category").notNull().default("resident"),
+  audience: text("audience").notNull().default("resident"),
+  sensitivity: text("sensitivity").notNull().default("standard"),
+  version: integer("version").notNull().default(1),
+  status: text("status").notNull().default("active"),
+  schema: jsonb("schema").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const assessmentSubmissionsTable = pgTable("assessment_submissions", {
+  id: serial("id").primaryKey(),
+  templateId: integer("template_id").notNull(),
+  residentId: integer("resident_id"),
+  status: text("status").notNull().default("draft"),
+  answers: jsonb("answers").notNull().default({}),
+  templateSnapshot: jsonb("template_snapshot"),
+  assignedBy: text("assigned_by"),
+  assignedAt: timestamp("assigned_at", { withTimezone: true }),
+  createdBy: text("created_by").notNull(),
+  submittedBy: text("submitted_by"),
+  submittedAt: timestamp("submitted_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const insertHouseSchema = createInsertSchema(housesTable).omit({ id: true });
 export const insertApplicationSchema = createInsertSchema(applicationsTable).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertDocumentSchema = createInsertSchema(documentsTable).omit({ id: true, createdAt: true, updatedAt: true, sharedAt: true });
 export const insertOperationSchema = createInsertSchema(operationsTable).omit({ id: true, createdAt: true });
+export const insertAssessmentTemplateSchema = createInsertSchema(assessmentTemplatesTable).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertAssessmentSubmissionSchema = createInsertSchema(assessmentSubmissionsTable).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertHouse = z.infer<typeof insertHouseSchema>;
 export type InsertApplication = z.infer<typeof insertApplicationSchema>;
 export type InsertDocument = z.infer<typeof insertDocumentSchema>;
 export type Document = typeof documentsTable.$inferSelect;
 export type InsertOperation = z.infer<typeof insertOperationSchema>;
+export type AssessmentTemplate = typeof assessmentTemplatesTable.$inferSelect;
+export type AssessmentSubmission = typeof assessmentSubmissionsTable.$inferSelect;
+export type InsertAssessmentTemplate = z.infer<typeof insertAssessmentTemplateSchema>;
+export type InsertAssessmentSubmission = z.infer<typeof insertAssessmentSubmissionSchema>;

@@ -21,6 +21,11 @@ import type {
 
 import type {
   Activity,
+  AssessmentAnswersInput,
+  AssessmentDetail,
+  AssessmentStartInput,
+  AssessmentSummary,
+  AssessmentTemplate,
   ConfirmResidentImportBody,
   Dashboard,
   DownloadResidentImportTemplateParams,
@@ -542,6 +547,453 @@ export const useUpdateResident = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getUpdateResidentMutationOptions(options));
+    }
+
+export const getListAssessmentTemplatesUrl = () => {
+
+
+
+
+  return `/api/assessment-templates`
+}
+
+/**
+ * @summary List assessment templates available to the caller
+ */
+export const listAssessmentTemplates = async ( options?: Parameters<typeof customFetch>[1]): Promise<AssessmentTemplate[]> => {
+
+  return customFetch<AssessmentTemplate[]>(getListAssessmentTemplatesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAssessmentTemplatesQueryKey = () => {
+    return [
+    `/api/assessment-templates`
+    ] as const;
+    }
+
+
+export const getListAssessmentTemplatesQueryOptions = <TData = Awaited<ReturnType<typeof listAssessmentTemplates>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAssessmentTemplates>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAssessmentTemplatesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAssessmentTemplates>>> = ({ signal }) => listAssessmentTemplates({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAssessmentTemplates>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAssessmentTemplatesQueryResult = NonNullable<Awaited<ReturnType<typeof listAssessmentTemplates>>>
+export type ListAssessmentTemplatesQueryError = ErrorType<void>
+
+
+/**
+ * @summary List assessment templates available to the caller
+ */
+
+export function useListAssessmentTemplates<TData = Awaited<ReturnType<typeof listAssessmentTemplates>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAssessmentTemplates>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAssessmentTemplatesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListResidentAssessmentsUrl = (id: number,) => {
+
+
+
+
+  return `/api/residents/${id}/assessments`
+}
+
+/**
+ * @summary List assessments for a resident
+ */
+export const listResidentAssessments = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<AssessmentSummary[]> => {
+
+  return customFetch<AssessmentSummary[]>(getListResidentAssessmentsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListResidentAssessmentsQueryKey = (id: number,) => {
+    return [
+    `/api/residents/${id}/assessments`
+    ] as const;
+    }
+
+
+export const getListResidentAssessmentsQueryOptions = <TData = Awaited<ReturnType<typeof listResidentAssessments>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listResidentAssessments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListResidentAssessmentsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listResidentAssessments>>> = ({ signal }) => listResidentAssessments(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listResidentAssessments>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListResidentAssessmentsQueryResult = NonNullable<Awaited<ReturnType<typeof listResidentAssessments>>>
+export type ListResidentAssessmentsQueryError = ErrorType<void>
+
+
+/**
+ * @summary List assessments for a resident
+ */
+
+export function useListResidentAssessments<TData = Awaited<ReturnType<typeof listResidentAssessments>>, TError = ErrorType<void>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listResidentAssessments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListResidentAssessmentsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateResidentAssessmentUrl = (id: number,) => {
+
+
+
+
+  return `/api/residents/${id}/assessments`
+}
+
+/**
+ * @summary Start or assign an assessment for a resident
+ */
+export const createResidentAssessment = async (id: number,
+    assessmentStartInput: AssessmentStartInput, options?: Parameters<typeof customFetch>[1]): Promise<AssessmentDetail> => {
+
+  return customFetch<AssessmentDetail>(getCreateResidentAssessmentUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(assessmentStartInput)
+  }
+);}
+
+
+
+
+
+export const getCreateResidentAssessmentMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createResidentAssessment>>, TError,{id: number;data: BodyType<AssessmentStartInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createResidentAssessment>>, TError,{id: number;data: BodyType<AssessmentStartInput>}, TContext> => {
+
+const mutationKey = ['createResidentAssessment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createResidentAssessment>>, {id: number;data: BodyType<AssessmentStartInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  createResidentAssessment(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateResidentAssessmentMutationResult = NonNullable<Awaited<ReturnType<typeof createResidentAssessment>>>
+    export type CreateResidentAssessmentMutationBody = BodyType<AssessmentStartInput>
+    export type CreateResidentAssessmentMutationError = ErrorType<void>
+
+    /**
+ * @summary Start or assign an assessment for a resident
+ */
+export const useCreateResidentAssessment = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createResidentAssessment>>, TError,{id: number;data: BodyType<AssessmentStartInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createResidentAssessment>>,
+        TError,
+        {id: number;data: BodyType<AssessmentStartInput>},
+        TContext
+      > => {
+      return useMutation(getCreateResidentAssessmentMutationOptions(options));
+    }
+
+export const getGetAssessmentUrl = (id: number,) => {
+
+
+
+
+  return `/api/assessments/${id}`
+}
+
+/**
+ * @summary Read an assessment draft or submission
+ */
+export const getAssessment = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<AssessmentDetail> => {
+
+  return customFetch<AssessmentDetail>(getGetAssessmentUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAssessmentQueryKey = (id: number,) => {
+    return [
+    `/api/assessments/${id}`
+    ] as const;
+    }
+
+
+export const getGetAssessmentQueryOptions = <TData = Awaited<ReturnType<typeof getAssessment>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAssessment>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAssessmentQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAssessment>>> = ({ signal }) => getAssessment(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAssessment>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAssessmentQueryResult = NonNullable<Awaited<ReturnType<typeof getAssessment>>>
+export type GetAssessmentQueryError = ErrorType<void>
+
+
+/**
+ * @summary Read an assessment draft or submission
+ */
+
+export function useGetAssessment<TData = Awaited<ReturnType<typeof getAssessment>>, TError = ErrorType<void>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAssessment>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAssessmentQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateAssessmentDraftUrl = (id: number,) => {
+
+
+
+
+  return `/api/assessments/${id}`
+}
+
+/**
+ * @summary Save draft answers
+ */
+export const updateAssessmentDraft = async (id: number,
+    assessmentAnswersInput: AssessmentAnswersInput, options?: Parameters<typeof customFetch>[1]): Promise<AssessmentDetail> => {
+
+  return customFetch<AssessmentDetail>(getUpdateAssessmentDraftUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(assessmentAnswersInput)
+  }
+);}
+
+
+
+
+
+export const getUpdateAssessmentDraftMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAssessmentDraft>>, TError,{id: number;data: BodyType<AssessmentAnswersInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateAssessmentDraft>>, TError,{id: number;data: BodyType<AssessmentAnswersInput>}, TContext> => {
+
+const mutationKey = ['updateAssessmentDraft'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateAssessmentDraft>>, {id: number;data: BodyType<AssessmentAnswersInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateAssessmentDraft(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateAssessmentDraftMutationResult = NonNullable<Awaited<ReturnType<typeof updateAssessmentDraft>>>
+    export type UpdateAssessmentDraftMutationBody = BodyType<AssessmentAnswersInput>
+    export type UpdateAssessmentDraftMutationError = ErrorType<void>
+
+    /**
+ * @summary Save draft answers
+ */
+export const useUpdateAssessmentDraft = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAssessmentDraft>>, TError,{id: number;data: BodyType<AssessmentAnswersInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateAssessmentDraft>>,
+        TError,
+        {id: number;data: BodyType<AssessmentAnswersInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateAssessmentDraftMutationOptions(options));
+    }
+
+export const getSubmitAssessmentUrl = (id: number,) => {
+
+
+
+
+  return `/api/assessments/${id}/submit`
+}
+
+/**
+ * @summary Validate and submit an assessment
+ */
+export const submitAssessment = async (id: number,
+    assessmentAnswersInput: AssessmentAnswersInput, options?: Parameters<typeof customFetch>[1]): Promise<AssessmentDetail> => {
+
+  return customFetch<AssessmentDetail>(getSubmitAssessmentUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(assessmentAnswersInput)
+  }
+);}
+
+
+
+
+
+export const getSubmitAssessmentMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitAssessment>>, TError,{id: number;data: BodyType<AssessmentAnswersInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof submitAssessment>>, TError,{id: number;data: BodyType<AssessmentAnswersInput>}, TContext> => {
+
+const mutationKey = ['submitAssessment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof submitAssessment>>, {id: number;data: BodyType<AssessmentAnswersInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  submitAssessment(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SubmitAssessmentMutationResult = NonNullable<Awaited<ReturnType<typeof submitAssessment>>>
+    export type SubmitAssessmentMutationBody = BodyType<AssessmentAnswersInput>
+    export type SubmitAssessmentMutationError = ErrorType<void>
+
+    /**
+ * @summary Validate and submit an assessment
+ */
+export const useSubmitAssessment = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitAssessment>>, TError,{id: number;data: BodyType<AssessmentAnswersInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof submitAssessment>>,
+        TError,
+        {id: number;data: BodyType<AssessmentAnswersInput>},
+        TContext
+      > => {
+      return useMutation(getSubmitAssessmentMutationOptions(options));
     }
 
 export const getDownloadResidentImportTemplateUrl = (params: DownloadResidentImportTemplateParams,) => {

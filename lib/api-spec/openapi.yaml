@@ -28,6 +28,8 @@ tags:
     description: Scoped operational reports and exports
   - name: resident-import
     description: Safe resident imports
+  - name: assessments
+    description: Versioned resident assessments
 paths:
   /healthz:
     get:
@@ -145,6 +147,133 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Resident"
+  /assessment-templates:
+    get:
+      operationId: listAssessmentTemplates
+      tags: [assessments]
+      summary: List assessment templates available to the caller
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Assessment template catalog
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AssessmentTemplate"
+        "403": { description: Assessment access denied }
+  /residents/{id}/assessments:
+    get:
+      operationId: listResidentAssessments
+      tags: [assessments]
+      summary: List assessments for a resident
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Resident assessment list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AssessmentSummary"
+        "403": { description: Assessment access denied }
+        "404": { description: Resident not found }
+    post:
+      operationId: createResidentAssessment
+      tags: [assessments]
+      summary: Start or assign an assessment for a resident
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssessmentStartInput"
+      responses:
+        "201":
+          description: Assessment draft
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssessmentDetail"
+        "403": { description: Assessment access denied }
+        "404": { description: Resident or template not found }
+  /assessments/{id}:
+    get:
+      operationId: getAssessment
+      tags: [assessments]
+      summary: Read an assessment draft or submission
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Assessment detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssessmentDetail"
+        "403": { description: Assessment access denied }
+        "404": { description: Assessment not found }
+    patch:
+      operationId: updateAssessmentDraft
+      tags: [assessments]
+      summary: Save draft answers
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssessmentAnswersInput"
+      responses:
+        "200":
+          description: Updated assessment draft
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssessmentDetail"
+        "400": { description: Submitted assessments cannot be edited }
+        "403": { description: Assessment access denied }
+        "404": { description: Assessment not found }
+  /assessments/{id}/submit:
+    post:
+      operationId: submitAssessment
+      tags: [assessments]
+      summary: Validate and submit an assessment
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssessmentAnswersInput"
+      responses:
+        "200":
+          description: Completed assessment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssessmentDetail"
+        "400": { description: Required fields are missing or invalid }
+        "403": { description: Assessment access denied }
+        "404": { description: Assessment not found }
   /residents/import/template:
     get:
       operationId: downloadResidentImportTemplate
@@ -874,6 +1003,107 @@ components:
         dueDate: { type: string, format: date }
         paidDate: { type: string, format: date }
         method: { type: string, maxLength: 80 }
+    AssessmentField:
+      type: object
+      additionalProperties: false
+      required: [id, label, type, required, sensitive]
+      properties:
+        id: { type: string }
+        label: { type: string }
+        type:
+          type: string
+          enum: [short_text, long_text, date, yes_no, select, checklist, repeating_group, acknowledgment]
+        required: { type: boolean }
+        sensitive: { type: boolean }
+        helpText: { type: ["string", "null"] }
+        options:
+          type: array
+          items: { type: string }
+        itemFields:
+          type: array
+          items:
+            $ref: "#/components/schemas/AssessmentField"
+    AssessmentSection:
+      type: object
+      additionalProperties: false
+      required: [id, title, instructions, fields]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        instructions: { type: ["string", "null"] }
+        fields:
+          type: array
+          items:
+            $ref: "#/components/schemas/AssessmentField"
+    AssessmentTemplate:
+      type: object
+      additionalProperties: false
+      required: [id, slug, title, description, category, audience, sensitivity, version, status, sections]
+      properties:
+        id: { type: number, multipleOf: 1, minimum: 1 }
+        slug: { type: string }
+        title: { type: string }
+        description: { type: string }
+        category: { type: string, enum: [resident, staff_volunteer] }
+        audience: { type: string, enum: [resident, staff] }
+        sensitivity: { type: string, enum: [standard, sensitive, restricted] }
+        version: { type: number, multipleOf: 1, minimum: 1 }
+        status: { type: string, enum: [active, retired] }
+        sections:
+          type: array
+          items:
+            $ref: "#/components/schemas/AssessmentSection"
+    AssessmentSummary:
+      type: object
+      additionalProperties: false
+      required: [id, residentId, templateId, title, category, status, version, assignedBy, assignedAt, createdAt, updatedAt, submittedBy, submittedAt]
+      properties:
+        id: { type: number, multipleOf: 1, minimum: 1 }
+        residentId: { type: number, multipleOf: 1, minimum: 1 }
+        templateId: { type: number, multipleOf: 1, minimum: 1 }
+        title: { type: string }
+        category: { type: string, enum: [resident, staff_volunteer] }
+        status: { type: string, enum: [draft, submitted] }
+        version: { type: number, multipleOf: 1, minimum: 1 }
+        assignedBy: { type: ["string", "null"] }
+        assignedAt: { type: ["string", "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        submittedBy: { type: ["string", "null"] }
+        submittedAt: { type: ["string", "null"], format: date-time }
+    AssessmentStartInput:
+      type: object
+      additionalProperties: false
+      required: [templateId]
+      properties:
+        templateId: { type: number, multipleOf: 1, minimum: 1 }
+    AssessmentAnswersInput:
+      type: object
+      additionalProperties: false
+      required: [answers]
+      properties:
+        answers:
+          type: object
+          additionalProperties: true
+    AssessmentDetail:
+      type: object
+      additionalProperties: false
+      required: [id, residentId, status, answers, template, assignedBy, assignedAt, createdAt, updatedAt, submittedBy, submittedAt]
+      properties:
+        id: { type: number, multipleOf: 1, minimum: 1 }
+        residentId: { type: number, multipleOf: 1, minimum: 1 }
+        status: { type: string, enum: [draft, submitted] }
+        answers:
+          type: object
+          additionalProperties: true
+        template:
+          $ref: "#/components/schemas/AssessmentTemplate"
+        assignedBy: { type: ["string", "null"] }
+        assignedAt: { type: ["string", "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        submittedBy: { type: ["string", "null"] }
+        submittedAt: { type: ["string", "null"], format: date-time }
     Activity:
       type: object
       required: [id, type, title, detail, timestamp]
