@@ -10,7 +10,8 @@
   "scripts": {
     "generate": "drizzle-kit generate --config ./drizzle.config.ts",
     "check": "drizzle-kit check --config ./drizzle.config.ts",
-    "migrate": "drizzle-kit migrate --config ./drizzle.config.ts"
+    "migrate": "drizzle-kit migrate --config ./drizzle.config.ts",
+    "push-force": "drizzle-kit push --config ./drizzle.config.ts --force"
   },
   "dependencies": {
     "drizzle-orm": "catalog:",
