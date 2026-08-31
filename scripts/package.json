@@ -6,6 +6,7 @@
   "scripts": {
     "hello": "tsx ./src/hello.ts",
     "db:release-check": "tsx ./src/db-release-check.ts",
+    "test:db-schema-drift": "node --import tsx --test src/db-schema-drift.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
