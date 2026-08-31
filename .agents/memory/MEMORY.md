@@ -8,3 +8,4 @@
 - [Drizzle migration output](drizzle-migration-workflow.md) — use a package-relative output path with this Drizzle CLI; absolute config paths can be incorrectly prefixed.
 - [Orval and Zod compatibility](orval-zod-runtime.md) — generated date/integer validators must match the workspace’s pinned Zod runtime before changing generator options.
 - [Managed workflow contract validation](dashboard-contract-validation.md) — API integration tests use the shared proxy, and Zod-coerced date fields serialize as ISO timestamps.
+- [Assessment lifecycle test isolation](assessment-lifecycle-tests.md) — versioned integration tests must use current active/max versions and account for shared rate limits across repeated runs.

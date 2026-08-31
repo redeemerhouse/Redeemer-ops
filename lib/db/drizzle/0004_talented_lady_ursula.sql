@@ -1,0 +1,2 @@
+ALTER TABLE "assessment_templates" DROP CONSTRAINT "assessment_templates_slug_unique";--> statement-breakpoint
+CREATE UNIQUE INDEX "assessment_templates_slug_version_unique" ON "assessment_templates" USING btree ("slug","version");

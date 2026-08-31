@@ -1,12 +1,14 @@
-import { Bell, CreditCard, LayoutDashboard, Menu, UsersRound, X, ClipboardList } from 'lucide-react';
+import { Bell, CreditCard, LayoutDashboard, Menu, UsersRound, X, ClipboardList, GitBranch } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { Link, useLocation } from 'wouter';
+import { isAdministrator } from '@/lib/api';
 
 const navItems = [
   { href: '/', label: 'Overview', icon: LayoutDashboard },
   { href: '/residents', label: 'Residents', icon: UsersRound },
   { href: '/payments', label: 'Payments', icon: CreditCard },
   { href: '/operations', label: 'Operations', icon: ClipboardList },
+  ...(isAdministrator ? [{ href: '/assessment-library', label: 'Assessment library', icon: GitBranch }] : []),
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {

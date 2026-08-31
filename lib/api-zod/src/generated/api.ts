@@ -142,6 +142,7 @@ export const ListResidentsResponse = zod.array(ListResidentsResponseItem)
  */
 
 
+
 export const CreateResidentBody = zod.object({
   "name": zod.string().min(1),
   "email": zod.string(),
@@ -173,6 +174,7 @@ export const getResidentPathIdMax = 2147483647;
 export const getResidentPathIdMultipleOf = 1;
 
 
+
 export const GetResidentParams = zod.object({
   "id": zod.coerce.number().min(1).max(getResidentPathIdMax).multipleOf(getResidentPathIdMultipleOf)
 })
@@ -198,9 +200,12 @@ export const updateResidentPathIdMax = 2147483647;
 export const updateResidentPathIdMultipleOf = 1;
 
 
+
 export const UpdateResidentParams = zod.object({
   "id": zod.coerce.number().min(1).max(updateResidentPathIdMax).multipleOf(updateResidentPathIdMultipleOf)
 })
+
+
 
 
 export const UpdateResidentBody = zod.object({
@@ -226,10 +231,560 @@ export const UpdateResidentResponse = zod.object({
   "notes": zod.string().nullish()
 })
 
+
 /**
- * @summary List assessment templates available to the caller
+ * @summary List assessment template versions available to the caller
  */
 export const listAssessmentTemplatesResponseIdMultipleOf = 1;
+
+export const listAssessmentTemplatesResponseVersionMultipleOf = 1;
+
+
+
+export const ListAssessmentTemplatesResponseItem = zod.object({
+  "id": zod.number().min(1).multipleOf(listAssessmentTemplatesResponseIdMultipleOf),
+  "slug": zod.string(),
+  "title": zod.string(),
+  "description": zod.string(),
+  "category": zod.enum(['resident', 'staff_volunteer']),
+  "audience": zod.enum(['resident', 'staff']),
+  "sensitivity": zod.enum(['standard', 'sensitive', 'restricted']),
+  "version": zod.number().min(1).multipleOf(listAssessmentTemplatesResponseVersionMultipleOf),
+  "status": zod.enum(['draft', 'active', 'retired']),
+  "sections": zod.array(zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "instructions": zod.string().nullable(),
+  "fields": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string(),
+  "type": zod.enum(['short_text', 'long_text', 'date', 'yes_no', 'select', 'checklist', 'repeating_group', 'acknowledgment']),
+  "required": zod.boolean(),
+  "sensitive": zod.boolean(),
+  "helpText": zod.string().nullish(),
+  "options": zod.array(zod.string()).optional(),
+  "itemFields": zod.array(zod.unknown()).optional()
+}))
+}))
+})
+export const ListAssessmentTemplatesResponse = zod.array(ListAssessmentTemplatesResponseItem)
+
+
+/**
+ * @summary Preview an assessment template version
+ */
+export const getAssessmentTemplatePathIdMax = 2147483647;
+export const getAssessmentTemplatePathIdMultipleOf = 1;
+
+
+
+export const GetAssessmentTemplateParams = zod.object({
+  "id": zod.coerce.number().min(1).max(getAssessmentTemplatePathIdMax).multipleOf(getAssessmentTemplatePathIdMultipleOf)
+})
+
+export const getAssessmentTemplateResponseIdMultipleOf = 1;
+
+export const getAssessmentTemplateResponseVersionMultipleOf = 1;
+
+
+
+export const GetAssessmentTemplateResponse = zod.object({
+  "id": zod.number().min(1).multipleOf(getAssessmentTemplateResponseIdMultipleOf),
+  "slug": zod.string(),
+  "title": zod.string(),
+  "description": zod.string(),
+  "category": zod.enum(['resident', 'staff_volunteer']),
+  "audience": zod.enum(['resident', 'staff']),
+  "sensitivity": zod.enum(['standard', 'sensitive', 'restricted']),
+  "version": zod.number().min(1).multipleOf(getAssessmentTemplateResponseVersionMultipleOf),
+  "status": zod.enum(['draft', 'active', 'retired']),
+  "sections": zod.array(zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "instructions": zod.string().nullable(),
+  "fields": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string(),
+  "type": zod.enum(['short_text', 'long_text', 'date', 'yes_no', 'select', 'checklist', 'repeating_group', 'acknowledgment']),
+  "required": zod.boolean(),
+  "sensitive": zod.boolean(),
+  "helpText": zod.string().nullish(),
+  "options": zod.array(zod.string()).optional(),
+  "itemFields": zod.array(zod.unknown()).optional()
+}))
+}))
+})
+
+
+/**
+ * @summary Create a draft assessment revision
+ */
+export const createAssessmentRevisionPathIdMax = 2147483647;
+export const createAssessmentRevisionPathIdMultipleOf = 1;
+
+
+
+export const CreateAssessmentRevisionParams = zod.object({
+  "id": zod.coerce.number().min(1).max(createAssessmentRevisionPathIdMax).multipleOf(createAssessmentRevisionPathIdMultipleOf)
+})
+
+export const createAssessmentRevisionBodyTitleMax = 200;
+
+export const createAssessmentRevisionBodyDescriptionMax = 2000;
+
+
+
+
+export const CreateAssessmentRevisionBody = zod.object({
+  "title": zod.string().min(1).max(createAssessmentRevisionBodyTitleMax),
+  "description": zod.string().min(1).max(createAssessmentRevisionBodyDescriptionMax),
+  "schema": zod.array(zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "instructions": zod.string().nullable(),
+  "fields": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string(),
+  "type": zod.enum(['short_text', 'long_text', 'date', 'yes_no', 'select', 'checklist', 'repeating_group', 'acknowledgment']),
+  "required": zod.boolean(),
+  "sensitive": zod.boolean(),
+  "helpText": zod.string().nullish(),
+  "options": zod.array(zod.string()).optional(),
+  "itemFields": zod.array(zod.unknown()).optional()
+}))
+})).min(1)
+})
+
+export const createAssessmentRevisionResponseIdMultipleOf = 1;
+
+export const createAssessmentRevisionResponseVersionMultipleOf = 1;
+
+
+
+export const CreateAssessmentRevisionResponse = zod.object({
+  "id": zod.number().min(1).multipleOf(createAssessmentRevisionResponseIdMultipleOf),
+  "slug": zod.string(),
+  "title": zod.string(),
+  "description": zod.string(),
+  "category": zod.enum(['resident', 'staff_volunteer']),
+  "audience": zod.enum(['resident', 'staff']),
+  "sensitivity": zod.enum(['standard', 'sensitive', 'restricted']),
+  "version": zod.number().min(1).multipleOf(createAssessmentRevisionResponseVersionMultipleOf),
+  "status": zod.enum(['draft', 'active', 'retired']),
+  "sections": zod.array(zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "instructions": zod.string().nullable(),
+  "fields": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string(),
+  "type": zod.enum(['short_text', 'long_text', 'date', 'yes_no', 'select', 'checklist', 'repeating_group', 'acknowledgment']),
+  "required": zod.boolean(),
+  "sensitive": zod.boolean(),
+  "helpText": zod.string().nullish(),
+  "options": zod.array(zod.string()).optional(),
+  "itemFields": zod.array(zod.unknown()).optional()
+}))
+}))
+})
+
+
+/**
+ * @summary Publish a draft assessment revision
+ */
+export const publishAssessmentTemplatePathIdMax = 2147483647;
+export const publishAssessmentTemplatePathIdMultipleOf = 1;
+
+
+
+export const PublishAssessmentTemplateParams = zod.object({
+  "id": zod.coerce.number().min(1).max(publishAssessmentTemplatePathIdMax).multipleOf(publishAssessmentTemplatePathIdMultipleOf)
+})
+
+export const publishAssessmentTemplateResponseIdMultipleOf = 1;
+
+export const publishAssessmentTemplateResponseVersionMultipleOf = 1;
+
+
+
+export const PublishAssessmentTemplateResponse = zod.object({
+  "id": zod.number().min(1).multipleOf(publishAssessmentTemplateResponseIdMultipleOf),
+  "slug": zod.string(),
+  "title": zod.string(),
+  "description": zod.string(),
+  "category": zod.enum(['resident', 'staff_volunteer']),
+  "audience": zod.enum(['resident', 'staff']),
+  "sensitivity": zod.enum(['standard', 'sensitive', 'restricted']),
+  "version": zod.number().min(1).multipleOf(publishAssessmentTemplateResponseVersionMultipleOf),
+  "status": zod.enum(['draft', 'active', 'retired']),
+  "sections": zod.array(zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "instructions": zod.string().nullable(),
+  "fields": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string(),
+  "type": zod.enum(['short_text', 'long_text', 'date', 'yes_no', 'select', 'checklist', 'repeating_group', 'acknowledgment']),
+  "required": zod.boolean(),
+  "sensitive": zod.boolean(),
+  "helpText": zod.string().nullish(),
+  "options": zod.array(zod.string()).optional(),
+  "itemFields": zod.array(zod.unknown()).optional()
+}))
+}))
+})
+
+
+/**
+ * @summary Retire an assessment template version
+ */
+export const retireAssessmentTemplatePathIdMax = 2147483647;
+export const retireAssessmentTemplatePathIdMultipleOf = 1;
+
+
+
+export const RetireAssessmentTemplateParams = zod.object({
+  "id": zod.coerce.number().min(1).max(retireAssessmentTemplatePathIdMax).multipleOf(retireAssessmentTemplatePathIdMultipleOf)
+})
+
+export const retireAssessmentTemplateResponseIdMultipleOf = 1;
+
+export const retireAssessmentTemplateResponseVersionMultipleOf = 1;
+
+
+
+export const RetireAssessmentTemplateResponse = zod.object({
+  "id": zod.number().min(1).multipleOf(retireAssessmentTemplateResponseIdMultipleOf),
+  "slug": zod.string(),
+  "title": zod.string(),
+  "description": zod.string(),
+  "category": zod.enum(['resident', 'staff_volunteer']),
+  "audience": zod.enum(['resident', 'staff']),
+  "sensitivity": zod.enum(['standard', 'sensitive', 'restricted']),
+  "version": zod.number().min(1).multipleOf(retireAssessmentTemplateResponseVersionMultipleOf),
+  "status": zod.enum(['draft', 'active', 'retired']),
+  "sections": zod.array(zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "instructions": zod.string().nullable(),
+  "fields": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string(),
+  "type": zod.enum(['short_text', 'long_text', 'date', 'yes_no', 'select', 'checklist', 'repeating_group', 'acknowledgment']),
+  "required": zod.boolean(),
+  "sensitive": zod.boolean(),
+  "helpText": zod.string().nullish(),
+  "options": zod.array(zod.string()).optional(),
+  "itemFields": zod.array(zod.unknown()).optional()
+}))
+}))
+})
+
+
+/**
+ * @summary List assessments for a resident
+ */
+export const listResidentAssessmentsPathIdMax = 2147483647;
+export const listResidentAssessmentsPathIdMultipleOf = 1;
+
+
+
+export const ListResidentAssessmentsParams = zod.object({
+  "id": zod.coerce.number().min(1).max(listResidentAssessmentsPathIdMax).multipleOf(listResidentAssessmentsPathIdMultipleOf)
+})
+
+export const listResidentAssessmentsResponseIdMultipleOf = 1;
+
+export const listResidentAssessmentsResponseResidentIdMultipleOf = 1;
+
+export const listResidentAssessmentsResponseTemplateIdMultipleOf = 1;
+
+export const listResidentAssessmentsResponseVersionMultipleOf = 1;
+
+
+
+export const ListResidentAssessmentsResponseItem = zod.object({
+  "id": zod.number().min(1).multipleOf(listResidentAssessmentsResponseIdMultipleOf),
+  "residentId": zod.number().min(1).multipleOf(listResidentAssessmentsResponseResidentIdMultipleOf),
+  "templateId": zod.number().min(1).multipleOf(listResidentAssessmentsResponseTemplateIdMultipleOf),
+  "title": zod.string(),
+  "category": zod.enum(['resident', 'staff_volunteer']),
+  "status": zod.enum(['draft', 'submitted']),
+  "version": zod.number().min(1).multipleOf(listResidentAssessmentsResponseVersionMultipleOf),
+  "assignedBy": zod.string().nullable(),
+  "assignedAt": zod.coerce.date().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "submittedBy": zod.string().nullable(),
+  "submittedAt": zod.coerce.date().nullable()
+})
+export const ListResidentAssessmentsResponse = zod.array(ListResidentAssessmentsResponseItem)
+
+
+/**
+ * @summary Start or assign an assessment for a resident
+ */
+export const createResidentAssessmentPathIdMax = 2147483647;
+export const createResidentAssessmentPathIdMultipleOf = 1;
+
+
+
+export const CreateResidentAssessmentParams = zod.object({
+  "id": zod.coerce.number().min(1).max(createResidentAssessmentPathIdMax).multipleOf(createResidentAssessmentPathIdMultipleOf)
+})
+
+export const createResidentAssessmentBodyTemplateIdMultipleOf = 1;
+
+
+
+export const CreateResidentAssessmentBody = zod.object({
+  "templateId": zod.number().min(1).multipleOf(createResidentAssessmentBodyTemplateIdMultipleOf)
+})
+
+export const createResidentAssessmentResponseIdMultipleOf = 1;
+
+export const createResidentAssessmentResponseResidentIdMultipleOf = 1;
+
+export const createResidentAssessmentResponseTemplateIdMultipleOf = 1;
+
+export const createResidentAssessmentResponseTemplateVersionMultipleOf = 1;
+
+
+
+export const CreateResidentAssessmentResponse = zod.object({
+  "id": zod.number().min(1).multipleOf(createResidentAssessmentResponseIdMultipleOf),
+  "residentId": zod.number().min(1).multipleOf(createResidentAssessmentResponseResidentIdMultipleOf),
+  "status": zod.enum(['draft', 'submitted']),
+  "answers": zod.record(zod.string(), zod.unknown()),
+  "template": zod.object({
+  "id": zod.number().min(1).multipleOf(createResidentAssessmentResponseTemplateIdMultipleOf),
+  "slug": zod.string(),
+  "title": zod.string(),
+  "description": zod.string(),
+  "category": zod.enum(['resident', 'staff_volunteer']),
+  "audience": zod.enum(['resident', 'staff']),
+  "sensitivity": zod.enum(['standard', 'sensitive', 'restricted']),
+  "version": zod.number().min(1).multipleOf(createResidentAssessmentResponseTemplateVersionMultipleOf),
+  "status": zod.enum(['draft', 'active', 'retired']),
+  "sections": zod.array(zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "instructions": zod.string().nullable(),
+  "fields": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string(),
+  "type": zod.enum(['short_text', 'long_text', 'date', 'yes_no', 'select', 'checklist', 'repeating_group', 'acknowledgment']),
+  "required": zod.boolean(),
+  "sensitive": zod.boolean(),
+  "helpText": zod.string().nullish(),
+  "options": zod.array(zod.string()).optional(),
+  "itemFields": zod.array(zod.unknown()).optional()
+}))
+}))
+}),
+  "assignedBy": zod.string().nullable(),
+  "assignedAt": zod.coerce.date().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "submittedBy": zod.string().nullable(),
+  "submittedAt": zod.coerce.date().nullable()
+})
+
+
+/**
+ * @summary Read an assessment draft or submission
+ */
+export const getAssessmentPathIdMax = 2147483647;
+export const getAssessmentPathIdMultipleOf = 1;
+
+
+
+export const GetAssessmentParams = zod.object({
+  "id": zod.coerce.number().min(1).max(getAssessmentPathIdMax).multipleOf(getAssessmentPathIdMultipleOf)
+})
+
+export const getAssessmentResponseIdMultipleOf = 1;
+
+export const getAssessmentResponseResidentIdMultipleOf = 1;
+
+export const getAssessmentResponseTemplateIdMultipleOf = 1;
+
+export const getAssessmentResponseTemplateVersionMultipleOf = 1;
+
+
+
+export const GetAssessmentResponse = zod.object({
+  "id": zod.number().min(1).multipleOf(getAssessmentResponseIdMultipleOf),
+  "residentId": zod.number().min(1).multipleOf(getAssessmentResponseResidentIdMultipleOf),
+  "status": zod.enum(['draft', 'submitted']),
+  "answers": zod.record(zod.string(), zod.unknown()),
+  "template": zod.object({
+  "id": zod.number().min(1).multipleOf(getAssessmentResponseTemplateIdMultipleOf),
+  "slug": zod.string(),
+  "title": zod.string(),
+  "description": zod.string(),
+  "category": zod.enum(['resident', 'staff_volunteer']),
+  "audience": zod.enum(['resident', 'staff']),
+  "sensitivity": zod.enum(['standard', 'sensitive', 'restricted']),
+  "version": zod.number().min(1).multipleOf(getAssessmentResponseTemplateVersionMultipleOf),
+  "status": zod.enum(['draft', 'active', 'retired']),
+  "sections": zod.array(zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "instructions": zod.string().nullable(),
+  "fields": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string(),
+  "type": zod.enum(['short_text', 'long_text', 'date', 'yes_no', 'select', 'checklist', 'repeating_group', 'acknowledgment']),
+  "required": zod.boolean(),
+  "sensitive": zod.boolean(),
+  "helpText": zod.string().nullish(),
+  "options": zod.array(zod.string()).optional(),
+  "itemFields": zod.array(zod.unknown()).optional()
+}))
+}))
+}),
+  "assignedBy": zod.string().nullable(),
+  "assignedAt": zod.coerce.date().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "submittedBy": zod.string().nullable(),
+  "submittedAt": zod.coerce.date().nullable()
+})
+
+
+/**
+ * @summary Save draft answers
+ */
+export const updateAssessmentDraftPathIdMax = 2147483647;
+export const updateAssessmentDraftPathIdMultipleOf = 1;
+
+
+
+export const UpdateAssessmentDraftParams = zod.object({
+  "id": zod.coerce.number().min(1).max(updateAssessmentDraftPathIdMax).multipleOf(updateAssessmentDraftPathIdMultipleOf)
+})
+
+export const UpdateAssessmentDraftBody = zod.object({
+  "answers": zod.record(zod.string(), zod.unknown())
+})
+
+export const updateAssessmentDraftResponseIdMultipleOf = 1;
+
+export const updateAssessmentDraftResponseResidentIdMultipleOf = 1;
+
+export const updateAssessmentDraftResponseTemplateIdMultipleOf = 1;
+
+export const updateAssessmentDraftResponseTemplateVersionMultipleOf = 1;
+
+
+
+export const UpdateAssessmentDraftResponse = zod.object({
+  "id": zod.number().min(1).multipleOf(updateAssessmentDraftResponseIdMultipleOf),
+  "residentId": zod.number().min(1).multipleOf(updateAssessmentDraftResponseResidentIdMultipleOf),
+  "status": zod.enum(['draft', 'submitted']),
+  "answers": zod.record(zod.string(), zod.unknown()),
+  "template": zod.object({
+  "id": zod.number().min(1).multipleOf(updateAssessmentDraftResponseTemplateIdMultipleOf),
+  "slug": zod.string(),
+  "title": zod.string(),
+  "description": zod.string(),
+  "category": zod.enum(['resident', 'staff_volunteer']),
+  "audience": zod.enum(['resident', 'staff']),
+  "sensitivity": zod.enum(['standard', 'sensitive', 'restricted']),
+  "version": zod.number().min(1).multipleOf(updateAssessmentDraftResponseTemplateVersionMultipleOf),
+  "status": zod.enum(['draft', 'active', 'retired']),
+  "sections": zod.array(zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "instructions": zod.string().nullable(),
+  "fields": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string(),
+  "type": zod.enum(['short_text', 'long_text', 'date', 'yes_no', 'select', 'checklist', 'repeating_group', 'acknowledgment']),
+  "required": zod.boolean(),
+  "sensitive": zod.boolean(),
+  "helpText": zod.string().nullish(),
+  "options": zod.array(zod.string()).optional(),
+  "itemFields": zod.array(zod.unknown()).optional()
+}))
+}))
+}),
+  "assignedBy": zod.string().nullable(),
+  "assignedAt": zod.coerce.date().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "submittedBy": zod.string().nullable(),
+  "submittedAt": zod.coerce.date().nullable()
+})
+
+
+/**
+ * @summary Validate and submit an assessment
+ */
+export const submitAssessmentPathIdMax = 2147483647;
+export const submitAssessmentPathIdMultipleOf = 1;
+
+
+
+export const SubmitAssessmentParams = zod.object({
+  "id": zod.coerce.number().min(1).max(submitAssessmentPathIdMax).multipleOf(submitAssessmentPathIdMultipleOf)
+})
+
+export const SubmitAssessmentBody = zod.object({
+  "answers": zod.record(zod.string(), zod.unknown())
+})
+
+export const submitAssessmentResponseIdMultipleOf = 1;
+
+export const submitAssessmentResponseResidentIdMultipleOf = 1;
+
+export const submitAssessmentResponseTemplateIdMultipleOf = 1;
+
+export const submitAssessmentResponseTemplateVersionMultipleOf = 1;
+
+
+
+export const SubmitAssessmentResponse = zod.object({
+  "id": zod.number().min(1).multipleOf(submitAssessmentResponseIdMultipleOf),
+  "residentId": zod.number().min(1).multipleOf(submitAssessmentResponseResidentIdMultipleOf),
+  "status": zod.enum(['draft', 'submitted']),
+  "answers": zod.record(zod.string(), zod.unknown()),
+  "template": zod.object({
+  "id": zod.number().min(1).multipleOf(submitAssessmentResponseTemplateIdMultipleOf),
+  "slug": zod.string(),
+  "title": zod.string(),
+  "description": zod.string(),
+  "category": zod.enum(['resident', 'staff_volunteer']),
+  "audience": zod.enum(['resident', 'staff']),
+  "sensitivity": zod.enum(['standard', 'sensitive', 'restricted']),
+  "version": zod.number().min(1).multipleOf(submitAssessmentResponseTemplateVersionMultipleOf),
+  "status": zod.enum(['draft', 'active', 'retired']),
+  "sections": zod.array(zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "instructions": zod.string().nullable(),
+  "fields": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string(),
+  "type": zod.enum(['short_text', 'long_text', 'date', 'yes_no', 'select', 'checklist', 'repeating_group', 'acknowledgment']),
+  "required": zod.boolean(),
+  "sensitive": zod.boolean(),
+  "helpText": zod.string().nullish(),
+  "options": zod.array(zod.string()).optional(),
+  "itemFields": zod.array(zod.unknown()).optional()
+}))
+}))
+}),
+  "assignedBy": zod.string().nullable(),
+  "assignedAt": zod.coerce.date().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "submittedBy": zod.string().nullable(),
+  "submittedAt": zod.coerce.date().nullable()
+})
+
+
 /**
  * @summary Download a resident import template
  */
@@ -248,6 +803,7 @@ export const previewResidentImportBodyFilenameMax = 255;
 export const previewResidentImportBodyContentBase64Max = 1400000;
 
 
+
 export const PreviewResidentImportBody = zod.object({
   "filename": zod.string().min(1).max(previewResidentImportBodyFilenameMax),
   "contentBase64": zod.string().min(1).max(previewResidentImportBodyContentBase64Max)
@@ -262,6 +818,7 @@ export const previewResidentImportResponseSummaryTotalMultipleOf = 1;
 export const previewResidentImportResponseSummaryValidMultipleOf = 1;
 
 export const previewResidentImportResponseSummaryFailedMultipleOf = 1;
+
 
 
 export const PreviewResidentImportResponse = zod.object({
@@ -290,12 +847,15 @@ export const PreviewResidentImportResponse = zod.object({
 export const confirmResidentImportPathBatchIdMultipleOf = 1;
 
 
+
 export const ConfirmResidentImportParams = zod.object({
   "batchId": zod.coerce.number().min(1).multipleOf(confirmResidentImportPathBatchIdMultipleOf)
 })
 
 export const confirmResidentImportBodyApprovedRowNumbersItemMin = 2;
 export const confirmResidentImportBodyApprovedRowNumbersItemMultipleOf = 1;
+
+
 
 
 export const ConfirmResidentImportBody = zod.object({
@@ -309,6 +869,7 @@ export const confirmResidentImportResponseImportedResidentIdsItemMultipleOf = 1;
 export const confirmResidentImportResponseImportedMultipleOf = 1;
 
 export const confirmResidentImportResponseSkippedMultipleOf = 1;
+
 
 
 export const ConfirmResidentImportResponse = zod.object({
@@ -327,6 +888,7 @@ export const listPaymentsQueryResidentIdMax = 2147483647;
 export const listPaymentsQueryResidentIdMultipleOf = 1;
 
 
+
 export const ListPaymentsQueryParams = zod.object({
   "residentId": zod.coerce.number().min(1).max(listPaymentsQueryResidentIdMax).multipleOf(listPaymentsQueryResidentIdMultipleOf).optional(),
   "status": zod.enum(['all', 'paid', 'due', 'overdue']).optional()
@@ -343,6 +905,7 @@ export const listPaymentsResponseAmountMax = 99999999.99;
 export const listPaymentsResponseAmountMultipleOf = 0.01;
 
 export const listPaymentsResponseMethodMax = 80;
+
 
 
 export const ListPaymentsResponseItem = zod.object({
@@ -371,6 +934,7 @@ export const createPaymentBodyAmountRegExp = new RegExp('^(0|[1-9][0-9]{0,7})(\\
 export const createPaymentBodyMethodMax = 80;
 
 
+
 export const CreatePaymentBody = zod.object({
   "residentId": zod.number().min(1).max(createPaymentBodyResidentIdMax).multipleOf(createPaymentBodyResidentIdMultipleOf),
   "amount": zod.string().min(1).max(createPaymentBodyAmountMax).regex(createPaymentBodyAmountRegExp).describe('Non-negative USD amount with at most two decimal places.'),
@@ -390,6 +954,7 @@ export const createPaymentResponseAmountMax = 99999999.99;
 export const createPaymentResponseAmountMultipleOf = 0.01;
 
 export const createPaymentResponseMethodMax = 80;
+
 
 
 export const CreatePaymentResponse = zod.object({
@@ -437,6 +1002,7 @@ export const listHousesResponseOccupancyMin = 0;
 export const listHousesResponseOccupancyMultipleOf = 1;
 
 
+
 export const ListHousesResponseItem = zod.object({
   "id": zod.number().min(1).multipleOf(listHousesResponseIdMultipleOf),
   "name": zod.string(),
@@ -470,6 +1036,7 @@ export const listExpensesResponseHouseIdMultipleOf = 1;
 export const listExpensesResponseDescriptionMax = 1000;
 
 
+
 export const ListExpensesResponseItem = zod.object({
   "id": zod.number().min(1).multipleOf(listExpensesResponseIdMultipleOf),
   "amount": zod.number(),
@@ -494,6 +1061,7 @@ export const createExpenseBodyHouseIdMultipleOf = 1;
 export const createExpenseBodyDescriptionMax = 1000;
 
 
+
 export const CreateExpenseBody = zod.object({
   "amount": zod.string().min(1).max(createExpenseBodyAmountMax).regex(createExpenseBodyAmountRegExp),
   "expenseDate": zod.coerce.date(),
@@ -507,6 +1075,7 @@ export const createExpenseResponseIdMultipleOf = 1;
 export const createExpenseResponseHouseIdMultipleOf = 1;
 
 export const createExpenseResponseDescriptionMax = 1000;
+
 
 
 export const CreateExpenseResponse = zod.object({
@@ -537,6 +1106,7 @@ export const listIncomeResponseHouseIdMultipleOf = 1;
 export const listIncomeResponseDescriptionMax = 1000;
 
 
+
 export const ListIncomeResponseItem = zod.object({
   "id": zod.number().min(1).multipleOf(listIncomeResponseIdMultipleOf),
   "amount": zod.number(),
@@ -561,6 +1131,7 @@ export const createIncomeBodyHouseIdMultipleOf = 1;
 export const createIncomeBodyDescriptionMax = 1000;
 
 
+
 export const CreateIncomeBody = zod.object({
   "amount": zod.string().min(1).max(createIncomeBodyAmountMax).regex(createIncomeBodyAmountRegExp),
   "receivedDate": zod.coerce.date(),
@@ -574,6 +1145,7 @@ export const createIncomeResponseIdMultipleOf = 1;
 export const createIncomeResponseHouseIdMultipleOf = 1;
 
 export const createIncomeResponseDescriptionMax = 1000;
+
 
 
 export const CreateIncomeResponse = zod.object({
@@ -610,6 +1182,7 @@ export const listMeetingAttendanceResponseWomenEligibleMultipleOf = 1;
 export const listMeetingAttendanceResponseNotesMax = 1000;
 
 
+
 export const ListMeetingAttendanceResponseItem = zod.object({
   "id": zod.number().min(1).multipleOf(listMeetingAttendanceResponseIdMultipleOf),
   "meetingType": zod.enum(['recovery_meeting', 'house_meeting', 'life_skills', 'case_management', 'other']),
@@ -637,6 +1210,7 @@ export const createMeetingAttendanceBodyWomenEligibleMultipleOf = 1;
 export const createMeetingAttendanceBodyNotesMax = 1000;
 
 
+
 export const CreateMeetingAttendanceBody = zod.object({
   "meetingType": zod.enum(['recovery_meeting', 'house_meeting', 'life_skills', 'case_management', 'other']),
   "meetingDate": zod.coerce.date(),
@@ -657,6 +1231,7 @@ export const createMeetingAttendanceResponseWomenEligibleMin = 0;
 export const createMeetingAttendanceResponseWomenEligibleMultipleOf = 1;
 
 export const createMeetingAttendanceResponseNotesMax = 1000;
+
 
 
 export const CreateMeetingAttendanceResponse = zod.object({
@@ -696,6 +1271,7 @@ export const GetReportParams = zod.object({
 export const getReportQueryHouseMax = 256;
 
 
+
 export const GetReportQueryParams = zod.object({
   "house": zod.coerce.string().max(getReportQueryHouseMax).optional(),
   "from": zod.date().optional(),
@@ -712,318 +1288,3 @@ export const GetReportResponse = zod.object({
 }),
   "rows": zod.array(zod.record(zod.string(), zod.unknown()))
 })
-
-
-export const ListResidentAssessmentsParams = zod.object({
-  "id": zod.coerce.number().min(1).max(listResidentAssessmentsPathIdMax).multipleOf(listResidentAssessmentsPathIdMultipleOf)
-})
-
-export const CreateResidentAssessmentParams = zod.object({
-  "id": zod.coerce.number().min(1).max(createResidentAssessmentPathIdMax).multipleOf(createResidentAssessmentPathIdMultipleOf)
-})
-
-export const createResidentAssessmentPathIdMultipleOf = 1;
-
-export const CreateResidentAssessmentBody = zod.object({
-  "templateId": zod.number().min(1).multipleOf(createResidentAssessmentBodyTemplateIdMultipleOf)
-})
-
-export const createResidentAssessmentResponseResidentIdMultipleOf = 1;
-
-export const GetAssessmentResponse = zod.object({
-  "id": zod.number().min(1).multipleOf(getAssessmentResponseIdMultipleOf),
-  "residentId": zod.number().min(1).multipleOf(getAssessmentResponseResidentIdMultipleOf),
-  "status": zod.enum(['draft', 'submitted']),
-  "answers": zod.record(zod.string(), zod.unknown()),
-  "template": zod.object({
-  "id": zod.number().min(1).multipleOf(getAssessmentResponseTemplateIdMultipleOf),
-  "slug": zod.string(),
-  "title": zod.string(),
-  "description": zod.string(),
-  "category": zod.enum(['resident', 'staff_volunteer']),
-  "audience": zod.enum(['resident', 'staff']),
-  "sensitivity": zod.enum(['standard', 'sensitive', 'restricted']),
-  "version": zod.number().min(1).multipleOf(getAssessmentResponseTemplateVersionMultipleOf),
-  "status": zod.enum(['active', 'retired']),
-  "sections": zod.array(zod.object({
-  "id": zod.string(),
-  "title": zod.string(),
-  "instructions": zod.string().nullable(),
-  "fields": zod.array(zod.object({
-  "id": zod.string(),
-  "label": zod.string(),
-  "type": zod.enum(['short_text', 'long_text', 'date', 'yes_no', 'select', 'checklist', 'repeating_group', 'acknowledgment']),
-  "required": zod.boolean(),
-  "sensitive": zod.boolean(),
-  "helpText": zod.string().nullish(),
-  "options": zod.array(zod.string()).optional(),
-  "itemFields": zod.array(zod.unknown()).optional()
-}))
-}))
-}),
-  "assignedBy": zod.string().nullable(),
-  "assignedAt": zod.coerce.date().nullable(),
-  "createdAt": zod.coerce.date(),
-  "updatedAt": zod.coerce.date(),
-  "submittedBy": zod.string().nullable(),
-  "submittedAt": zod.coerce.date().nullable()
-})
-
-export const updateAssessmentDraftResponseTemplateIdMultipleOf = 1;
-
-export const getAssessmentResponseTemplateVersionMultipleOf = 1;
-
-export const updateAssessmentDraftResponseTemplateVersionMultipleOf = 1;
-
-export const submitAssessmentPathIdMultipleOf = 1;
-
-export const submitAssessmentResponseTemplateVersionMultipleOf = 1;
-
-export const UpdateAssessmentDraftParams = zod.object({
-  "id": zod.coerce.number().min(1).max(updateAssessmentDraftPathIdMax).multipleOf(updateAssessmentDraftPathIdMultipleOf)
-})
-
-export const updateAssessmentDraftResponseIdMultipleOf = 1;
-
-/**
- * @summary Start or assign an assessment for a resident
- */
-export const createResidentAssessmentPathIdMax = 2147483647;
-
-/**
- * @summary Save draft answers
- */
-export const updateAssessmentDraftPathIdMax = 2147483647;
-
-export const listResidentAssessmentsPathIdMultipleOf = 1;
-
-export const ListAssessmentTemplatesResponse = zod.array(ListAssessmentTemplatesResponseItem)
-
-export const listResidentAssessmentsResponseIdMultipleOf = 1;
-
-export const createResidentAssessmentResponseTemplateIdMultipleOf = 1;
-
-/**
- * @summary Validate and submit an assessment
- */
-export const submitAssessmentPathIdMax = 2147483647;
-
-export const SubmitAssessmentResponse = zod.object({
-  "id": zod.number().min(1).multipleOf(submitAssessmentResponseIdMultipleOf),
-  "residentId": zod.number().min(1).multipleOf(submitAssessmentResponseResidentIdMultipleOf),
-  "status": zod.enum(['draft', 'submitted']),
-  "answers": zod.record(zod.string(), zod.unknown()),
-  "template": zod.object({
-  "id": zod.number().min(1).multipleOf(submitAssessmentResponseTemplateIdMultipleOf),
-  "slug": zod.string(),
-  "title": zod.string(),
-  "description": zod.string(),
-  "category": zod.enum(['resident', 'staff_volunteer']),
-  "audience": zod.enum(['resident', 'staff']),
-  "sensitivity": zod.enum(['standard', 'sensitive', 'restricted']),
-  "version": zod.number().min(1).multipleOf(submitAssessmentResponseTemplateVersionMultipleOf),
-  "status": zod.enum(['active', 'retired']),
-  "sections": zod.array(zod.object({
-  "id": zod.string(),
-  "title": zod.string(),
-  "instructions": zod.string().nullable(),
-  "fields": zod.array(zod.object({
-  "id": zod.string(),
-  "label": zod.string(),
-  "type": zod.enum(['short_text', 'long_text', 'date', 'yes_no', 'select', 'checklist', 'repeating_group', 'acknowledgment']),
-  "required": zod.boolean(),
-  "sensitive": zod.boolean(),
-  "helpText": zod.string().nullish(),
-  "options": zod.array(zod.string()).optional(),
-  "itemFields": zod.array(zod.unknown()).optional()
-}))
-}))
-}),
-  "assignedBy": zod.string().nullable(),
-  "assignedAt": zod.coerce.date().nullable(),
-  "createdAt": zod.coerce.date(),
-  "updatedAt": zod.coerce.date(),
-  "submittedBy": zod.string().nullable(),
-  "submittedAt": zod.coerce.date().nullable()
-})
-
-export const getAssessmentResponseTemplateIdMultipleOf = 1;
-
-export const GetAssessmentParams = zod.object({
-  "id": zod.coerce.number().min(1).max(getAssessmentPathIdMax).multipleOf(getAssessmentPathIdMultipleOf)
-})
-
-export const ListAssessmentTemplatesResponseItem = zod.object({
-  "id": zod.number().min(1).multipleOf(listAssessmentTemplatesResponseIdMultipleOf),
-  "slug": zod.string(),
-  "title": zod.string(),
-  "description": zod.string(),
-  "category": zod.enum(['resident', 'staff_volunteer']),
-  "audience": zod.enum(['resident', 'staff']),
-  "sensitivity": zod.enum(['standard', 'sensitive', 'restricted']),
-  "version": zod.number().min(1).multipleOf(listAssessmentTemplatesResponseVersionMultipleOf),
-  "status": zod.enum(['active', 'retired']),
-  "sections": zod.array(zod.object({
-  "id": zod.string(),
-  "title": zod.string(),
-  "instructions": zod.string().nullable(),
-  "fields": zod.array(zod.object({
-  "id": zod.string(),
-  "label": zod.string(),
-  "type": zod.enum(['short_text', 'long_text', 'date', 'yes_no', 'select', 'checklist', 'repeating_group', 'acknowledgment']),
-  "required": zod.boolean(),
-  "sensitive": zod.boolean(),
-  "helpText": zod.string().nullish(),
-  "options": zod.array(zod.string()).optional(),
-  "itemFields": zod.array(zod.unknown()).optional()
-}))
-}))
-})
-
-export const createResidentAssessmentResponseTemplateVersionMultipleOf = 1;
-
-export const submitAssessmentResponseTemplateIdMultipleOf = 1;
-
-export const submitAssessmentResponseIdMultipleOf = 1;
-
-export const createResidentAssessmentResponseIdMultipleOf = 1;
-
-export const UpdateAssessmentDraftBody = zod.object({
-  "answers": zod.record(zod.string(), zod.unknown())
-})
-
-export const CreateResidentAssessmentResponse = zod.object({
-  "id": zod.number().min(1).multipleOf(createResidentAssessmentResponseIdMultipleOf),
-  "residentId": zod.number().min(1).multipleOf(createResidentAssessmentResponseResidentIdMultipleOf),
-  "status": zod.enum(['draft', 'submitted']),
-  "answers": zod.record(zod.string(), zod.unknown()),
-  "template": zod.object({
-  "id": zod.number().min(1).multipleOf(createResidentAssessmentResponseTemplateIdMultipleOf),
-  "slug": zod.string(),
-  "title": zod.string(),
-  "description": zod.string(),
-  "category": zod.enum(['resident', 'staff_volunteer']),
-  "audience": zod.enum(['resident', 'staff']),
-  "sensitivity": zod.enum(['standard', 'sensitive', 'restricted']),
-  "version": zod.number().min(1).multipleOf(createResidentAssessmentResponseTemplateVersionMultipleOf),
-  "status": zod.enum(['active', 'retired']),
-  "sections": zod.array(zod.object({
-  "id": zod.string(),
-  "title": zod.string(),
-  "instructions": zod.string().nullable(),
-  "fields": zod.array(zod.object({
-  "id": zod.string(),
-  "label": zod.string(),
-  "type": zod.enum(['short_text', 'long_text', 'date', 'yes_no', 'select', 'checklist', 'repeating_group', 'acknowledgment']),
-  "required": zod.boolean(),
-  "sensitive": zod.boolean(),
-  "helpText": zod.string().nullish(),
-  "options": zod.array(zod.string()).optional(),
-  "itemFields": zod.array(zod.unknown()).optional()
-}))
-}))
-}),
-  "assignedBy": zod.string().nullable(),
-  "assignedAt": zod.coerce.date().nullable(),
-  "createdAt": zod.coerce.date(),
-  "updatedAt": zod.coerce.date(),
-  "submittedBy": zod.string().nullable(),
-  "submittedAt": zod.coerce.date().nullable()
-})
-
-export const SubmitAssessmentBody = zod.object({
-  "answers": zod.record(zod.string(), zod.unknown())
-})
-
-export const ListResidentAssessmentsResponse = zod.array(ListResidentAssessmentsResponseItem)
-
-export const submitAssessmentResponseResidentIdMultipleOf = 1;
-
-export const listResidentAssessmentsResponseResidentIdMultipleOf = 1;
-
-export const updateAssessmentDraftPathIdMultipleOf = 1;
-
-export const createResidentAssessmentBodyTemplateIdMultipleOf = 1;
-
-export const ListResidentAssessmentsResponseItem = zod.object({
-  "id": zod.number().min(1).multipleOf(listResidentAssessmentsResponseIdMultipleOf),
-  "residentId": zod.number().min(1).multipleOf(listResidentAssessmentsResponseResidentIdMultipleOf),
-  "templateId": zod.number().min(1).multipleOf(listResidentAssessmentsResponseTemplateIdMultipleOf),
-  "title": zod.string(),
-  "category": zod.enum(['resident', 'staff_volunteer']),
-  "status": zod.enum(['draft', 'submitted']),
-  "version": zod.number().min(1).multipleOf(listResidentAssessmentsResponseVersionMultipleOf),
-  "assignedBy": zod.string().nullable(),
-  "assignedAt": zod.coerce.date().nullable(),
-  "createdAt": zod.coerce.date(),
-  "updatedAt": zod.coerce.date(),
-  "submittedBy": zod.string().nullable(),
-  "submittedAt": zod.coerce.date().nullable()
-})
-
-export const listAssessmentTemplatesResponseVersionMultipleOf = 1;
-
-export const listResidentAssessmentsResponseVersionMultipleOf = 1;
-
-export const updateAssessmentDraftResponseResidentIdMultipleOf = 1;
-
-export const SubmitAssessmentParams = zod.object({
-  "id": zod.coerce.number().min(1).max(submitAssessmentPathIdMax).multipleOf(submitAssessmentPathIdMultipleOf)
-})
-
-export const listResidentAssessmentsResponseTemplateIdMultipleOf = 1;
-
-export const UpdateAssessmentDraftResponse = zod.object({
-  "id": zod.number().min(1).multipleOf(updateAssessmentDraftResponseIdMultipleOf),
-  "residentId": zod.number().min(1).multipleOf(updateAssessmentDraftResponseResidentIdMultipleOf),
-  "status": zod.enum(['draft', 'submitted']),
-  "answers": zod.record(zod.string(), zod.unknown()),
-  "template": zod.object({
-  "id": zod.number().min(1).multipleOf(updateAssessmentDraftResponseTemplateIdMultipleOf),
-  "slug": zod.string(),
-  "title": zod.string(),
-  "description": zod.string(),
-  "category": zod.enum(['resident', 'staff_volunteer']),
-  "audience": zod.enum(['resident', 'staff']),
-  "sensitivity": zod.enum(['standard', 'sensitive', 'restricted']),
-  "version": zod.number().min(1).multipleOf(updateAssessmentDraftResponseTemplateVersionMultipleOf),
-  "status": zod.enum(['active', 'retired']),
-  "sections": zod.array(zod.object({
-  "id": zod.string(),
-  "title": zod.string(),
-  "instructions": zod.string().nullable(),
-  "fields": zod.array(zod.object({
-  "id": zod.string(),
-  "label": zod.string(),
-  "type": zod.enum(['short_text', 'long_text', 'date', 'yes_no', 'select', 'checklist', 'repeating_group', 'acknowledgment']),
-  "required": zod.boolean(),
-  "sensitive": zod.boolean(),
-  "helpText": zod.string().nullish(),
-  "options": zod.array(zod.string()).optional(),
-  "itemFields": zod.array(zod.unknown()).optional()
-}))
-}))
-}),
-  "assignedBy": zod.string().nullable(),
-  "assignedAt": zod.coerce.date().nullable(),
-  "createdAt": zod.coerce.date(),
-  "updatedAt": zod.coerce.date(),
-  "submittedBy": zod.string().nullable(),
-  "submittedAt": zod.coerce.date().nullable()
-})
-
-export const getAssessmentResponseIdMultipleOf = 1;
-
-/**
- * @summary Read an assessment draft or submission
- */
-export const getAssessmentPathIdMax = 2147483647;
-
-export const getAssessmentPathIdMultipleOf = 1;
-
-export const getAssessmentResponseResidentIdMultipleOf = 1;
-
-/**
- * @summary List assessments for a resident
- */
-export const listResidentAssessmentsPathIdMax = 2147483647;

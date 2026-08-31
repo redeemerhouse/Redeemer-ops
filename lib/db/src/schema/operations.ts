@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer, numeric, date, timestamp, boolean, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, numeric, date, timestamp, boolean, jsonb, uniqueIndex } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -120,7 +120,7 @@ export const residentImportRowsTable = pgTable("resident_import_rows", {
 
 export const assessmentTemplatesTable = pgTable("assessment_templates", {
   id: serial("id").primaryKey(),
-  slug: text("slug").notNull().unique(),
+  slug: text("slug").notNull(),
   title: text("title").notNull(),
   description: text("description").notNull(),
   category: text("category").notNull().default("resident"),
@@ -131,7 +131,9 @@ export const assessmentTemplatesTable = pgTable("assessment_templates", {
   schema: jsonb("schema").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => ({
+  slugVersionUnique: uniqueIndex("assessment_templates_slug_version_unique").on(table.slug, table.version),
+}));
 
 export const assessmentSubmissionsTable = pgTable("assessment_submissions", {
   id: serial("id").primaryKey(),

@@ -10,6 +10,7 @@ export type AssessmentTemplateStatus = typeof AssessmentTemplateStatus[keyof typ
 
 
 export const AssessmentTemplateStatus = {
+  draft: 'draft',
   active: 'active',
   retired: 'retired',
 } as const;

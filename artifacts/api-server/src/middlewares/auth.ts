@@ -39,7 +39,8 @@ export type Permission =
   | "assessment:read"
   | "assessment:create"
   | "assessment:update"
-  | "assessment:submit";
+  | "assessment:submit"
+  | "assessment:manage";
 
 type AuthorizationContext = {
   houseName?: string;
@@ -224,6 +225,7 @@ export function authorize(principal: Principal, permission: Permission, context:
     if (permission === "assessment:read") return isAdmin || isManager || isResident;
     return isAdmin || isManager || isResident;
   }
+  if (permission === "assessment:manage") return isAdmin;
   return false;
 }
 

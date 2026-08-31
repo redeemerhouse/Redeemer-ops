@@ -61,14 +61,6 @@ export type DashboardMeetingsProperty = {
   attendanceRate: number | null;
 };
 
-export type DashboardMeetingsProperty = {
-  meetingsLogged: number;
-  womenAttended: number;
-  womenEligible: number;
-  /** @nullable */
-  attendanceRate: number | null;
-};
-
 export type DashboardProgress = {
   newMoveIns: number;
   completedOperations: number;
@@ -543,6 +535,184 @@ export interface PaymentInput {
 }
 
 export type AssessmentFieldType = typeof AssessmentFieldType[keyof typeof AssessmentFieldType];
+
+
+export const AssessmentFieldType = {
+  short_text: 'short_text',
+  long_text: 'long_text',
+  date: 'date',
+  yes_no: 'yes_no',
+  select: 'select',
+  checklist: 'checklist',
+  repeating_group: 'repeating_group',
+  acknowledgment: 'acknowledgment',
+} as const;
+
+export interface AssessmentField {
+  id: string;
+  label: string;
+  type: AssessmentFieldType;
+  required: boolean;
+  sensitive: boolean;
+  /** @nullable */
+  helpText?: string | null;
+  options?: string[];
+  itemFields?: AssessmentField[];
+}
+
+export interface AssessmentSection {
+  id: string;
+  title: string;
+  /** @nullable */
+  instructions: string | null;
+  fields: AssessmentField[];
+}
+
+export type AssessmentTemplateCategory = typeof AssessmentTemplateCategory[keyof typeof AssessmentTemplateCategory];
+
+
+export const AssessmentTemplateCategory = {
+  resident: 'resident',
+  staff_volunteer: 'staff_volunteer',
+} as const;
+
+export type AssessmentTemplateAudience = typeof AssessmentTemplateAudience[keyof typeof AssessmentTemplateAudience];
+
+
+export const AssessmentTemplateAudience = {
+  resident: 'resident',
+  staff: 'staff',
+} as const;
+
+export type AssessmentTemplateSensitivity = typeof AssessmentTemplateSensitivity[keyof typeof AssessmentTemplateSensitivity];
+
+
+export const AssessmentTemplateSensitivity = {
+  standard: 'standard',
+  sensitive: 'sensitive',
+  restricted: 'restricted',
+} as const;
+
+export type AssessmentTemplateStatus = typeof AssessmentTemplateStatus[keyof typeof AssessmentTemplateStatus];
+
+
+export const AssessmentTemplateStatus = {
+  draft: 'draft',
+  active: 'active',
+  retired: 'retired',
+} as const;
+
+export interface AssessmentTemplate {
+  /** @minimum 1 */
+  id: number;
+  slug: string;
+  title: string;
+  description: string;
+  category: AssessmentTemplateCategory;
+  audience: AssessmentTemplateAudience;
+  sensitivity: AssessmentTemplateSensitivity;
+  /** @minimum 1 */
+  version: number;
+  status: AssessmentTemplateStatus;
+  sections: AssessmentSection[];
+}
+
+export type AssessmentSummaryCategory = typeof AssessmentSummaryCategory[keyof typeof AssessmentSummaryCategory];
+
+
+export const AssessmentSummaryCategory = {
+  resident: 'resident',
+  staff_volunteer: 'staff_volunteer',
+} as const;
+
+export type AssessmentSummaryStatus = typeof AssessmentSummaryStatus[keyof typeof AssessmentSummaryStatus];
+
+
+export const AssessmentSummaryStatus = {
+  draft: 'draft',
+  submitted: 'submitted',
+} as const;
+
+export interface AssessmentSummary {
+  /** @minimum 1 */
+  id: number;
+  /** @minimum 1 */
+  residentId: number;
+  /** @minimum 1 */
+  templateId: number;
+  title: string;
+  category: AssessmentSummaryCategory;
+  status: AssessmentSummaryStatus;
+  /** @minimum 1 */
+  version: number;
+  /** @nullable */
+  assignedBy: string | null;
+  /** @nullable */
+  assignedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  /** @nullable */
+  submittedBy: string | null;
+  /** @nullable */
+  submittedAt: string | null;
+}
+
+export interface AssessmentStartInput {
+  /** @minimum 1 */
+  templateId: number;
+}
+
+export interface AssessmentRevisionInput {
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  title: string;
+  /**
+     * @minLength 1
+     * @maxLength 2000
+     */
+  description: string;
+  /** @minItems 1 */
+  schema: AssessmentSection[];
+}
+
+export type AssessmentAnswersInputAnswers = { [key: string]: unknown };
+
+export interface AssessmentAnswersInput {
+  answers: AssessmentAnswersInputAnswers;
+}
+
+export type AssessmentDetailStatus = typeof AssessmentDetailStatus[keyof typeof AssessmentDetailStatus];
+
+
+export const AssessmentDetailStatus = {
+  draft: 'draft',
+  submitted: 'submitted',
+} as const;
+
+export type AssessmentDetailAnswers = { [key: string]: unknown };
+
+export interface AssessmentDetail {
+  /** @minimum 1 */
+  id: number;
+  /** @minimum 1 */
+  residentId: number;
+  status: AssessmentDetailStatus;
+  answers: AssessmentDetailAnswers;
+  template: AssessmentTemplate;
+  /** @nullable */
+  assignedBy: string | null;
+  /** @nullable */
+  assignedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  /** @nullable */
+  submittedBy: string | null;
+  /** @nullable */
+  submittedAt: string | null;
+}
+
 export type ActivityType = typeof ActivityType[keyof typeof ActivityType];
 
 
@@ -684,157 +854,3 @@ house?: string;
 from?: string;
 to?: string;
 };
-
-
-export interface AssessmentSummary {
-  /** @minimum 1 */
-  id: number;
-  /** @minimum 1 */
-  residentId: number;
-  /** @minimum 1 */
-  templateId: number;
-  title: string;
-  category: AssessmentSummaryCategory;
-  status: AssessmentSummaryStatus;
-  /** @minimum 1 */
-  version: number;
-  /** @nullable */
-  assignedBy: string | null;
-  /** @nullable */
-  assignedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-  /** @nullable */
-  submittedBy: string | null;
-  /** @nullable */
-  submittedAt: string | null;
-}
-
-export type AssessmentSummaryStatus = typeof AssessmentSummaryStatus[keyof typeof AssessmentSummaryStatus];
-
-export type AssessmentTemplateAudience = typeof AssessmentTemplateAudience[keyof typeof AssessmentTemplateAudience];
-
-export interface AssessmentField {
-  id: string;
-  label: string;
-  type: AssessmentFieldType;
-  required: boolean;
-  sensitive: boolean;
-  /** @nullable */
-  helpText?: string | null;
-  options?: string[];
-  itemFields?: AssessmentField[];
-}
-
-export interface AssessmentSection {
-  id: string;
-  title: string;
-  /** @nullable */
-  instructions: string | null;
-  fields: AssessmentField[];
-}
-
-export const AssessmentSummaryStatus = {
-  draft: 'draft',
-  submitted: 'submitted',
-} as const;
-
-export type AssessmentTemplateSensitivity = typeof AssessmentTemplateSensitivity[keyof typeof AssessmentTemplateSensitivity];
-
-export interface AssessmentStartInput {
-  /** @minimum 1 */
-  templateId: number;
-}
-
-export interface AssessmentTemplate {
-  /** @minimum 1 */
-  id: number;
-  slug: string;
-  title: string;
-  description: string;
-  category: AssessmentTemplateCategory;
-  audience: AssessmentTemplateAudience;
-  sensitivity: AssessmentTemplateSensitivity;
-  /** @minimum 1 */
-  version: number;
-  status: AssessmentTemplateStatus;
-  sections: AssessmentSection[];
-}
-
-export type AssessmentTemplateStatus = typeof AssessmentTemplateStatus[keyof typeof AssessmentTemplateStatus];
-
-export type AssessmentSummaryCategory = typeof AssessmentSummaryCategory[keyof typeof AssessmentSummaryCategory];
-
-export const AssessmentFieldType = {
-  short_text: 'short_text',
-  long_text: 'long_text',
-  date: 'date',
-  yes_no: 'yes_no',
-  select: 'select',
-  checklist: 'checklist',
-  repeating_group: 'repeating_group',
-  acknowledgment: 'acknowledgment',
-} as const;
-
-export type AssessmentTemplateCategory = typeof AssessmentTemplateCategory[keyof typeof AssessmentTemplateCategory];
-
-export const AssessmentTemplateAudience = {
-  resident: 'resident',
-  staff: 'staff',
-} as const;
-
-export const AssessmentTemplateStatus = {
-  active: 'active',
-  retired: 'retired',
-} as const;
-
-export const AssessmentSummaryCategory = {
-  resident: 'resident',
-  staff_volunteer: 'staff_volunteer',
-} as const;
-
-export const AssessmentTemplateSensitivity = {
-  standard: 'standard',
-  sensitive: 'sensitive',
-  restricted: 'restricted',
-} as const;
-
-export interface AssessmentAnswersInput {
-  answers: AssessmentAnswersInputAnswers;
-}
-
-export const AssessmentTemplateCategory = {
-  resident: 'resident',
-  staff_volunteer: 'staff_volunteer',
-} as const;
-
-export const AssessmentDetailStatus = {
-  draft: 'draft',
-  submitted: 'submitted',
-} as const;
-
-export type AssessmentDetailAnswers = { [key: string]: unknown };
-
-export type AssessmentAnswersInputAnswers = { [key: string]: unknown };
-
-export interface AssessmentDetail {
-  /** @minimum 1 */
-  id: number;
-  /** @minimum 1 */
-  residentId: number;
-  status: AssessmentDetailStatus;
-  answers: AssessmentDetailAnswers;
-  template: AssessmentTemplate;
-  /** @nullable */
-  assignedBy: string | null;
-  /** @nullable */
-  assignedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-  /** @nullable */
-  submittedBy: string | null;
-  /** @nullable */
-  submittedAt: string | null;
-}
-
-export type AssessmentDetailStatus = typeof AssessmentDetailStatus[keyof typeof AssessmentDetailStatus];

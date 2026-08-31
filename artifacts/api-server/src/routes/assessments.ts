@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, max } from "drizzle-orm";
 import {
   assessmentSubmissionsTable,
   assessmentTemplatesTable,
@@ -11,6 +11,14 @@ import {
 import {
   CreateResidentAssessmentBody,
   CreateResidentAssessmentResponse,
+  CreateAssessmentRevisionBody,
+  CreateAssessmentRevisionResponse,
+  GetAssessmentTemplateParams,
+  GetAssessmentTemplateResponse,
+  PublishAssessmentTemplateParams,
+  PublishAssessmentTemplateResponse,
+  RetireAssessmentTemplateParams,
+  RetireAssessmentTemplateResponse,
   GetAssessmentParams,
   GetAssessmentResponse,
   ListAssessmentTemplatesResponse,
@@ -23,7 +31,7 @@ import {
   UpdateAssessmentDraftParams,
   UpdateAssessmentDraftResponse,
 } from "@workspace/api-zod";
-import { authenticate, canAccessResident, getPrincipal, type Principal } from "../middlewares/auth";
+import { authenticate, canAccessResident, getPrincipal, isAdministrator, requirePermission, type Principal } from "../middlewares/auth";
 import { problem } from "../middlewares/errors";
 
 const router: IRouter = Router();
@@ -178,10 +186,123 @@ const loadSubmission = async (id: number) => {
 
 router.get("/assessment-templates", async (req, res): Promise<void> => {
   const principal = getPrincipal(res);
-  const rows = await db.select().from(assessmentTemplatesTable).where(eq(assessmentTemplatesTable.status, "active")).orderBy(asc(assessmentTemplatesTable.title));
+  const rows = await db.select().from(assessmentTemplatesTable)
+    .where(isAdministrator(principal) ? undefined : eq(assessmentTemplatesTable.status, "active"))
+    .orderBy(asc(assessmentTemplatesTable.title), desc(assessmentTemplatesTable.version));
   const visible = rows.filter((template) => principal.role !== "resident" || template.audience === "resident");
   res.json(ListAssessmentTemplatesResponse.parse(visible.map(asTemplate)));
   await audit(req, "Assessment templates viewed", undefined, { count: visible.length });
+});
+
+router.get("/assessment-templates/:id", async (req, res): Promise<void> => {
+  const parsed = GetAssessmentTemplateParams.safeParse(req.params);
+  if (!parsed.success) { problem(req, res, 400); return; }
+  const principal = getPrincipal(res);
+  const template = await getTemplate(parsed.data.id);
+  if (!template || (!isAdministrator(principal) && (template.status !== "active" || (principal.role === "resident" && template.audience !== "resident")))) {
+    problem(req, res, 404);
+    return;
+  }
+  res.json(GetAssessmentTemplateResponse.parse(asTemplate(template)));
+  await audit(req, "Assessment template previewed", template.id, { templateId: template.id, version: template.version, status: template.status });
+});
+
+router.post("/assessment-templates/:id/revisions", requirePermission("assessment:manage"), async (req, res): Promise<void> => {
+  const parsedParams = GetAssessmentTemplateParams.safeParse(req.params);
+  const parsedBody = CreateAssessmentRevisionBody.strict().safeParse(req.body);
+  if (!parsedParams.success || !parsedBody.success) { problem(req, res, 400); return; }
+  const principal = getPrincipal(res);
+  const source = await getTemplate(parsedParams.data.id);
+  if (!source) { problem(req, res, 404); return; }
+  const [{ highestVersion }] = await db.select({ highestVersion: max(assessmentTemplatesTable.version) })
+    .from(assessmentTemplatesTable).where(eq(assessmentTemplatesTable.slug, source.slug));
+  const version = Number(highestVersion ?? source.version) + 1;
+  const now = new Date();
+  const [created] = await db.insert(assessmentTemplatesTable).values({
+    slug: source.slug,
+    title: parsedBody.data.title,
+    description: parsedBody.data.description,
+    category: source.category,
+    audience: source.audience,
+    sensitivity: source.sensitivity,
+    version,
+    status: "draft",
+    schema: parsedBody.data.schema,
+    createdAt: now,
+    updatedAt: now,
+  }).returning();
+  await audit(req, "Assessment revision created", created.id, {
+    templateId: source.id,
+    revisionId: created.id,
+    version,
+    basedOnVersion: source.version,
+    status: "draft",
+  });
+  res.status(201).json(CreateAssessmentRevisionResponse.parse(asTemplate(created)));
+});
+
+router.post("/assessment-templates/:id/publish", requirePermission("assessment:manage"), async (req, res): Promise<void> => {
+  const parsed = PublishAssessmentTemplateParams.safeParse(req.params);
+  if (!parsed.success) { problem(req, res, 400); return; }
+  const principal = getPrincipal(res);
+  const template = await getTemplate(parsed.data.id);
+  if (!template) { problem(req, res, 404); return; }
+  if (template.status !== "draft") {
+    res.status(400).json({ error: "Only draft assessment revisions can be published." });
+    return;
+  }
+  const now = new Date();
+  const activeVersions = await db.select({ id: assessmentTemplatesTable.id, version: assessmentTemplatesTable.version })
+    .from(assessmentTemplatesTable)
+    .where(and(eq(assessmentTemplatesTable.slug, template.slug), eq(assessmentTemplatesTable.status, "active")));
+  const published = await db.transaction(async (tx) => {
+    await tx.update(assessmentTemplatesTable).set({ status: "retired", updatedAt: now })
+      .where(and(eq(assessmentTemplatesTable.slug, template.slug), eq(assessmentTemplatesTable.status, "active")));
+    const [updated] = await tx.update(assessmentTemplatesTable)
+      .set({ status: "active", updatedAt: now })
+      .where(and(eq(assessmentTemplatesTable.id, template.id), eq(assessmentTemplatesTable.status, "draft")))
+      .returning();
+    return updated;
+  });
+  if (!published) { res.status(409).json({ error: "This assessment revision changed before it could be published." }); return; }
+  await audit(req, "Assessment revision published", published.id, {
+    templateId: published.id,
+    version: published.version,
+    status: "active",
+  });
+  for (const previous of activeVersions) {
+    await audit(req, "Assessment revision retired", previous.id, {
+      templateId: previous.id,
+      version: previous.version,
+      reason: "Replaced by published revision",
+      replacedBy: published.id,
+      status: "retired",
+    });
+  }
+  res.json(PublishAssessmentTemplateResponse.parse(asTemplate(published)));
+});
+
+router.post("/assessment-templates/:id/retire", requirePermission("assessment:manage"), async (req, res): Promise<void> => {
+  const parsed = RetireAssessmentTemplateParams.safeParse(req.params);
+  if (!parsed.success) { problem(req, res, 400); return; }
+  const principal = getPrincipal(res);
+  const template = await getTemplate(parsed.data.id);
+  if (!template) { problem(req, res, 404); return; }
+  if (template.status === "retired") {
+    res.status(400).json({ error: "This assessment revision is already retired." });
+    return;
+  }
+  const [retired] = await db.update(assessmentTemplatesTable).set({ status: "retired", updatedAt: new Date() })
+    .where(and(eq(assessmentTemplatesTable.id, template.id), eq(assessmentTemplatesTable.status, template.status)))
+    .returning();
+  if (!retired) { res.status(409).json({ error: "This assessment revision changed before it could be retired." }); return; }
+  await audit(req, "Assessment revision retired", retired.id, {
+    templateId: retired.id,
+    version: retired.version,
+    previousStatus: template.status,
+    status: "retired",
+  });
+  res.json(RetireAssessmentTemplateResponse.parse(asTemplate(retired)));
 });
 
 router.get("/residents/:id/assessments", async (req, res): Promise<void> => {

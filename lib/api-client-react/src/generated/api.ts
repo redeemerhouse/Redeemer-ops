@@ -23,6 +23,7 @@ import type {
   Activity,
   AssessmentAnswersInput,
   AssessmentDetail,
+  AssessmentRevisionInput,
   AssessmentStartInput,
   AssessmentSummary,
   AssessmentTemplate,
@@ -558,7 +559,7 @@ export const getListAssessmentTemplatesUrl = () => {
 }
 
 /**
- * @summary List assessment templates available to the caller
+ * @summary List assessment template versions available to the caller
  */
 export const listAssessmentTemplates = async ( options?: Parameters<typeof customFetch>[1]): Promise<AssessmentTemplate[]> => {
 
@@ -605,7 +606,7 @@ export type ListAssessmentTemplatesQueryError = ErrorType<void>
 
 
 /**
- * @summary List assessment templates available to the caller
+ * @summary List assessment template versions available to the caller
  */
 
 export function useListAssessmentTemplates<TData = Awaited<ReturnType<typeof listAssessmentTemplates>>, TError = ErrorType<void>>(
@@ -625,6 +626,297 @@ export function useListAssessmentTemplates<TData = Awaited<ReturnType<typeof lis
 
 
 
+
+export const getGetAssessmentTemplateUrl = (id: number,) => {
+
+
+
+
+  return `/api/assessment-templates/${id}`
+}
+
+/**
+ * @summary Preview an assessment template version
+ */
+export const getAssessmentTemplate = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<AssessmentTemplate> => {
+
+  return customFetch<AssessmentTemplate>(getGetAssessmentTemplateUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAssessmentTemplateQueryKey = (id: number,) => {
+    return [
+    `/api/assessment-templates/${id}`
+    ] as const;
+    }
+
+
+export const getGetAssessmentTemplateQueryOptions = <TData = Awaited<ReturnType<typeof getAssessmentTemplate>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAssessmentTemplate>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAssessmentTemplateQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAssessmentTemplate>>> = ({ signal }) => getAssessmentTemplate(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAssessmentTemplate>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAssessmentTemplateQueryResult = NonNullable<Awaited<ReturnType<typeof getAssessmentTemplate>>>
+export type GetAssessmentTemplateQueryError = ErrorType<void>
+
+
+/**
+ * @summary Preview an assessment template version
+ */
+
+export function useGetAssessmentTemplate<TData = Awaited<ReturnType<typeof getAssessmentTemplate>>, TError = ErrorType<void>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAssessmentTemplate>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAssessmentTemplateQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateAssessmentRevisionUrl = (id: number,) => {
+
+
+
+
+  return `/api/assessment-templates/${id}/revisions`
+}
+
+/**
+ * @summary Create a draft assessment revision
+ */
+export const createAssessmentRevision = async (id: number,
+    assessmentRevisionInput: AssessmentRevisionInput, options?: Parameters<typeof customFetch>[1]): Promise<AssessmentTemplate> => {
+
+  return customFetch<AssessmentTemplate>(getCreateAssessmentRevisionUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(assessmentRevisionInput)
+  }
+);}
+
+
+
+
+
+export const getCreateAssessmentRevisionMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAssessmentRevision>>, TError,{id: number;data: BodyType<AssessmentRevisionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createAssessmentRevision>>, TError,{id: number;data: BodyType<AssessmentRevisionInput>}, TContext> => {
+
+const mutationKey = ['createAssessmentRevision'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createAssessmentRevision>>, {id: number;data: BodyType<AssessmentRevisionInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  createAssessmentRevision(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateAssessmentRevisionMutationResult = NonNullable<Awaited<ReturnType<typeof createAssessmentRevision>>>
+    export type CreateAssessmentRevisionMutationBody = BodyType<AssessmentRevisionInput>
+    export type CreateAssessmentRevisionMutationError = ErrorType<void>
+
+    /**
+ * @summary Create a draft assessment revision
+ */
+export const useCreateAssessmentRevision = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAssessmentRevision>>, TError,{id: number;data: BodyType<AssessmentRevisionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createAssessmentRevision>>,
+        TError,
+        {id: number;data: BodyType<AssessmentRevisionInput>},
+        TContext
+      > => {
+      return useMutation(getCreateAssessmentRevisionMutationOptions(options));
+    }
+
+export const getPublishAssessmentTemplateUrl = (id: number,) => {
+
+
+
+
+  return `/api/assessment-templates/${id}/publish`
+}
+
+/**
+ * @summary Publish a draft assessment revision
+ */
+export const publishAssessmentTemplate = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<AssessmentTemplate> => {
+
+  return customFetch<AssessmentTemplate>(getPublishAssessmentTemplateUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPublishAssessmentTemplateMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof publishAssessmentTemplate>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof publishAssessmentTemplate>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['publishAssessmentTemplate'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof publishAssessmentTemplate>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  publishAssessmentTemplate(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PublishAssessmentTemplateMutationResult = NonNullable<Awaited<ReturnType<typeof publishAssessmentTemplate>>>
+
+    export type PublishAssessmentTemplateMutationError = ErrorType<void>
+
+    /**
+ * @summary Publish a draft assessment revision
+ */
+export const usePublishAssessmentTemplate = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof publishAssessmentTemplate>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof publishAssessmentTemplate>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getPublishAssessmentTemplateMutationOptions(options));
+    }
+
+export const getRetireAssessmentTemplateUrl = (id: number,) => {
+
+
+
+
+  return `/api/assessment-templates/${id}/retire`
+}
+
+/**
+ * @summary Retire an assessment template version
+ */
+export const retireAssessmentTemplate = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<AssessmentTemplate> => {
+
+  return customFetch<AssessmentTemplate>(getRetireAssessmentTemplateUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRetireAssessmentTemplateMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof retireAssessmentTemplate>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof retireAssessmentTemplate>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['retireAssessmentTemplate'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof retireAssessmentTemplate>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  retireAssessmentTemplate(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RetireAssessmentTemplateMutationResult = NonNullable<Awaited<ReturnType<typeof retireAssessmentTemplate>>>
+
+    export type RetireAssessmentTemplateMutationError = ErrorType<void>
+
+    /**
+ * @summary Retire an assessment template version
+ */
+export const useRetireAssessmentTemplate = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof retireAssessmentTemplate>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof retireAssessmentTemplate>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getRetireAssessmentTemplateMutationOptions(options));
+    }
 
 export const getListResidentAssessmentsUrl = (id: number,) => {
 

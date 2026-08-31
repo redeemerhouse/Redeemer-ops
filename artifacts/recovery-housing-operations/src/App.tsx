@@ -10,6 +10,7 @@ import Payments from '@/pages/payments';
 import ResidentDetail from '@/pages/resident-detail';
 import Operations from '@/pages/operations';
 import Assessment from '@/pages/assessment';
+import AssessmentLibrary from '@/pages/assessment-library';
 import {
   Route,
   Switch,
@@ -29,6 +30,7 @@ function Router() {
         <Route path="/residents" component={Residents} />
         <Route path="/residents/:id" component={ResidentDetail} />
          <Route path="/assessments/:id" component={Assessment} />
+        <Route path="/assessment-library" component={AssessmentLibrary} />
         <Route path="/payments" component={Payments} />
         <Route path="/operations" component={Operations} />
         <Route component={NotFound} />
