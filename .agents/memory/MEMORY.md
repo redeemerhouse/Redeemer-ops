@@ -10,3 +10,4 @@
 - [Managed workflow contract validation](dashboard-contract-validation.md) — API integration tests use the shared proxy, and Zod-coerced date fields serialize as ISO timestamps.
 - [Assessment lifecycle test isolation](assessment-lifecycle-tests.md) — versioned integration tests must use current active/max versions and account for shared rate limits across repeated runs.
 - [Post-merge database application](post-merge-database-application.md) — a successful setup can still skip schema work; verify the real Drizzle command ran before trusting workflow recovery.
+- [Replit production database TLS](replit-production-db-tls.md) — node-postgres uses encrypted SSL with managed-certificate verification disabled in autoscale production.

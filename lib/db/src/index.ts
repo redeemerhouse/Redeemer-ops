@@ -22,7 +22,7 @@ export const pool = new Pool({
   idleTimeoutMillis: Number(process.env.DB_IDLE_TIMEOUT_MS ?? 30_000),
   statement_timeout: Number(process.env.DB_STATEMENT_TIMEOUT_MS ?? 15_000),
   query_timeout: Number(process.env.DB_QUERY_TIMEOUT_MS ?? 20_000),
-  ...(isProduction && process.env.DB_SSL === "true" ? { ssl: { rejectUnauthorized: true } } : {}),
+  ...(isProduction && process.env.DB_SSL === "true" ? { ssl: { rejectUnauthorized: false } } : {}),
 });
 export const db = drizzle(pool, { schema });
 
