@@ -295,7 +295,7 @@ Successful startup and `200` responses demonstrate merge coherence only. They ar
 ### Migration and recovery expectations
 
 - Schema changes are generated into `lib/db/drizzle/`, reviewed as SQL, committed with the Drizzle journal metadata, and applied with `pnpm --filter @workspace/db run migrate`. Production must not use `push`, `push --force`, or an interactive schema diff.
-- Before applying a production migration, take or confirm a restorable database backup and verify the target and migration version. The release check requires `DATABASE_URL` and exercises the production apply command; it does not replace backup or restore testing.
+- Before applying a production migration, take or confirm a restorable database backup and verify the target and migration version. The release check requires `DATABASE_URL` and exercises the production apply command; it does not replace backup or restore testing. A legacy schema-push database must first use the operator-confirmed, read-only schema verification and ledger-only baseline in [`docs/database-baseline.md`](docs/database-baseline.md), with an explicit target plus backup and recovery confirmations. Fresh databases must skip baseline and use the checked-in migration path.
 - Migrations are forward-only release artifacts. If an application rollback is needed, first deploy the last compatible application version without reversing a schema migration. A schema rollback must use a reviewed forward-fix migration or restore/PITR to an approved recovery point after reconciling any writes made since that point; do not manually drop tables or delete resident, payment, application, document, operations, house, or audit data as a rollback mechanism.
 
 ## Validation and unresolved assumptions

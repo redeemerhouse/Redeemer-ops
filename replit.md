@@ -10,6 +10,7 @@ ONEsource gives Redeemer House teams a dependable workspace for resident intake,
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run generate` — generate a reviewed SQL migration after schema changes
 - `pnpm --filter @workspace/db run migrate` — apply checked-in migrations non-interactively
+- `pnpm run db:baseline -- --target <host:port/database> --backup-confirmed --recovery-confirmed` — one-time, verified baseline for a legacy schema-push database; never use for a fresh database
 - `pnpm run db:release-check` — validate the migration journal and apply the same migration command used for release (requires `DATABASE_URL`)
 - Required env: `DATABASE_URL` — Postgres connection string
 

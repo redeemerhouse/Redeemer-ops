@@ -5,13 +5,20 @@
   "type": "module",
   "scripts": {
     "hello": "tsx ./src/hello.ts",
+    "db:baseline": "tsx ./src/db-baseline.ts",
     "db:release-check": "tsx ./src/db-release-check.ts",
+    "test:db-baseline-integration": "bash ./test/db-baseline-integration.sh",
     "test:db-release-check": "node --import tsx --test src/db-release-check.integration.test.ts",
     "test:db-schema-drift": "node --import tsx --test src/db-schema-drift.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
+
+  "dependencies": {
+    "pg": "^8.22.0"
+  },
   "devDependencies": {
     "@types/node": "catalog:",
+    "@types/pg": "^8.20.0",
     "tsx": "catalog:"
   }
 }
