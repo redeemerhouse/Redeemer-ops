@@ -177,7 +177,7 @@ The first four items are **launch blockers** for any sensitive resident/payment 
 - **Guarantee:** Every non-health operation requires an authenticated principal and a server-side role plus organization/house/resource-scope decision.
 - **Affected surface:** All described dashboard, activity, resident, and payment routes; future admin routes.
 - **Abuse case:** An unauthenticated caller, or a valid staff user changing `{id}`/`residentId`, reads or mutates another resident or house.
-- **Acceptance criteria:** Contract security requirements are present for every sensitive operation; missing/invalid auth returns `401`; insufficient role/scope returns a documented `403` or indistinguishable `404`; tests cover horizontal and vertical access; no client-provided tenant field can widen scope.
+- **Acceptance criteria:** Contract security requirements are present for every sensitive operation; missing/invalid auth returns `401`; insufficient role/scope returns a documented `403` or indistinguishable `404`; tests cover horizontal and vertical access; no client-provided tenant field can widen scope. The policy must distinguish owner-admin-only quarantined-record restore and permanent deletion from program-director request/quarantine authority, and must allow house managers to execute exit, discharge, and reactivation only for assigned residents.
 
 ### Blocker B2 — Server-side validation and authoritative mutation rules
 
@@ -191,7 +191,7 @@ The first four items are **launch blockers** for any sensitive resident/payment 
 - **Guarantee:** Every query and aggregate is scoped by authenticated organization/house and resource relationship; database constraints preserve valid references and states.
 - **Affected surface:** Lists, detail lookups, dashboard/activity aggregates, payment creation, future updates/deletes.
 - **Abuse case:** An IDOR or `residentId` substitution crosses houses; a payment is attached to an inaccessible resident; an invalid status enters through a secondary path.
-- **Acceptance criteria:** Data-access tests prove no cross-scope rows/counts; resident/payment writes are transactional where needed; DB constraints cover status, amount, and relationship rules; deletion/exit behavior is explicitly tested; DB role cannot perform unrelated administrative operations.
+- **Acceptance criteria:** Data-access tests prove no cross-scope rows/counts; resident/payment writes are transactional where needed; DB constraints cover status, amount, and relationship rules; deletion/exit behavior is explicitly tested, including owner-admin-only restore/permanent deletion, program-director quarantine/request boundaries, and a recorded owner-admin approval that the purge worker verifies after the quarantine becomes eligible; DB role cannot perform unrelated administrative operations.
 
 ### Blocker B4 — Safe transport and error boundary
 
@@ -205,7 +205,7 @@ The first four items are **launch blockers** for any sensitive resident/payment 
 - **Guarantee:** High-impact reads/writes are attributable, and logs/audits contain the minimum data needed for operations.
 - **Affected surface:** Resident/payment mutations and reads, `pino-http`, application errors, audit storage/export.
 - **Abuse case:** A payment is altered without an actor trail, or a log sink/back-up becomes an ungoverned copy of resident records.
-- **Acceptance criteria:** Audit events cover create/update/payment/status/admin actions with actor/scope/outcome; automated redaction tests cover headers, bodies, PII, money, tokens, and errors; retention/access/deletion procedures are documented and reviewed; routine logs do not contain raw resident/payment payloads.
+- **Acceptance criteria:** Audit events cover create/update/payment/status/admin actions with actor/scope/outcome, including every lifecycle transition and its discharge reason when applicable; automated redaction tests cover headers, bodies, PII, money, tokens, and errors; retention/access/deletion procedures are documented and reviewed against the accepted seven-year audit minimum and 35-day rolling-backup window; routine logs do not contain raw resident/payment payloads.
 
 ### Hardening H1 — Pagination, query budgets, and availability
 
@@ -231,7 +231,11 @@ implementation source of truth for the single organization/multiple-house tenanc
 `owner_admin`, `program_director`, `house_manager`, and `resident` roles; email/password
 identity and session posture; resident lifecycle; household and child representation;
 data visibility; documents and attendance; money rules; exports; notifications; audit;
-retention; and deletion quarantine.
+retention; and deletion quarantine. In particular, house managers may execute exit,
+discharge, and reactivation only within assigned house scope; program directors may
+request or move records into quarantine but may not restore or permanently delete them;
+and the seven-year audit minimum and 35-day rolling-backup window are accepted operating
+defaults.
 
 The following legacy contract observations remain implementation work, not unresolved
 policy: the current OpenAPI status enums and report role header predate the approved
@@ -240,7 +244,8 @@ implementation may treat those legacy fields as permission enforcement.
 
 ## 7a. Historical questions (resolved by the operating model)
 
-These decisions must be recorded before implementing B1–B5:
+These decisions are recorded in the operating model and are no longer unresolved
+prerequisites for implementing B1–B5:
 
 1. Is the initial tenancy one house, multiple houses, or multiple organizations containing houses? Can staff belong to more than one scope?
 2. Which roles exist (for example, house staff, manager, finance, system admin), and which read/write/export/audit actions does each role receive?

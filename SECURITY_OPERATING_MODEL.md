@@ -33,14 +33,15 @@ OpenAPI descriptions, and database defaults are not authorization boundaries.
 
 | Role | Scope | Authority |
 |---|---|---|
-| `owner_admin` | Entire organization | Super-admin. All operational records, account approval/assignment, lifecycle and housing administration, audit review, exports, deletion authorization, and policy configuration. |
-| `program_director` | Entire organization | Broad operational authority equivalent to owner admin for exports and deletion. May manage residents, housing, payments, documents, operations, and audits. This role does not change organization ownership or policy without owner-admin authority where separately required. |
-| `house_manager` | Assigned house(s) | Work with women assigned to an assigned house: operational resident records, assignments/transfers, notes, documents within role/category policy, attendance, and payment records. Other-house visibility is limited to approved bed availability and directory names/contact information; no other-house notes, health, legal, financial, payment, document contents, or operational history. |
+| `owner_admin` | Entire organization | Super-admin. All operational records, account approval/assignment, lifecycle and housing administration, audit review, exports, deletion authorization, quarantined-record restoration, permanent deletion, and policy configuration. |
+| `program_director` | Entire organization | Broad operational authority for exports and day-to-day operations. May manage residents, housing, payments, documents, operations, and audits, and may request or move records into deletion quarantine. May not restore a quarantined record or permanently delete a record. This role does not change organization ownership or policy without owner-admin authority where separately required. |
+| `house_manager` | Assigned house(s) | Work with women assigned to an assigned house: operational resident records, assignments/transfers, exit, discharge, and reactivation, notes, documents within role/category policy, attendance, and payment records. Other-house visibility is limited to approved bed availability and directory names/contact information; no other-house notes, health, legal, financial, payment, document contents, or operational history. |
 | `resident` | Own resident/household record | Read and contribute to the resident-facing resources listed in section 4. No access to another resident, staff-only notes, other-house data, audit records, exports, or deletion. |
 
-“Equivalent export/deletion authority” means owner admin and program director receive the
-same export and deletion permission; it does not make either role exempt from audit,
-quarantine, validation, or incident review.
+Deletion authority is intentionally split: a program director may request or perform the
+initial move into deletion quarantine, but only an owner admin may restore a quarantined
+record or permanently delete it. Neither role is exempt from audit, quarantine, validation,
+or incident review.
 
 ### Permission matrix
 
@@ -50,7 +51,7 @@ it. `Assigned` means a woman assigned to a house in the manager’s server-deriv
 | Action / data | Owner admin | Program director | House manager | Resident |
 |---|---|---|---|---|
 | Read/edit general resident record | All | All | Assigned; other-house directory only | Own read; approved self-service fields only |
-| Activate, exit, discharge, or correct lifecycle | All | All | Request/recommend; may perform approved operational transitions in assigned scope | No |
+| Activate, exit, discharge, reactivate, or correct lifecycle | All | All | Exit, discharge, or reactivate assigned residents; request/recommend activation or correction | No |
 | Assign bed, place, hold, or transfer | All | All | Assigned houses | No |
 | Read/write payment records | All | All | Assigned residents | Own balance/read; submit permitted confirmation, never authoritative status |
 | Read/write notes | All subject to category policy | All subject to category policy | Assigned residents and role-permitted categories | Own resident-visible notes only |
@@ -59,7 +60,8 @@ it. `Assigned` means a woman assigned to a house in the manager’s server-deriv
 | Read UA/drug-screening results | All | All | Assigned residents | Own results only |
 | Read audit history | All | All | Only events needed for assigned operational work, with sensitive values minimized | No |
 | Export reports | Yes | Yes | No | No |
-| Authorize deletion/quarantine | Yes | Yes | No | No |
+| Request or move to deletion quarantine | Yes | Yes | No | No |
+| Restore quarantined record or permanently delete | Yes | No | No | No |
 
 Every action also requires an active account, organization membership, and resource scope.
 A forbidden resource must return the agreed uniform authorization/not-found behavior rather
@@ -111,9 +113,14 @@ reopens an approved placement. `discharged` is terminal for launch. A correction
 rewrite history; it creates an audited correction.
 
 Owner admin and program director may perform lifecycle transitions across the
-organization. House managers may perform only explicitly delegated operational actions
-for assigned residents; they cannot discharge, delete, or widen scope. Residents cannot
-change lifecycle state.
+organization. House managers may execute exit, discharge, and reactivation only for
+residents in their assigned, server-derived house scope. They cannot act outside that
+scope, restore records, delete records, or widen scope. Residents cannot change lifecycle
+state.
+
+Discharge requires a recorded reason before the transition is committed. Every lifecycle
+transition, including a house-manager transition and an administrative correction, creates
+an audit event; a correction does not rewrite the prior transition history.
 
 Activation requires approval and any required placement checks. Bed assignment is a
 separate server-side action and must respect availability, eligibility, capacity, and
@@ -160,8 +167,9 @@ returning every column.
 - Malware scanning must complete before a document becomes available to another user.
   Failed, unknown, or quarantined scans are not downloadable.
 - Uploaded files are immutable. Users, including residents, cannot delete uploads or
-  erase upload history. Authorized owner admins and program directors can delete a
-  document record only through the deletion quarantine in section 6.
+  erase upload history. Owner admins and program directors may request or move a document
+  record into the deletion quarantine; only an owner admin may restore it or permanently
+  delete it under section 6.
 - Sharing a document with a resident is an explicit category-level decision; staff-private
   documents remain staff-private. A shared resource must not expose unrelated metadata.
 - Attendance photos are operational records, not a general social gallery. Access is
@@ -243,16 +251,21 @@ until corrected and explicitly requeued.
 
 ### Deletion and quarantine
 
-- Records are retained until an owner admin or program director authorizes deletion,
-  subject to legal hold, investigation, payment reconciliation, and operational needs.
-- Authorized deletion first moves the target record and its permitted dependent data into
-  an inaccessible 15-day archive/quarantine. The actor, reason, timestamp, scope, and
-  target are recorded before the move.
-- During quarantine, no normal user can read or restore the data. An owner admin or
-  program director may cancel the deletion during the quarantine with an audited reason.
-- After 15 days, the deletion job permanently removes the approved record and dependent
-  copies, excluding required audit history and legally required evidence. Foreign-key
-  and export behavior must be defined per record type before implementation.
+- Records are retained until deletion is requested or authorized, subject to legal hold,
+  investigation, payment reconciliation, and operational needs. A program director may
+  request or perform the initial move of a record and its permitted dependent data into an
+  inaccessible 15-day archive/quarantine. An owner admin may also request or perform that
+  move.
+- The actor, reason, timestamp, scope, and target are recorded before the move. During
+  quarantine, no normal user can read the data. Only an owner admin may restore a
+  quarantined record, cancel the deletion, or permanently delete it, and each action
+  requires an audited reason.
+- After 15 days, elapsed quarantine time establishes eligibility for review; it does not
+  authorize permanent deletion by itself. An owner admin must record permanent-deletion
+  approval after reviewing the quarantined target and active holds. Only a deletion job
+  that verifies that owner-admin approval may permanently remove the approved record and
+  dependent copies, excluding required audit history and legally required evidence.
+  Foreign-key and export behavior must be defined per record type before implementation.
 - A legal hold or active investigation pauses permanent deletion. Deletion must never
   remove or rewrite the audit event that proves the authorization and outcome.
 
@@ -268,11 +281,12 @@ until corrected and explicitly requeued.
 - Audit history is restricted to administrators, with limited assigned-scope operational
   views for house managers. It remains reviewable after source-record deletion and is
   retained for at least seven years after the event, or longer when a legal hold or
-  applicable record obligation requires it.
+  applicable record obligation requires it. The seven-year minimum is an accepted
+  operating default.
 - Use encrypted daily backups with access restricted to operators and the service.
-  Retain a rolling operational window of at least 35 days, test restoration regularly,
-  and require an approved, audited restore procedure. Restores must not silently
-  reintroduce quarantined or deleted data.
+  Retain a rolling operational window of at least 35 days, an accepted operating default;
+  test restoration regularly, and require an approved, audited restore procedure.
+  Restores must not silently reintroduce quarantined or deleted data.
 - Logs, exports, backups, and scans are separate sensitive stores. They use least
   privilege, documented retention, and redaction; no raw resident/payment payloads or
   secret values are logged.

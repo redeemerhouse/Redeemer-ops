@@ -47,26 +47,38 @@ The release gate is not a substitute for route tests. Before a GO decision, rout
 ## Retention verification
 
 Deletion retention is kept behind a server-only service boundary until the
-authentication and authorization work is complete. The boundary:
+authentication and authorization work is complete. The current boundary:
 
 - stores an immutable target/scope/reason/actor snapshot in a 15-day quarantine;
 - writes the quarantine audit event before the source-move callback runs;
 - exposes quarantine metadata only to an authenticated `owner_admin` or
   `program_director`, never the archived record itself;
-- requires an audited administrator cancellation reason and an explicit restore
-  callback; and
+- requires an audited cancellation reason and an explicit restore callback; and
 - re-checks active legal holds inside the purge transaction, records a blocked
   purge, claims due rows to prevent concurrent workers, and empties the archive
   only after durable purge evidence is written.
 
-Run `pnpm --filter @workspace/api-server run test:retention` to verify the
-15-day boundary, organization scope, administrator roles, reason validation,
-restore state transitions, and legal-hold pause policy. This does not make any
-route safe by itself; the future authenticated route must pass a principal
-object into the service rather than trusting request headers.
+The current implementation does **not** yet enforce the approved role split. Its shared
+administrator assertion admits a `program_director` to cancellation/restore, and the
+purge worker treats elapsed quarantine time as sufficient to purge without verifying a
+recorded owner-admin permanent-deletion approval. These are explicit release blockers,
+not accepted behavior.
+
+Run `pnpm --filter @workspace/api-server run test:retention` only to verify the current
+15-day mechanics, organization scope, reason validation, restore state transitions, and
+legal-hold pause policy. A passing result does not verify the approved authority model.
+Before a GO decision, direct tests must prove that a program director may request or move
+a record into quarantine but cannot restore, cancel, approve permanent deletion, or cause
+a purge; they must also prove that the purge worker requires recorded owner-admin approval
+after eligibility. This does not make any route safe by itself; the future authenticated
+route must pass a principal object into the service rather than trusting request headers.
 
 ## Current release decision
 
 The current repository is **NO-GO**. The API mounts sensitive handlers that directly access PostgreSQL and accept raw request bodies; authentication, centralized authorization, tenant/house scoping, complete validation, response shaping, safe error middleware, explicit CORS, parser limits, rate limiting, and security headers are not yet established consistently. Report exports additionally use a client-controlled role header and unscoped aggregate queries.
 
-These are explicit blockers, not accepted risks. Product decisions still required by `threat_model.md` include tenancy model, roles and permissions, health exposure, money representation, resident/payment lifecycle rules, browser auth posture, note sensitivity, and retention/access policy. No sensitive route should be enabled until those decisions are recorded and the gate plus route-level tests report GO.
+These are explicit blockers, not accepted risks. The tenancy, role, lifecycle, money,
+retention, deletion, and access-policy decisions are approved in
+`SECURITY_OPERATING_MODEL.md`; they are no longer unresolved prerequisites. Release
+remains blocked until the implementation and tests enforce those decisions—including the
+retention authority split above—and the gate plus route-level tests report GO.
