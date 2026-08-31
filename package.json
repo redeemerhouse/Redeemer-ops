@@ -9,6 +9,7 @@
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
     "codegen:check": "pnpm --filter @workspace/api-spec run codegen && git diff --exit-code -- lib/api-client-react/src/generated lib/api-zod/src/generated",
     "db:release-check": "pnpm --filter @workspace/scripts run db:release-check",
+    "test:db-release-check": "pnpm --filter @workspace/scripts run test:db-release-check",
     "release:verify": "pnpm run codegen:check && pnpm run db:release-check && pnpm run security:release-gate",
     "security:release-gate": "pnpm --filter @workspace/scripts exec tsx src/security-release-gate.ts"
   },
