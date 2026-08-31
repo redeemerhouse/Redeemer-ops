@@ -7,10 +7,11 @@ export function authHeaders({
   role = "owner_admin",
   houseNames = [],
   residentId,
+  now = Math.floor(Date.now() / 1000),
+  ttlSeconds = 3600,
 } = {}) {
   const secret = process.env.SESSION_SECRET;
   if (!secret) throw new Error("SESSION_SECRET is required for authenticated API tests.");
-  const now = Math.floor(Date.now() / 1000);
   const payload = {
     iss: issuer,
     sub,
@@ -20,7 +21,7 @@ export function authHeaders({
     active: true,
     ...(residentId === undefined ? {} : { residentId }),
     iat: now,
-    exp: now + 3600,
+    exp: now + ttlSeconds,
   };
   const encoded = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
   const signature = createHmac("sha256", secret).update(encoded).digest("base64url");

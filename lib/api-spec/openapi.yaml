@@ -45,6 +45,23 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /auth/session:
+    get:
+      operationId: getSession
+      tags: [health]
+      summary: Verify the current browser session
+      description: Returns only the safe identity and scope needed to render the authenticated workspace. Session credentials remain in an HttpOnly cookie.
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Authenticated browser session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+        "401":
+          description: Session is missing, expired, or revoked
   /dashboard:
     get:
       operationId: getDashboard
@@ -726,6 +743,31 @@ components:
         type: string
         pattern: '^[0-9]{4}-(0[1-9]|1[0-2])$'
   schemas:
+    Session:
+      type: object
+      required: [authenticated, user, expiresAt]
+      properties:
+        authenticated:
+          type: boolean
+          const: true
+        user:
+          type: object
+          required: [id, role, organizationId, houseNames]
+          properties:
+            id: { type: string, minLength: 1, maxLength: 256 }
+            role:
+              type: string
+              enum: [owner_admin, program_director, house_manager, resident]
+            organizationId: { type: string, minLength: 1, maxLength: 256 }
+            houseNames:
+              type: array
+              items: { type: string, maxLength: 256 }
+            residentId:
+              type: number
+              multipleOf: 1
+              minimum: 1
+        expiresAt:
+          type: string
     HealthStatus:
       type: object
       properties:

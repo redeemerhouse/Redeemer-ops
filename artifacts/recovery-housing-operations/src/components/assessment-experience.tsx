@@ -16,7 +16,7 @@ import {
   type AssessmentSummary,
   type AssessmentTemplate,
 } from '@workspace/api-client-react';
-import { currentUserRole } from '@/lib/api';
+import { useAuth, type SessionRole } from '@/lib/auth';
 import { AppShell } from '@/components/app-shell';
 import { Modal, EmptyState, QueryState, StatusBadge } from '@/components/ui-primitives';
 
@@ -44,14 +44,15 @@ const answerForField = (field: AssessmentField, answers: Answers) => {
   return field.type === 'yes_no' ? false : '';
 };
 
-const activeTemplatesForRole = (templates?: AssessmentTemplate[]) =>
+const activeTemplatesForRole = (templates: AssessmentTemplate[] | undefined, role: SessionRole) =>
   (templates ?? []).filter((template) =>
     template.status === 'active' &&
-    (currentUserRole === 'resident'
+    (role === 'resident'
       ? template.category === 'resident' && template.audience === 'resident'
       : true));
 
 export function ResidentAssessments({ residentId }: { residentId: number }) {
+  const { user } = useAuth();
   const assessments = useListResidentAssessments(residentId);
   const templates = useListAssessmentTemplates();
   const queryClient = useQueryClient();
@@ -59,7 +60,7 @@ export function ResidentAssessments({ residentId }: { residentId: number }) {
   const [chooserOpen, setChooserOpen] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState('');
   const create = useCreateResidentAssessment();
-  const availableTemplates = activeTemplatesForRole(templates.data);
+  const availableTemplates = activeTemplatesForRole(templates.data, user?.role ?? 'resident');
 
   const startAssessment = () => {
     if (!selectedTemplate) return;

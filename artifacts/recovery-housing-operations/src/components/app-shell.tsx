@@ -1,20 +1,26 @@
 import { Bell, CreditCard, LayoutDashboard, Menu, UsersRound, X, ClipboardList, GitBranch } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { Link, useLocation } from 'wouter';
-import { isAdministrator } from '@/lib/api';
+import { isAdministratorRole, useAuth } from '@/lib/auth';
 
-const navItems = [
+const baseNavItems = [
   { href: '/', label: 'Overview', icon: LayoutDashboard },
   { href: '/residents', label: 'Residents', icon: UsersRound },
   { href: '/payments', label: 'Payments', icon: CreditCard },
   { href: '/operations', label: 'Operations', icon: ClipboardList },
-  ...(isAdministrator ? [{ href: '/assessment-library', label: 'Assessment library', icon: GitBranch }] : []),
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
   const [location] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const navItems = isAdministratorRole(user?.role ?? 'resident')
+    ? [...baseNavItems, { href: '/assessment-library', label: 'Assessment library', icon: GitBranch }]
+    : baseNavItems;
+  const displayName = user?.id || 'Verified user';
+  const initials = displayName.slice(0, 2).toUpperCase();
+  const roleLabel = user?.role.replaceAll('_', ' ') || 'verified account';
   return (
     <div className="app-shell flex min-h-[100dvh]">
       <aside className={`sidebar fixed inset-y-0 left-0 z-40 flex w-[250px] flex-col border-r border-sidebar-border px-4 py-5 transition-transform duration-300 lg:static lg:translate-x-0 ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}`}>
@@ -37,8 +43,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           <p className="mt-2 text-[11px] leading-relaxed text-sidebar-foreground/55">All resident and payment records are up to date.</p>
         </div>
         <div className="mt-4 flex items-center gap-3 border-t border-sidebar-border px-3 pt-4">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[hsl(var(--accent))] text-xs font-extrabold text-[hsl(var(--primary))]">AM</div>
-          <div><div className="text-xs font-bold">Alex Morgan</div><div className="text-[10px] text-sidebar-foreground/50">House coordinator</div></div>
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[hsl(var(--accent))] text-xs font-extrabold text-[hsl(var(--primary))]">{initials}</div>
+          <div><div className="max-w-[155px] truncate text-xs font-bold">{displayName}</div><div className="text-[10px] capitalize text-sidebar-foreground/50">{roleLabel}</div></div>
         </div>
       </aside>
       {mobileOpen && <button data-testid="button-overlay-menu" className="fixed inset-0 z-30 bg-[hsl(219_64%_14%/.35)] lg:hidden" onClick={() => setMobileOpen(false)} aria-label="Close menu overlay" />}

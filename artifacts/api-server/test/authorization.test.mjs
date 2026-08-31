@@ -20,6 +20,69 @@ test("rejects missing and client-supplied authentication", { skip: !canRun }, as
   assert.equal(forgedHeader.status, 401);
 });
 
+test("bootstraps a safe browser session from bearer or HttpOnly cookie credentials", { skip: !canRun }, async () => {
+  const headers = authHeaders({
+    sub: "session-bootstrap-user",
+    role: "house_manager",
+    houseNames: ["Northside House"],
+  });
+  const token = headers.authorization.slice("Bearer ".length);
+
+  const bearerSession = await request("/auth/session", headers);
+  assert.equal(bearerSession.status, 200);
+  const body = await bearerSession.json();
+  assert.deepEqual(body, {
+    authenticated: true,
+    user: {
+      id: "session-bootstrap-user",
+      role: "house_manager",
+      organizationId: "redeemer-house",
+      houseNames: ["Northside House"],
+    },
+    expiresAt: body.expiresAt,
+  });
+  assert.ok(Number.isFinite(Date.parse(body.expiresAt)));
+  assert.equal(JSON.stringify(body).includes(token), false);
+  assert.equal(bearerSession.headers.get("cache-control"), "no-store, private");
+
+  const cookieSession = await request("/auth/session", {
+    cookie: `__Host-recovery-session=${encodeURIComponent(token)}`,
+  });
+  assert.equal(cookieSession.status, 200);
+
+  const crossSiteMutation = await request("/residents", {
+    cookie: `__Host-recovery-session=${encodeURIComponent(token)}`,
+    origin: "https://attacker.example",
+    "content-type": "application/json",
+  }, {
+    method: "POST",
+    body: "{}",
+  });
+  assert.equal(crossSiteMutation.status, 403);
+
+  const sameSiteMutation = await request("/residents", {
+    cookie: `__Host-recovery-session=${encodeURIComponent(token)}`,
+    origin: new URL(baseUrl).origin,
+    "content-type": "application/json",
+  }, {
+    method: "POST",
+    body: "{}",
+  });
+  assert.equal(sameSiteMutation.status, 400);
+
+  const expiredHeaders = authHeaders({
+    sub: "expired-session-user",
+    now: Math.floor(Date.now() / 1000) - 120,
+    ttlSeconds: 60,
+  });
+  const expiredToken = expiredHeaders.authorization.slice("Bearer ".length);
+  const expiredSession = await request("/auth/session", {
+    cookie: `__Host-recovery-session=${encodeURIComponent(expiredToken)}`,
+  });
+  assert.equal(expiredSession.status, 401);
+  assert.equal(expiredSession.headers.get("www-authenticate"), "Bearer");
+});
+
 test("enforces house scope for resident and payment reads", { skip: !canRun }, async () => {
   const allResidents = await request("/residents", authHeaders());
   assert.equal(allResidents.status, 200);

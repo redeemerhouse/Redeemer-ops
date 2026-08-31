@@ -18,6 +18,33 @@ export const HealthCheckResponse = zod.object({
 
 
 /**
+ * Returns only the safe identity and scope needed to render the authenticated workspace. Session credentials remain in an HttpOnly cookie.
+ * @summary Verify the current browser session
+ */
+export const getSessionResponseUserIdMax = 256;
+
+export const getSessionResponseUserOrganizationIdMax = 256;
+
+export const getSessionResponseUserHouseNamesItemMax = 256;
+
+export const getSessionResponseUserResidentIdMultipleOf = 1;
+
+
+
+export const GetSessionResponse = zod.object({
+  "authenticated": zod.literal(true),
+  "user": zod.object({
+  "id": zod.string().min(1).max(getSessionResponseUserIdMax),
+  "role": zod.enum(['owner_admin', 'program_director', 'house_manager', 'resident']),
+  "organizationId": zod.string().min(1).max(getSessionResponseUserOrganizationIdMax),
+  "houseNames": zod.array(zod.string().max(getSessionResponseUserHouseNamesItemMax)),
+  "residentId": zod.number().min(1).multipleOf(getSessionResponseUserResidentIdMultipleOf).optional()
+}),
+  "expiresAt": zod.string()
+})
+
+
+/**
  * @summary Get operations dashboard
  */
 export const getDashboardQueryMonthRegExp = new RegExp('^[0-9]{4}-(0[1-9]|1[0-2])$');

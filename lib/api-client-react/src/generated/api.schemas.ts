@@ -5,6 +5,40 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export type SessionUserRole = typeof SessionUserRole[keyof typeof SessionUserRole];
+
+
+export const SessionUserRole = {
+  owner_admin: 'owner_admin',
+  program_director: 'program_director',
+  house_manager: 'house_manager',
+  resident: 'resident',
+} as const;
+
+export type SessionUser = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  id: string;
+  role: SessionUserRole;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  organizationId: string;
+  /** @items.maxLength 256 */
+  houseNames: string[];
+  /** @minimum 1 */
+  residentId?: number;
+};
+
+export interface Session {
+  authenticated: true;
+  user: SessionUser;
+  expiresAt: string;
+}
+
 export interface HealthStatus {
   status: string;
 }

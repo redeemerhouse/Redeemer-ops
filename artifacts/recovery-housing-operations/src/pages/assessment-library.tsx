@@ -12,10 +12,12 @@ import {
   type AssessmentTemplate,
 } from '@workspace/api-client-react';
 import { AppShell } from '@/components/app-shell';
-import { isAdministrator } from '@/lib/api';
+import { isAdministratorRole, useAuth } from '@/lib/auth';
 import { EmptyState, Field, Modal, QueryState, StatusBadge, SubmitButton } from '@/components/ui-primitives';
 
 export default function AssessmentLibrary() {
+  const { user } = useAuth();
+  const isAdministrator = isAdministratorRole(user?.role ?? 'resident');
   const templates = useListAssessmentTemplates();
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<number | null>(null);

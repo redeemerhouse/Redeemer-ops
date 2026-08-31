@@ -17,6 +17,7 @@ import {
   useLocation,
   Router as WouterRouter,
 } from 'wouter';
+import { AuthLoading, AuthProvider, SessionError, SignInScreen, useAuth } from '@/lib/auth';
 
 const queryClient = new QueryClient();
 
@@ -47,13 +48,27 @@ function RoutedErrorBoundary({ children }: { children: ReactNode }) {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
-          <Router />
-        </WouterRouter>
-        <Toaster />
-      </TooltipProvider>
+      <AuthProvider>
+        <AuthenticatedApp />
+      </AuthProvider>
     </QueryClientProvider>
+  );
+}
+
+function AuthenticatedApp() {
+  const { status } = useAuth();
+
+  if (status === 'checking') return <AuthLoading />;
+  if (status === 'unauthenticated') return <SignInScreen />;
+  if (status === 'error') return <SessionError onRetry={() => window.location.reload()} />;
+
+  return (
+    <TooltipProvider>
+      <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
+        <Router />
+      </WouterRouter>
+      <Toaster />
+    </TooltipProvider>
   );
 }
 

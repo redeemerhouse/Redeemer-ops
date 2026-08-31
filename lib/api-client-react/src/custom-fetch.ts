@@ -7,6 +7,10 @@ export type ErrorType<T = unknown> = ApiError<T>;
 export type BodyType<T> = T;
 
 export type AuthTokenGetter = () => Promise<string | null> | string | null;
+export type UnauthorizedHandler = (request: {
+  method: string;
+  url: string;
+}) => void;
 
 const NO_BODY_STATUS = new Set([204, 205, 304]);
 const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
@@ -17,6 +21,7 @@ const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 
 let _baseUrl: string | null = null;
 let _authTokenGetter: AuthTokenGetter | null = null;
+let _unauthorizedHandler: UnauthorizedHandler | null = null;
 
 /**
  * Set a base URL that is prepended to every relative request URL
@@ -34,7 +39,9 @@ export function setBaseUrl(url: string | null): void {
  * the getter is invoked; when it returns a non-null string, an
  * `Authorization: Bearer <token>` header is attached to the request.
  *
- * Useful for Expo bundles making token-gated API calls.
+ * Useful for token-gated API calls when the token is held by an approved
+ * session manager. Web apps must keep the value in memory and never place it
+ * in localStorage, sessionStorage, URLs, or logs.
  * Pass `null` to clear the getter.
  *
  * NOTE: This function should never be used in web applications where session
@@ -42,6 +49,14 @@ export function setBaseUrl(url: string | null): void {
  */
 export function setAuthTokenGetter(getter: AuthTokenGetter | null): void {
   _authTokenGetter = getter;
+}
+
+/**
+ * Register a callback for an expired or revoked session. The callback receives
+ * only safe request metadata; response bodies are intentionally not exposed.
+ */
+export function setUnauthorizedHandler(handler: UnauthorizedHandler | null): void {
+  _unauthorizedHandler = handler;
 }
 
 function isRequest(input: RequestInfo | URL): input is Request {
@@ -336,10 +351,18 @@ async function parseSuccessBody(
   }
 }
 
-export async function customFetch<T = unknown>(
+type PreparedRequest = {
+  input: RequestInfo | URL;
+  init: RequestInit;
+  method: string;
+  requestInfo: { method: string; url: string };
+  responseType: "json" | "text" | "blob" | "auto";
+};
+
+async function prepareRequest(
   input: RequestInfo | URL,
   options: CustomFetchOptions = {},
-): Promise<T> {
+): Promise<PreparedRequest> {
   input = applyBaseUrl(input);
   const { responseType = "auto", headers: headersInit, ...init } = options;
 
@@ -373,13 +396,57 @@ export async function customFetch<T = unknown>(
   }
 
   const requestInfo = { method, url: resolveUrl(input) };
+  return {
+    input,
+    init: {
+      ...init,
+      method,
+      headers,
+      // The browser session is an HttpOnly cookie. Keep this default here so
+      // generated calls and hand-written API helpers share the same boundary.
+      credentials: init.credentials ?? "include",
+      // Protected records must not survive an expired or changed user session
+      // in the browser HTTP cache.
+      cache: init.cache ?? "no-store",
+    },
+    method,
+    requestInfo,
+    responseType,
+  };
+}
 
-  const response = await fetch(input, { ...init, method, headers });
+async function notifyUnauthorized(requestInfo: { method: string; url: string }, response: Response): Promise<void> {
+  if (response.status === 401) {
+    _unauthorizedHandler?.(requestInfo);
+  }
+}
+
+/**
+ * Fetch an authenticated endpoint while preserving the raw Response. This is
+ * used for downloads that need response headers and for upload flows.
+ */
+export async function authenticatedFetch(
+  input: RequestInfo | URL,
+  options: CustomFetchOptions = {},
+): Promise<Response> {
+  const prepared = await prepareRequest(input, options);
+  const response = await fetch(prepared.input, prepared.init);
+  await notifyUnauthorized(prepared.requestInfo, response);
+  return response;
+}
+
+export async function customFetch<T = unknown>(
+  input: RequestInfo | URL,
+  options: CustomFetchOptions = {},
+): Promise<T> {
+  const prepared = await prepareRequest(input, options);
+  const response = await fetch(prepared.input, prepared.init);
+  await notifyUnauthorized(prepared.requestInfo, response);
 
   if (!response.ok) {
-    const errorData = await parseErrorBody(response, method);
-    throw new ApiError(response, errorData, requestInfo);
+    const errorData = await parseErrorBody(response, prepared.method);
+    throw new ApiError(response, errorData, prepared.requestInfo);
   }
 
-  return (await parseSuccessBody(response, responseType, requestInfo)) as T;
+  return (await parseSuccessBody(response, prepared.responseType, prepared.requestInfo)) as T;
 }

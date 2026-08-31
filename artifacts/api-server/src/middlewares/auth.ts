@@ -2,6 +2,8 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import type { NextFunction, Request, RequestHandler, Response } from "express";
 
 export const ORGANIZATION_ID = "redeemer-house";
+export const SESSION_COOKIE_NAME = "__Host-recovery-session";
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 export const roles = ["owner_admin", "program_director", "house_manager", "resident"] as const;
 export type Role = (typeof roles)[number];
@@ -142,17 +144,59 @@ export function getPrincipal(res: Response): Principal {
 }
 
 function authenticationFailure(res: Response): void {
+  res.setHeader("WWW-Authenticate", "Bearer");
   res.status(401).json({ error: "Authentication required." });
+}
+
+function cookieValue(header: string | undefined, name: string): string | null {
+  if (!header) return null;
+  for (const part of header.split(";")) {
+    const separator = part.indexOf("=");
+    if (separator < 0) continue;
+    const key = part.slice(0, separator).trim();
+    if (key !== name) continue;
+    try {
+      return decodeURIComponent(part.slice(separator + 1).trim()) || null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+export function accessTokenFromRequest(req: Request): string | null {
+  const authorization = req.header("authorization");
+  const match = authorization?.match(/^Bearer ([^\s]+)$/i);
+  return match?.[1] ?? cookieValue(req.header("cookie"), SESSION_COOKIE_NAME);
+}
+
+function requestOriginIsSameHost(req: Request): boolean {
+  const origin = req.header("origin");
+  const host = req.header("x-forwarded-host") ?? req.header("host");
+  if (!origin || !host) return false;
+  try {
+    return new URL(origin).host.toLowerCase() === host.split(",", 1)[0].trim().toLowerCase();
+  } catch {
+    return false;
+  }
 }
 
 export const authenticate: RequestHandler = (req, res, next) => {
   const authorization = req.header("authorization");
-  const match = authorization?.match(/^Bearer ([^\s]+)$/i);
-  const principal = match ? verifyAccessToken(match[1]) : null;
+  const bearerMatch = authorization?.match(/^Bearer ([^\s]+)$/i);
+  const cookieToken = cookieValue(req.header("cookie"), SESSION_COOKIE_NAME);
+  const token = bearerMatch?.[1] ?? cookieToken;
+  const principal = token ? verifyAccessToken(token) : null;
   if (!principal) {
     authenticationFailure(res);
     return;
   }
+  if (!bearerMatch && cookieToken && !SAFE_METHODS.has(req.method) && !requestOriginIsSameHost(req)) {
+    res.status(403).json({ error: "Request origin could not be verified." });
+    return;
+  }
+  res.setHeader("Cache-Control", "no-store, private");
+  res.setHeader("Pragma", "no-cache");
   res.locals.principal = principal;
   next();
 };
