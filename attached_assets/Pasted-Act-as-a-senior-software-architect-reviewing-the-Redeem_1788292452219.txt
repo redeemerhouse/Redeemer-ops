@@ -1,0 +1,76 @@
+Act as a senior software architect reviewing the Redeemer House recovery housing application for long-term stability, maintainability, and production reliability.
+
+Your job is NOT to redesign the application or add new features.
+
+Audit the existing architecture and identify structural weaknesses that could cause:
+
+* runtime failures
+* deployment failures
+* duplicated logic
+* circular dependencies
+* difficult maintenance
+* fragile modules
+* inconsistent API behavior
+* security problems
+* database inconsistencies
+* one feature breaking another feature
+
+Review:
+
+* frontend architecture
+* backend architecture
+* API structure
+* database access patterns
+* shared libraries
+* authentication
+* authorization
+* middleware
+* service layers
+* environment configuration
+* workspace structure
+* package organization
+* error handling
+* external integrations
+* build process
+
+Look specifically for:
+
+* overly large files
+* duplicate business logic
+* tightly coupled modules
+* frontend code directly depending on backend implementation details
+* business logic embedded inside routes
+* direct database queries scattered throughout the application
+* inconsistent response formats
+* inconsistent error handling
+* hard-coded configuration
+* circular imports
+* fragile cross-module dependencies
+* code that executes as a side effect during import
+* services that can crash the entire application when unavailable
+
+Classify findings:
+
+CRITICAL — could cause outages, data loss, or security issues
+
+HIGH — likely to cause production problems
+
+MEDIUM — maintainability or reliability concern
+
+LOW — cleanup opportunity
+
+Before changing anything, create:
+
+ARCHITECTURE MAP
+
+STABILITY RISKS
+
+TECHNICAL DEBT
+
+RECOMMENDED PRIORITIES
+
+Then implement only LOW-RISK fixes that clearly improve reliability without altering application behavior.
+
+Do not rebuild the application from scratch.
+
+Preserve all existing Redeemer House functionality and data.

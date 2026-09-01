@@ -1,0 +1,438 @@
+Act as a senior Replit production deployment engineer and fix the deployment/runtime failure preventing the Redeemer House application from launching.
+
+This is a production deployment debugging task. Do not redesign the application, remove working features, replace the architecture, or make broad unrelated changes.
+
+The current deployment logs repeatedly show:
+
+* GET /api/healthz returning HTTP 503
+* Replit reporting: `healthcheck failed error=healthcheck /api returned status 503`
+* Repeated error: `Shared rate-limit store unavailable`
+* The API server otherwise starts with:
+  `node --enable-source-maps ./dist/index.mjs`
+* Replit eventually sends SIGTERM because the deployment never becomes healthy
+* PNPM then reports the start process was terminated
+
+The SIGTERM appears to be a CONSEQUENCE of the failed health checks, not the original root cause.
+
+Your job is to locate and fix the underlying production readiness failure.
+
+PRIMARY SUSPECT:
+
+The shared/distributed rate-limit store, or another dependency included in the `/api/healthz` readiness check, is unavailable in production and is causing the health endpoint to return 503.
+
+However, do not assume this is the only problem. Verify it from the code.
+
+==================================================
+PHASE 1 — TRACE THE HEALTH CHECK
+================================
+
+Find the exact implementation of:
+
+`GET /api/healthz`
+
+Determine every dependency that influences whether it returns 200 or 503.
+
+Inspect for checks involving:
+
+* shared rate-limit store
+* Redis
+* Valkey
+* Upstash
+* database
+* session store
+* cache
+* authentication
+* environment variables
+* external API services
+* message queues
+* storage providers
+* other infrastructure dependencies
+
+Create a dependency map showing:
+
+Replit healthcheck
+→ /api/healthz
+→ readiness checks
+→ infrastructure dependencies
+→ failing dependency
+
+Determine exactly why `/api/healthz` is returning 503.
+
+==================================================
+PHASE 2 — INVESTIGATE THE RATE-LIMIT STORE
+==========================================
+
+Search the entire repository for:
+
+`Shared rate-limit store unavailable`
+
+Then locate:
+
+* where this message originates
+* which package/module owns the rate limiter
+* which backing store it expects
+* how the store is initialized
+* which environment variables it requires
+* whether initialization differs between development and production
+* whether the health endpoint considers this store mandatory
+
+Check specifically for environment variables such as:
+
+REDIS_URL
+REDIS_HOST
+REDIS_PORT
+REDIS_PASSWORD
+UPSTASH_REDIS_REST_URL
+UPSTASH_REDIS_REST_TOKEN
+RATE_LIMIT_REDIS_URL
+RATE_LIMIT_STORE_URL
+
+Do not assume those exact names are used. Find the actual variables used by this project.
+
+Determine whether the problem is:
+
+1. missing deployment secret
+2. malformed connection string
+3. unreachable host
+4. TLS configuration
+5. Redis/Valkey service not provisioned
+6. production networking problem
+7. initialization occurring too late
+8. rate limiter being treated as required when it should be optional
+9. incorrect health-check logic
+10. some other root cause
+
+==================================================
+PHASE 3 — DISTINGUISH LIVENESS FROM READINESS
+=============================================
+
+Review whether `/api/healthz` is being used correctly for Replit deployment health checks.
+
+The application process itself appears capable of running while `/api/healthz` returns 503.
+
+Determine whether the current endpoint incorrectly makes the entire application unhealthy because an auxiliary service such as a distributed rate limiter is unavailable.
+
+Create or correct the health-check architecture if needed.
+
+Ideally distinguish:
+
+LIVENESS:
+Is the Node server running and capable of answering HTTP requests?
+
+READINESS:
+Are critical dependencies such as the primary database available?
+
+A non-critical dependency such as a distributed rate-limit store should normally not cause the entire deployment to be killed unless the application's security architecture genuinely requires it.
+
+If appropriate, make:
+
+`/api/healthz`
+
+a lightweight Replit-compatible liveness endpoint that returns HTTP 200 when the server itself is operational.
+
+For example, the response may include structured status information such as:
+
+{
+"status": "ok",
+"server": "healthy",
+"database": "healthy",
+"rateLimitStore": "degraded"
+}
+
+Do NOT blindly return 200 while critical systems are broken.
+
+Determine which services are truly required before considering the application ready.
+
+If separate endpoints are beneficial, consider:
+
+`/api/healthz` — liveness
+
+and
+
+`/api/readyz` — dependency/readiness status
+
+But only introduce this if it fits the existing architecture cleanly.
+
+==================================================
+PHASE 4 — RATE LIMITER FAIL-SAFE BEHAVIOR
+=========================================
+
+Review the rate-limiting implementation.
+
+We need production-safe behavior.
+
+DO NOT simply disable security protections.
+
+Determine whether the application can safely use one of these approaches:
+
+A. restore the intended shared rate-limit service
+
+OR
+
+B. gracefully fall back to an in-process limiter when the distributed store is temporarily unavailable
+
+OR
+
+C. fail closed only on sensitive endpoints while allowing the application health endpoint and public application shell to remain operational
+
+Choose the safest approach for this architecture.
+
+Important:
+
+* Do not remove rate limiting.
+* Do not expose authentication endpoints.
+* Do not bypass authorization.
+* Do not hard-code credentials.
+* Do not commit secrets.
+* Do not weaken CSRF/session/security protections.
+* Do not use a permanent in-memory limiter for a horizontally scaled production architecture unless you clearly document the limitation.
+
+If a Redis/Valkey/shared store is intended to be mandatory, fix the shared store rather than bypassing it.
+
+==================================================
+PHASE 5 — VERIFY DEPLOYMENT ENVIRONMENT VARIABLES
+=================================================
+
+Audit every environment variable required during production startup.
+
+Compare development and deployment environments.
+
+Create a list with:
+
+VARIABLE
+USED BY
+REQUIRED/OPTIONAL
+AVAILABLE IN PRODUCTION?
+FAILURE BEHAVIOR
+
+Pay particular attention to:
+
+* DATABASE_URL
+* authentication secrets
+* session secrets
+* encryption keys
+* Redis/rate-limit configuration
+* API base URLs
+* frontend URLs
+* trusted origins
+* callback URLs
+* NODE_ENV
+* PORT
+
+Do not print secret VALUES.
+
+Only identify whether each required variable exists and whether its format appears valid.
+
+==================================================
+PHASE 6 — DATABASE HEALTH
+=========================
+
+Because `/api/healthz` may be checking multiple services, confirm the database separately.
+
+Verify:
+
+* database connection succeeds
+* required migrations exist
+* production schema is current
+* connection pool initializes
+* SSL/TLS requirements are correct
+* database initialization does not depend on development-only configuration
+
+Do not modify or delete production data.
+
+Do not reset the database.
+
+Do not run destructive migrations.
+
+==================================================
+PHASE 7 — SERVER AND REPLIT CONFIGURATION
+=========================================
+
+Audit:
+
+* package.json
+* pnpm-workspace.yaml
+* pnpm-lock.yaml
+* .replit
+* deployment configuration
+* build scripts
+* start scripts
+* artifacts/api-server/package.json
+* server entry point
+* frontend build configuration
+* Node version
+
+Confirm the server:
+
+* listens on `process.env.PORT`
+* binds to `0.0.0.0` where required
+* remains alive after startup
+* does not terminate after initialization
+* serves `/api/healthz` without requiring authentication
+* does not apply unnecessary rate limiting to health-check requests
+
+IMPORTANT:
+
+Check whether the health endpoint itself is being passed through the rate-limit middleware.
+
+If `/api/healthz` is protected by the same shared rate-limit middleware whose store is unavailable, this can create a circular deployment failure:
+
+rate-limit store unavailable
+→ health request enters rate limiter
+→ rate limiter fails
+→ health endpoint returns 503
+→ Replit declares deployment unhealthy
+→ Replit kills server
+
+If that is happening, fix it appropriately.
+
+Infrastructure health endpoints generally should not be subject to the same public API rate limiter.
+
+Do not bypass authentication or rate limiting for other protected routes.
+
+==================================================
+PHASE 8 — CHECK MIDDLEWARE ORDER
+================================
+
+Inspect Express/Fastify/Hono/etc. middleware registration order.
+
+Specifically determine whether:
+
+* health routes register before or after rate-limit middleware
+* health routes register before authentication middleware
+* global middleware can convert health responses into errors
+* error middleware converts dependency failures into HTTP 503
+* health requests trigger unnecessary database/session/cache activity
+
+Health checks should be extremely lightweight.
+
+Correct middleware ordering if necessary.
+
+==================================================
+PHASE 9 — LOGGING
+=================
+
+The logs currently produce repeated generic messages:
+
+`Shared rate-limit store unavailable`
+
+Improve the diagnostic logging so that future failures identify the dependency and category without exposing credentials.
+
+For example:
+
+Rate-limit store connection failed
+provider: Redis
+environment: production
+failureType: connection_refused
+
+Do NOT log:
+
+* passwords
+* database credentials
+* API keys
+* auth tokens
+* Redis credentials
+* session secrets
+
+==================================================
+PHASE 10 — IMPLEMENT THE FIX
+============================
+
+Before editing, summarize:
+
+ROOT CAUSE
+
+CURRENT FAILURE CHAIN
+
+FILES THAT NEED MODIFICATION
+
+SAFEST PROPOSED FIX
+
+Then implement the minimum necessary changes.
+
+Do not modify unrelated UI, resident profiles, payments, UA logs, medications, recovery notes, case notes, assessments, document storage, or other Redeemer House functionality.
+
+==================================================
+PHASE 11 — TEST EXACTLY LIKE PRODUCTION
+=======================================
+
+Do not stop when TypeScript compiles.
+
+Run the actual production-equivalent sequence.
+
+At minimum test:
+
+1. pnpm dependency installation
+2. production build
+3. API build
+4. frontend build
+5. production server startup
+6. `/api/healthz`
+7. database connectivity
+8. authentication initialization
+9. login endpoint
+10. one protected API endpoint
+11. one normal API endpoint
+12. frontend homepage
+13. server uptime after repeated health checks
+
+Test `/api/healthz` repeatedly.
+
+It must reliably return HTTP 200 under normal production conditions.
+
+Then simulate temporary shared rate-limit store failure and confirm the behavior matches the architecture you selected.
+
+The server must not enter a loop of:
+
+503 health check
+→ failed deployment
+→ SIGTERM
+→ restart
+
+==================================================
+PHASE 12 — FINAL DEPLOYMENT REPORT
+==================================
+
+When finished, provide:
+
+ROOT CAUSE:
+What actually caused the deployment failure.
+
+WHY DEVELOPMENT WORKED:
+Why this problem appeared during deployment.
+
+HEALTH CHECK ISSUE:
+Why `/api/healthz` returned 503.
+
+RATE-LIMIT STORE ISSUE:
+What was wrong with the shared rate-limit store.
+
+FILES CHANGED:
+Every file modified.
+
+CONFIGURATION CHANGED:
+Any Replit/runtime configuration changed.
+
+ENVIRONMENT VARIABLES REQUIRED:
+Names only. Never display secret values.
+
+SECURITY IMPACT:
+Confirm that rate limiting, authentication, authorization, sessions, and data protections remain operational.
+
+TEST RESULTS:
+Include the actual results of the production build/start tests.
+
+HEALTH CHECK RESULT:
+Include the resulting HTTP status from `/api/healthz`.
+
+REMAINING RISKS:
+Anything still needing attention.
+
+DEPLOYMENT STATUS:
+READY TO DEPLOY
+or
+NOT READY TO DEPLOY
+
+Do not report READY TO DEPLOY unless the production server has actually been started and the health endpoint has been verified successfully.
+
+Most importantly: fix the ROOT CAUSE rather than merely suppressing the 503 error.

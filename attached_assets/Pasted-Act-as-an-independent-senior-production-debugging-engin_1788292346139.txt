@@ -1,0 +1,567 @@
+Act as an independent senior production debugging engineer for the Redeemer House Replit application.
+
+This is a SEPARATE debugging task from the health-check/rate-limit investigation.
+
+Do not assume the previously identified `/api/healthz` and shared rate-limit-store issue is the only deployment problem.
+
+Your job is to find any ADDITIONAL errors that could prevent this application from launching successfully in Replit production.
+
+Treat the application as potentially having multiple independent deployment blockers.
+
+Do not redesign the application.
+Do not remove working features.
+Do not weaken security.
+Do not reset the database.
+Do not make broad changes without evidence.
+
+Your goal is to answer this question:
+
+“If the health-check issue were fixed right now, what other build, runtime, environment, database, frontend, backend, dependency, or configuration problems could still keep this app from launching correctly?”
+
+==================================================
+PHASE 1 — REPRODUCE THE FULL PRODUCTION LAUNCH
+==============================================
+
+Run the application using the exact production deployment sequence used by Replit.
+
+Identify:
+
+* dependency installation command
+* workspace build command
+* frontend build command
+* backend build command
+* production start command
+* server entry point
+* expected output directories
+* expected runtime port
+
+Do not rely on `npm run dev`, `pnpm dev`, Vite development mode, hot reload, or other development-only behavior.
+
+Run the production process from a clean state where practical.
+
+Capture the FIRST meaningful error produced during:
+
+INSTALL
+BUILD
+STARTUP
+RUNTIME
+
+Do not treat secondary process-exit messages as the root cause.
+
+==================================================
+PHASE 2 — AUDIT THE MONOREPO / PNPM WORKSPACE
+=============================================
+
+The application appears to use PNPM workspaces and includes an API artifact such as:
+
+`artifacts/api-server`
+
+Audit:
+
+* pnpm-workspace.yaml
+* root package.json
+* individual workspace package.json files
+* pnpm-lock.yaml
+* workspace package references
+* build order
+* start order
+* recursive scripts
+* filters
+* package dependencies
+* generated artifacts
+
+Check for issues including:
+
+* incorrect workspace package names
+* missing workspace dependencies
+* circular dependencies
+* packages referenced but not built
+* incorrect `workspace:*` references
+* recursive build commands failing silently
+* build scripts executing in the wrong order
+* root start command pointing to a package that has not been built
+* stale generated output
+* duplicate package versions
+* lockfile mismatch
+
+Verify every workspace required at runtime actually exists and builds.
+
+==================================================
+PHASE 3 — VERIFY BUILD ARTIFACTS
+================================
+
+Inspect all expected production output.
+
+For the API server, verify that files such as:
+
+`dist/index.mjs`
+
+actually exist after the production build.
+
+Confirm:
+
+* build output directory exists
+* filenames match production start scripts
+* `.mjs`, `.js`, `.cjs`, and TypeScript module expectations match
+* source maps are optional and not required for launch
+* imported files are included in the deployment
+* runtime assets are copied into the output
+* package.json `main`, `exports`, and start scripts point to valid files
+
+Check for production failures such as:
+
+* `dist/index.mjs` missing
+* build producing `index.js` while start expects `index.mjs`
+* generated files omitted from deployment
+* paths valid locally but not after build
+* required JSON/templates/assets not copied to `dist`
+* code importing files from `src` after production compilation
+
+==================================================
+PHASE 4 — ESM / COMMONJS / MODULE RESOLUTION
+============================================
+
+Audit the Node module system carefully.
+
+Inspect:
+
+* `"type": "module"`
+* `.mjs`
+* `.cjs`
+* `.js`
+* tsconfig module settings
+* package exports
+* dynamic imports
+* require()
+* import statements
+
+Find conflicts including:
+
+* ESM importing CommonJS incorrectly
+* CommonJS requiring ESM-only packages
+* missing file extensions in production imports
+* TypeScript resolving imports that Node cannot resolve at runtime
+* path aliases that compile but do not work in Node
+* tsconfig aliases not rewritten into production paths
+* package export restrictions
+* case-sensitive filename mismatches
+
+Remember that file paths may behave differently in Linux production than in local development.
+
+Check capitalization on every suspicious import.
+
+==================================================
+PHASE 5 — NODE VERSION AND RUNTIME COMPATIBILITY
+================================================
+
+Determine the actual Node version used by Replit deployment.
+
+Compare it with:
+
+* package.json engines
+* `.nvmrc`
+* Replit runtime configuration
+* pnpm requirements
+* framework requirements
+* library compatibility
+
+Check for:
+
+* unsupported Node APIs
+* packages requiring newer Node
+* packages incompatible with the deployed Node version
+* global fetch assumptions
+* crypto API differences
+* native dependency incompatibility
+* OpenSSL/TLS differences
+
+Standardize the Node version if needed.
+
+Do not upgrade major frameworks unnecessarily.
+
+==================================================
+PHASE 6 — PRODUCTION DEPENDENCIES
+=================================
+
+Audit `dependencies` versus `devDependencies`.
+
+Determine whether any package required at runtime is incorrectly placed under `devDependencies`.
+
+Pay close attention to packages used by:
+
+* Express/Fastify/Hono/etc.
+* authentication
+* sessions
+* database ORM
+* database drivers
+* Redis/rate limiting
+* logging
+* validation
+* file uploads
+* encryption
+* mail
+* QuickBooks or external APIs
+* frontend static serving
+
+Check production install behavior.
+
+If Replit installs production dependencies only, make sure every runtime package is available.
+
+Also check for:
+
+* unused packages causing conflicts
+* peer dependency problems
+* incompatible versions
+* duplicate framework versions
+* optional native modules that fail in production
+
+==================================================
+PHASE 7 — ENVIRONMENT CONFIGURATION
+===================================
+
+Audit all environment variables used anywhere during:
+
+BUILD
+SERVER STARTUP
+DATABASE INITIALIZATION
+AUTH INITIALIZATION
+FRONTEND BUILD
+API INITIALIZATION
+
+Generate a matrix:
+
+VARIABLE NAME
+USED BY
+REQUIRED OR OPTIONAL
+BUILD-TIME OR RUNTIME
+PRODUCTION STATUS
+FAILURE IF MISSING
+
+Do not reveal secret values.
+
+Check for variables that exist in the Replit development shell but may not exist in deployment.
+
+Pay special attention to:
+
+* DATABASE_URL
+* PORT
+* NODE_ENV
+* SESSION_SECRET
+* authentication secrets
+* encryption secrets
+* frontend URL
+* backend URL
+* trusted origins
+* CORS origins
+* callback URLs
+* cookie domain
+* Redis/cache variables
+* QuickBooks variables
+* email variables
+* storage variables
+
+Identify any code that uses a non-null assertion or immediately throws when an optional service variable is absent.
+
+==================================================
+PHASE 8 — SERVER STARTUP
+========================
+
+Trace the backend from:
+
+production start command
+→ entry point
+→ configuration load
+→ middleware registration
+→ database initialization
+→ authentication
+→ API routes
+→ server listen
+
+Find anything that can crash startup.
+
+Inspect for:
+
+* top-level awaits that reject
+* unhandled promise rejections
+* constructor errors
+* database initialization errors
+* secret validation failures
+* auth initialization failures
+* external API initialization during startup
+* asynchronous initialization not awaited correctly
+* server.listen never reached
+* process.exit calls
+* startup timeouts
+
+Add safe diagnostic logging where needed.
+
+Do not log secrets.
+
+==================================================
+PHASE 9 — PORT AND NETWORK CONFIGURATION
+========================================
+
+Verify the production server:
+
+* uses `process.env.PORT`
+* does not rely on a hard-coded port
+* listens on the correct interface
+* uses `0.0.0.0` if required by Replit
+* exposes only one intended public server
+* does not start multiple servers competing for the same port
+
+Search for hard-coded values such as:
+
+3000
+3001
+5000
+5173
+8000
+8080
+
+Determine whether any of these incorrectly control production behavior.
+
+Check for:
+
+* EADDRINUSE
+* localhost-only binding
+* separate frontend and backend ports that only work in dev
+* API proxy assumptions that do not exist after deployment
+
+==================================================
+PHASE 10 — FRONTEND PRODUCTION BUILD
+====================================
+
+Audit the frontend independently.
+
+Verify:
+
+* frontend production build succeeds
+* output folder is correct
+* server serves the correct static directory
+* frontend assets are included in deployment
+* SPA fallback routing works
+* API URLs work in production
+* frontend does not call localhost
+* Vite/React environment variables are available at build time
+* dynamic asset paths resolve correctly
+
+Search the repository for:
+
+`localhost`
+`127.0.0.1`
+`:3000`
+`:5000`
+`:5173`
+development-only API URLs
+
+Replace production-invalid assumptions with environment-aware configuration where appropriate.
+
+Do not break local development.
+
+==================================================
+PHASE 11 — DATABASE STARTUP AND MIGRATIONS
+==========================================
+
+Independently verify database behavior.
+
+Do not rely only on a health-check result.
+
+Confirm:
+
+* connection URL format
+* SSL requirements
+* ORM configuration
+* migration status
+* schema compatibility
+* connection pool configuration
+* startup query behavior
+
+Check whether migrations automatically execute during deployment.
+
+If they do, determine whether they are safe.
+
+Look for:
+
+* migration locks
+* pending migrations
+* destructive migrations
+* schema drift
+* missing tables
+* incorrect schema name
+* failed startup seed scripts
+* connection exhaustion
+
+Never drop tables.
+Never reset production data.
+Never rerun destructive migrations.
+
+==================================================
+PHASE 12 — AUTHENTICATION AND SESSION STARTUP
+=============================================
+
+Inspect authentication separately from the main health investigation.
+
+Verify:
+
+* auth secret exists
+* session secret exists
+* production callback URL is correct
+* trusted origin is correct
+* cookies work over HTTPS
+* Secure cookie settings are correct
+* SameSite behavior is appropriate
+* production domain matches auth config
+* session store initializes
+
+Check whether authentication initialization can prevent the entire server from starting.
+
+Authentication may fail for users without requiring the entire process to crash.
+
+Do not bypass authentication.
+
+==================================================
+PHASE 13 — EXTERNAL SERVICES
+============================
+
+Identify every external service initialized at startup.
+
+Examples may include:
+
+* QuickBooks / Intuit
+* email
+* object storage
+* Redis
+* analytics
+* payment services
+* file storage
+* third-party APIs
+
+Determine whether any optional integration is initialized synchronously at server startup and causes the entire application to fail when credentials or connectivity are unavailable.
+
+Where architecturally appropriate, optional integrations should initialize lazily or report degraded status rather than crash the whole application.
+
+Do not disable required services.
+
+==================================================
+PHASE 14 — ERROR HANDLING
+=========================
+
+Search for:
+
+`process.exit`
+`throw new Error`
+`unhandledRejection`
+`uncaughtException`
+
+Review every occurrence associated with startup.
+
+Determine whether errors are:
+
+* correctly fatal
+* incorrectly fatal
+* swallowed
+* logged without enough context
+
+A missing optional integration should not necessarily terminate the entire server.
+
+A missing critical database or authentication secret may correctly be fatal.
+
+Classify each startup dependency accordingly.
+
+==================================================
+PHASE 15 — CLEAN PRODUCTION TEST
+================================
+
+After identifying and fixing confirmed issues, perform a clean production verification.
+
+Where safe:
+
+1. remove stale build output
+2. install dependencies from lockfile
+3. build all required workspaces
+4. verify expected artifacts
+5. start production API
+6. start/serve frontend
+7. confirm server remains running
+8. make HTTP request to homepage
+9. make HTTP request to API
+10. test authentication initialization
+11. test database connectivity
+12. inspect logs for warnings/errors
+
+Do not declare success because a build command exits with code 0.
+
+The application must actually remain running.
+
+==================================================
+PHASE 16 — DO NOT OVER-FIX
+==========================
+
+Do not make speculative changes.
+
+For each modification, identify:
+
+ERROR OBSERVED
+ROOT CAUSE
+FILE AFFECTED
+CHANGE MADE
+WHY THIS FIX IS NECESSARY
+RISK
+
+If you cannot reproduce or substantiate an error, do not rewrite code just because it “might help.”
+
+==================================================
+FINAL REPORT
+============
+
+At completion, provide:
+
+ADDITIONAL DEPLOYMENT BLOCKERS FOUND
+
+For each blocker include:
+
+* symptom
+* root cause
+* file/configuration involved
+* fix implemented
+* verification result
+
+Then provide:
+
+BUILD STATUS
+
+API STARTUP STATUS
+
+FRONTEND STATUS
+
+DATABASE STATUS
+
+AUTHENTICATION STATUS
+
+ENVIRONMENT CONFIGURATION STATUS
+
+PORT/BINDING STATUS
+
+PNPM WORKSPACE STATUS
+
+PRODUCTION DEPENDENCY STATUS
+
+EXTERNAL INTEGRATION STATUS
+
+FILES CHANGED
+
+REMAINING WARNINGS
+
+REMAINING DEPLOYMENT RISKS
+
+FINAL STATUS:
+READY TO DEPLOY
+or
+NOT READY TO DEPLOY
+
+Do not investigate only the previously known shared rate-limit-store problem.
+
+Assume that another engineer is handling that issue.
+
+Your purpose is to independently discover the NEXT deployment failure before it occurs and resolve all verified additional production launch blockers.
