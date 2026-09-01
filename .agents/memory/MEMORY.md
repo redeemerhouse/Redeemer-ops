@@ -13,3 +13,5 @@
 - [Replit production database TLS](replit-production-db-tls.md) — node-postgres uses encrypted SSL with managed-certificate verification disabled in autoscale production.
 - [Legacy migration baselines](legacy-migration-baselines.md) — baseline only after exact catalog equivalence and target/recovery confirmation; fresh databases always run the full chain.
 - [Account session boundary](account-session-boundary.md) — production browser access requires revocable DB sessions; assignment changes revoke stale principals.
+- [Orval dependency patching](orval-dependency-patching.md) — keep Orval exact when patching transitives; range upgrades can alter generated fetch header code.
+- [Dependency source integrity](dependency-source-integrity.md) — security upgrades must resolve through integrity-verified registry artifacts, not mutable remote tarball URLs.
