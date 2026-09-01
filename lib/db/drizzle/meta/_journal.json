@@ -36,6 +36,20 @@
       "when": 1788186154521,
       "tag": "0004_talented_lady_ursula",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1788212633527,
+      "tag": "0005_exotic_ravenous",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788213107992,
+      "tag": "0006_lethal_jubilee",
+      "breakpoints": true
     }
   ]
 }

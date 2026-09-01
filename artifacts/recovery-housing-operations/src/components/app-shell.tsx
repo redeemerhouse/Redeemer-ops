@@ -1,4 +1,4 @@
-import { Bell, CreditCard, LayoutDashboard, Menu, UsersRound, X, ClipboardList, GitBranch } from 'lucide-react';
+import { Bell, CreditCard, LayoutDashboard, LogOut, Menu, UsersRound, X, ClipboardList, GitBranch } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { Link, useLocation } from 'wouter';
 import { isAdministratorRole, useAuth } from '@/lib/auth';
@@ -11,14 +11,14 @@ const baseNavItems = [
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [location] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const navItems = isAdministratorRole(user?.role ?? 'resident')
     ? [...baseNavItems, { href: '/assessment-library', label: 'Assessment library', icon: GitBranch }]
     : baseNavItems;
-  const displayName = user?.id || 'Verified user';
+  const displayName = user?.email || String(user?.id || 'Verified user');
   const initials = displayName.slice(0, 2).toUpperCase();
   const roleLabel = user?.role.replaceAll('_', ' ') || 'verified account';
   return (
@@ -44,7 +44,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
         <div className="mt-4 flex items-center gap-3 border-t border-sidebar-border px-3 pt-4">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[hsl(var(--accent))] text-xs font-extrabold text-[hsl(var(--primary))]">{initials}</div>
-          <div><div className="max-w-[155px] truncate text-xs font-bold">{displayName}</div><div className="text-[10px] capitalize text-sidebar-foreground/50">{roleLabel}</div></div>
+           <div className="min-w-0 flex-1"><div data-testid="text-signed-in-user" className="max-w-[135px] truncate text-xs font-bold">{displayName}</div><div className="text-[10px] capitalize text-sidebar-foreground/50">{roleLabel}</div></div>
+           <button data-testid="button-logout" type="button" onClick={() => void logout()} className="rounded-lg p-2 text-sidebar-foreground/55 hover:bg-sidebar-accent hover:text-sidebar-foreground" aria-label="Sign out"><LogOut size={15} /></button>
         </div>
       </aside>
       {mobileOpen && <button data-testid="button-overlay-menu" className="fixed inset-0 z-30 bg-[hsl(219_64%_14%/.35)] lg:hidden" onClick={() => setMobileOpen(false)} aria-label="Close menu overlay" />}

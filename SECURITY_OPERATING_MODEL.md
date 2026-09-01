@@ -74,6 +74,13 @@ than disclosing whether an inaccessible record exists.
 - Staff and resident self-registration may create only an unapproved account. An owner
   admin or program director must approve the account, assign its role, and assign its
   house scope before access is granted.
+- On an empty database, an operator provisions the first owner administrator exactly once
+  with `POST /api/auth/bootstrap`, a valid email/password body, and the server-side
+  `SESSION_SECRET` supplied in the `X-Initial-Admin-Token` header. The route takes a
+  transaction-scoped advisory lock, fails closed when any account already exists, never
+  accepts the bootstrap credential in a URL, and never returns a session or credential.
+  After provisioning, the owner signs in normally and all later accounts use the approval
+  workflow.
 - No user may self-select, escalate, or broaden a role, organization, household, or house
   assignment. These fields are server-administered.
 - Email verification is required before activation. Password recovery uses a

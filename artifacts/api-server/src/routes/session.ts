@@ -9,6 +9,7 @@ const router: IRouter = Router();
  * session credential remains an HttpOnly cookie; it is never returned to JS.
  */
 router.get("/auth/session", authenticate, (_req, res) => {
+  res.setHeader("Cache-Control", "no-store, private");
   const principal = getPrincipal(res);
   const session = GetSessionResponse.parse({
     authenticated: true,
@@ -19,7 +20,7 @@ router.get("/auth/session", authenticate, (_req, res) => {
       houseNames: principal.houseNames,
       residentId: principal.residentId,
     },
-    expiresAt: new Date(principal.exp * 1000).toISOString(),
+    expiresAt: new Date((principal.sessionExpiresAt ?? principal.exp) * 1000).toISOString(),
   });
   res.json(session);
 });

@@ -46,7 +46,7 @@ app.use(cors({
     // decision into an internal-server-error response.
     callback(null, false);
   },
-  credentials: false,
+  credentials: true,
 }));
 app.use(express.json({ limit: serverConfig.bodyLimit, strict: true }));
 app.use(express.urlencoded({ extended: false, limit: serverConfig.bodyLimit, parameterLimit: serverConfig.maxParameters }));

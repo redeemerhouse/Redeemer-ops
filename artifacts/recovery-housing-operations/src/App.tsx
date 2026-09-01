@@ -11,13 +11,14 @@ import ResidentDetail from '@/pages/resident-detail';
 import Operations from '@/pages/operations';
 import Assessment from '@/pages/assessment';
 import AssessmentLibrary from '@/pages/assessment-library';
+import SignIn from '@/pages/sign-in';
 import {
   Route,
   Switch,
   useLocation,
   Router as WouterRouter,
 } from 'wouter';
-import { AuthLoading, AuthProvider, SessionError, SignInScreen, useAuth } from '@/lib/auth';
+import { AuthLoading, AuthProvider, SessionError, useAuth } from '@/lib/auth';
 
 const queryClient = new QueryClient();
 
@@ -56,10 +57,10 @@ function App() {
 }
 
 function AuthenticatedApp() {
-  const { status } = useAuth();
+  const { status, login, register, requestPasswordReset, verifyEmail, resetPassword } = useAuth();
 
   if (status === 'checking') return <AuthLoading />;
-  if (status === 'unauthenticated') return <SignInScreen />;
+  if (status === 'unauthenticated') return <TooltipProvider><SignIn login={login} register={register} requestPasswordReset={requestPasswordReset} verifyEmail={verifyEmail} resetPassword={resetPassword} /><Toaster /></TooltipProvider>;
   if (status === 'error') return <SessionError onRetry={() => window.location.reload()} />;
 
   return (

@@ -1,10 +1,9 @@
 import { Router } from "express";
 import { ObjectStorageService } from "../lib/objectStorage";
-import { authenticate, getPrincipal } from "../middlewares/auth";
+import { getPrincipal } from "../middlewares/auth";
 import { problem } from "../middlewares/errors";
 const router = Router();
 const objects = new ObjectStorageService();
-router.use(authenticate);
 router.post("/storage/uploads/request-url", async (req, res) => {
   const principal = getPrincipal(res);
   if (!["owner_admin", "program_director", "house_manager"].includes(principal.role)) { problem(req, res, 403); return; }

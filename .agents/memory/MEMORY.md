@@ -12,3 +12,4 @@
 - [Post-merge database application](post-merge-database-application.md) — a successful setup can still skip schema work; verify the real Drizzle command ran before trusting workflow recovery.
 - [Replit production database TLS](replit-production-db-tls.md) — node-postgres uses encrypted SSL with managed-certificate verification disabled in autoscale production.
 - [Legacy migration baselines](legacy-migration-baselines.md) — baseline only after exact catalog equivalence and target/recovery confirmation; fresh databases always run the full chain.
+- [Account session boundary](account-session-boundary.md) — production browser access requires revocable DB sessions; assignment changes revoke stale principals.

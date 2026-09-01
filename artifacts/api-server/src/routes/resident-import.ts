@@ -10,7 +10,6 @@ import {
   auditEventsTable,
 } from "@workspace/db";
 import {
-  authenticate,
   authorize,
   getPrincipal,
   hasHouseScope,
@@ -19,7 +18,6 @@ import {
 import { problem } from "../middlewares/errors";
 
 const router: IRouter = Router();
-router.use(authenticate);
 
 const columns = [
   "name",

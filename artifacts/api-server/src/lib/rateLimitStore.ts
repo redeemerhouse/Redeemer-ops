@@ -5,6 +5,7 @@ export type RateLimitBucket = {
 
 export interface RateLimitStore {
   increment(key: string, windowMs: number, now: number): Promise<RateLimitBucket>;
+  reset?(key: string): Promise<void>;
 }
 
 export type RateLimitQueryExecutor = {
@@ -56,6 +57,9 @@ export function createMemoryRateLimitStore(): RateLimitStore {
       buckets.set(key, bucket);
       return bucket;
     },
+    async reset(key) {
+      buckets.delete(key);
+    },
   };
 }
 
@@ -91,6 +95,9 @@ export function createPostgresRateLimitStore(
         throw new Error("Rate-limit store returned an invalid bucket.");
       }
       return { count, resetAt };
+    },
+    async reset(key) {
+      await executor.query("DELETE FROM api_rate_limit_buckets WHERE key = $1", [key]);
     },
   };
 }

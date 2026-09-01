@@ -29,6 +29,10 @@ async function getPostgresRateLimitStore(): Promise<RateLimitStore> {
   return postgresStorePromise;
 }
 
+export async function getConfiguredRateLimitStore(): Promise<RateLimitStore> {
+  return serverConfig.rateLimitStore === "postgres" ? getPostgresRateLimitStore() : memoryStore;
+}
+
 function sharedStoreIsUnavailable(now: number): boolean {
   return serverConfig.rateLimitStore === "postgres" && sharedStoreUnavailableUntil > now;
 }

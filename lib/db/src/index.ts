@@ -34,3 +34,4 @@ export * from "./schema/operations";
 export * from "./schema/financials";
 export * from "./schema/meeting-attendance";
 export * from "./schema/retention";
+export * from "./schema/auth";

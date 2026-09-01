@@ -51,7 +51,7 @@ import
 
 import 
 {
- authenticate, authorize, canAccessResident, getPrincipal, hasHouseScope, isAdministrator, type Principal 
+ authorize, canAccessResident, getPrincipal, hasHouseScope, isAdministrator, type Principal
 }
  from "../middlewares/auth"
 ;
@@ -67,7 +67,6 @@ import
 const router: IRouter = Router()
 ;
 
-router.use(authenticate)
 ;
 
 // There is one organization at launch. Keep the organization boundary explicit

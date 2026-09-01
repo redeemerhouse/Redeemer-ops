@@ -23,3 +23,4 @@ export * from "./operations";
 export * from "./financials";
 export * from "./meeting-attendance";
 export * from "./retention";
+export * from "./auth";

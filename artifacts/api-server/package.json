@@ -8,6 +8,8 @@
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "test:rate-limit": "node --experimental-strip-types --test test/security-rate-limit.test.ts",
+    "test:auth-lifecycle": "pnpm run build && bash test/auth-lifecycle-integration.sh",
+    "test:authorization": "node --test test/authorization.test.mjs",
     "test:reports": "node --test test/report-exports.test.mjs",
     "test:retention": "node --experimental-strip-types --test test/retention-policy.test.ts",
     "test:security": "node --test test/security-controls.test.mjs",
@@ -18,6 +20,7 @@
   },
   "dependencies": {
     "@google-cloud/storage": "^7.16.0",
+    "@replit/connectors-sdk": "latest",
     "@workspace/api-zod": "workspace:*",
     "@workspace/db": "workspace:*",
     "cookie-parser": "^1.4.7",

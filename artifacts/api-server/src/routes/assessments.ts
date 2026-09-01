@@ -31,11 +31,10 @@ import {
   UpdateAssessmentDraftParams,
   UpdateAssessmentDraftResponse,
 } from "@workspace/api-zod";
-import { authenticate, canAccessResident, getPrincipal, isAdministrator, requirePermission, type Principal } from "../middlewares/auth";
+import { canAccessResident, getPrincipal, isAdministrator, requirePermission, type Principal } from "../middlewares/auth";
 import { problem } from "../middlewares/errors";
 
 const router: IRouter = Router();
-router.use(authenticate);
 
 type FormField = {
   id: string;

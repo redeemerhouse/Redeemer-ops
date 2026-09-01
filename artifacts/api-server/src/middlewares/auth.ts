@@ -1,9 +1,17 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { NextFunction, Request, RequestHandler, Response } from "express";
+import { and, eq, gt, isNull } from "drizzle-orm";
+import {
+  authAccountsTable,
+  authAccountHousesTable,
+  authSessionsTable,
+  db,
+  housesTable,
+} from "@workspace/db";
+import { corsOrigins, serverConfig } from "../lib/config";
 
 export const ORGANIZATION_ID = "redeemer-house";
 export const SESSION_COOKIE_NAME = "__Host-recovery-session";
-const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 export const roles = ["owner_admin", "program_director", "house_manager", "resident"] as const;
 export type Role = (typeof roles)[number];
@@ -15,6 +23,8 @@ export type Principal = {
   houseNames: string[];
   active: true;
   residentId?: number;
+  sessionId?: string;
+  sessionExpiresAt?: number;
   iat: number;
   exp: number;
 };
@@ -87,6 +97,7 @@ function validPrincipal(payload: unknown, now = Math.floor(Date.now() / 1000)): 
   if ((payload.exp as number) - (payload.iat as number) > 30 * 24 * 60 * 60) return false;
   if (payload.role === "house_manager" && payload.houseNames.length === 0) return false;
   if (payload.role === "resident" && (!Number.isInteger(payload.residentId) || (payload.residentId as number) <= 0)) return false;
+  if (payload.sid !== undefined && (typeof payload.sid !== "string" || !/^[a-f0-9-]{20,80}$/.test(payload.sid))) return false;
   return true;
 }
 
@@ -101,6 +112,7 @@ export function createAccessToken(input: {
   organizationId?: string;
   houseNames?: string[];
   residentId?: number;
+  sessionId?: string;
   now?: number;
   ttlSeconds?: number;
 }, configuredSecret = secret()): string {
@@ -114,6 +126,7 @@ export function createAccessToken(input: {
     houseNames: input.houseNames ?? [],
     active: true,
     ...(input.residentId === undefined ? {} : { residentId: input.residentId }),
+    ...(input.sessionId === undefined ? {} : { sid: input.sessionId }),
     iat: now,
     exp: now + Math.min(input.ttlSeconds ?? TOKEN_TTL_SECONDS, 30 * 24 * 60 * 60),
   };
@@ -130,11 +143,100 @@ function verifyAccessToken(token: string, configuredSecret = secret()): Principa
   const received = Buffer.from(parts[1]);
   if (expected.length !== received.length || !timingSafeEqual(expected, received)) return null;
   try {
-    const payload = decode(parts[0]);
-    return validPrincipal(payload) ? payload : null;
+    const rawPayload = decode(parts[0]);
+    const sessionId = isRecord(rawPayload) && typeof rawPayload.sid === "string" ? rawPayload.sid : undefined;
+    if (!validPrincipal(rawPayload)) return null;
+    return {
+      ...rawPayload,
+      ...(sessionId ? { sessionId } : {}),
+    };
   } catch {
     return null;
   }
+}
+
+export function hashSessionToken(token: string): string {
+  return createHmac("sha256", "auth-session-token").update(token).digest("hex");
+}
+
+function sessionCookie(req: Request): string | null {
+  const header = req.header("cookie");
+  const match = header?.match(new RegExp(`(?:^|;\\s*)${SESSION_COOKIE_NAME}=([^;]+)`));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function sessionCookieOptions() {
+  return {
+    httpOnly: true,
+    // Replit preview and production are both HTTPS at the browser boundary.
+    // A __Host- cookie must always carry Secure or standards-compliant browsers
+    // reject it before any session request can be made.
+    secure: true,
+    sameSite: "lax" as const,
+    path: "/",
+  };
+}
+
+export function clearSessionCookie(res: Response): void {
+  res.clearCookie(SESSION_COOKIE_NAME, sessionCookieOptions());
+}
+
+export function setSessionCookie(res: Response, token: string): void {
+  res.cookie(SESSION_COOKIE_NAME, token, {
+    ...sessionCookieOptions(),
+    maxAge: 30 * 24 * 60 * 60 * 1000,
+  });
+}
+
+export function getSessionToken(req: Request): string | null {
+  return sessionCookie(req);
+}
+
+async function principalFromSession(token: string): Promise<Principal | null> {
+  const now = new Date();
+  const [row] = await db
+    .select({ session: authSessionsTable, account: authAccountsTable })
+    .from(authSessionsTable)
+    .innerJoin(authAccountsTable, eq(authSessionsTable.accountId, authAccountsTable.id))
+    .where(and(
+      eq(authSessionsTable.tokenHash, hashSessionToken(token)),
+      isNull(authSessionsTable.revokedAt),
+      gt(authSessionsTable.expiresAt, now),
+      gt(authSessionsTable.absoluteExpiresAt, now),
+    ))
+    .limit(1);
+  if (!row || row.account.deactivatedAt || !row.account.approvedAt || !row.account.emailVerifiedAt) return null;
+
+  const assignments = await db
+    .select({ houseName: housesTable.name })
+    .from(authAccountHousesTable)
+    .innerJoin(housesTable, eq(authAccountHousesTable.houseId, housesTable.id))
+    .where(eq(authAccountHousesTable.accountId, row.account.id));
+  const houseNames = assignments.map(({ houseName }) => houseName);
+  const role = row.account.role as Role;
+  if (!roles.includes(role) || row.account.organizationId !== ORGANIZATION_ID) return null;
+  if (role === "house_manager" && houseNames.length === 0) return null;
+  if (role === "resident" && (!row.account.residentId || houseNames.length === 0)) return null;
+
+  const idleExpiry = new Date(Math.min(
+    Date.now() + 12 * 60 * 60 * 1000,
+    row.session.absoluteExpiresAt.getTime(),
+  ));
+  await db.update(authSessionsTable)
+    .set({ lastSeenAt: now, expiresAt: idleExpiry })
+    .where(eq(authSessionsTable.id, row.session.id));
+  return {
+    sub: String(row.account.id),
+    role,
+    organizationId: row.account.organizationId,
+    houseNames,
+    active: true,
+    ...(row.account.residentId === null ? {} : { residentId: row.account.residentId }),
+    sessionId: row.session.id.toString(),
+    sessionExpiresAt: Math.floor(idleExpiry.getTime() / 1000),
+    iat: Math.floor(now.getTime() / 1000),
+    exp: Math.floor(row.session.absoluteExpiresAt.getTime() / 1000),
+  };
 }
 
 export function getPrincipal(res: Response): Principal {
@@ -144,60 +246,71 @@ export function getPrincipal(res: Response): Principal {
 }
 
 function authenticationFailure(res: Response): void {
+  res.setHeader("Cache-Control", "no-store, private");
   res.setHeader("WWW-Authenticate", "Bearer");
   res.status(401).json({ error: "Authentication required." });
 }
 
-function cookieValue(header: string | undefined, name: string): string | null {
-  if (!header) return null;
-  for (const part of header.split(";")) {
-    const separator = part.indexOf("=");
-    if (separator < 0) continue;
-    const key = part.slice(0, separator).trim();
-    if (key !== name) continue;
-    try {
-      return decodeURIComponent(part.slice(separator + 1).trim()) || null;
-    } catch {
-      return null;
-    }
-  }
-  return null;
-}
-
-export function accessTokenFromRequest(req: Request): string | null {
+export const authenticate: RequestHandler = async (req, res, next) => {
   const authorization = req.header("authorization");
   const match = authorization?.match(/^Bearer ([^\s]+)$/i);
-  return match?.[1] ?? cookieValue(req.header("cookie"), SESSION_COOKIE_NAME);
-}
-
-function requestOriginIsSameHost(req: Request): boolean {
-  const origin = req.header("origin");
-  const host = req.header("x-forwarded-host") ?? req.header("host");
-  if (!origin || !host) return false;
-  try {
-    return new URL(origin).host.toLowerCase() === host.split(",", 1)[0].trim().toLowerCase();
-  } catch {
-    return false;
+  let principal: Principal | null = null;
+  if (match) {
+    const bearerPrincipal = verifyAccessToken(match[1]);
+    if (bearerPrincipal?.sessionId) {
+      try {
+        principal = await principalFromSession(match[1]);
+      } catch {
+        principal = null;
+      }
+    } else if (!serverConfig.isProduction) {
+      // Signed bearer principals remain available for local integration tests.
+      // Production user access must always map to a revocable database session.
+      principal = bearerPrincipal;
+    }
   }
-}
-
-export const authenticate: RequestHandler = (req, res, next) => {
-  const authorization = req.header("authorization");
-  const bearerMatch = authorization?.match(/^Bearer ([^\s]+)$/i);
-  const cookieToken = cookieValue(req.header("cookie"), SESSION_COOKIE_NAME);
-  const token = bearerMatch?.[1] ?? cookieToken;
-  const principal = token ? verifyAccessToken(token) : null;
+  const cookieToken = sessionCookie(req);
+  if (!principal && cookieToken) {
+    const cookiePrincipal = verifyAccessToken(cookieToken);
+    if (cookiePrincipal?.sessionId) {
+      try {
+        principal = await principalFromSession(cookieToken);
+      } catch {
+        principal = null;
+      }
+    }
+  }
   if (!principal) {
+    if (cookieToken) clearSessionCookie(res);
     authenticationFailure(res);
     return;
   }
-  if (!bearerMatch && cookieToken && !SAFE_METHODS.has(req.method) && !requestOriginIsSameHost(req)) {
-    res.status(403).json({ error: "Request origin could not be verified." });
+  res.locals.principal = principal;
+  res.locals.actorId = principal.sub;
+  next();
+};
+
+export const csrfProtection: RequestHandler = (req, res, next) => {
+  if (["GET", "HEAD", "OPTIONS"].includes(req.method)) {
+    next();
     return;
   }
-  res.setHeader("Cache-Control", "no-store, private");
-  res.setHeader("Pragma", "no-cache");
-  res.locals.principal = principal;
+  const origin = req.header("origin");
+  if (sessionCookie(req) && !origin) {
+    res.status(403).json({ error: "Request origin is required." });
+    return;
+  }
+  if (!origin) {
+    next();
+    return;
+  }
+  const expected = `${req.protocol}://${req.get("host")}`;
+  const allowed = corsOrigins.includes(origin)
+    || (!serverConfig.isProduction && origin === expected);
+  if (!allowed) {
+    res.status(403).json({ error: "Request origin is not allowed." });
+    return;
+  }
   next();
 };
 

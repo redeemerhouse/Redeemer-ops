@@ -9,7 +9,9 @@ import {
   createContext,
   useContext,
   useEffect,
+  useCallback,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -17,7 +19,8 @@ import {
 export type SessionRole = 'owner_admin' | 'program_director' | 'house_manager' | 'resident';
 
 export type SessionUser = {
-  id: string;
+  id: string | number;
+  email?: string;
   role: SessionRole;
   organizationId: string;
   houseNames: string[];
@@ -36,7 +39,16 @@ type AuthState = {
   expiresAt: string | null;
 };
 
-const AuthContext = createContext<AuthState | null>(null);
+type AuthContextValue = AuthState & {
+  login: (email: string, password: string) => Promise<string>;
+  logout: () => Promise<void>;
+  register: (email: string, password: string) => Promise<string>;
+  requestPasswordReset: (email: string) => Promise<string>;
+  verifyEmail: (token: string) => Promise<string>;
+  resetPassword: (token: string, password: string) => Promise<string>;
+};
+
+const AuthContext = createContext<AuthContextValue | null>(null);
 
 // This is deliberately process memory only. The approved browser session is
 // an HttpOnly cookie; this supports a short-lived bearer returned by a managed
@@ -46,15 +58,29 @@ let inMemoryAccessToken: string | null = null;
 export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const [state, setState] = useState<AuthState>({ status: 'checking', user: null, expiresAt: null });
+  const expiryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearSession = useCallback(() => {
+    inMemoryAccessToken = null;
+    queryClient.clear();
+    if (expiryTimerRef.current) clearTimeout(expiryTimerRef.current);
+    expiryTimerRef.current = null;
+    setState({ status: 'unauthenticated', user: null, expiresAt: null });
+  }, [queryClient]);
+
+  const applySession = useCallback((session: SessionResponse) => {
+    const expiresInMs = Date.parse(session.expiresAt) - Date.now();
+    if (!Number.isFinite(expiresInMs) || expiresInMs <= 0) {
+      clearSession();
+      return;
+    }
+    if (expiryTimerRef.current) clearTimeout(expiryTimerRef.current);
+    setState({ status: 'authenticated', user: session.user, expiresAt: session.expiresAt });
+    expiryTimerRef.current = setTimeout(clearSession, expiresInMs);
+  }, [clearSession]);
 
   useEffect(() => {
     let mounted = true;
-    let expiryTimer: ReturnType<typeof setTimeout> | null = null;
-    const clearSession = () => {
-      inMemoryAccessToken = null;
-      queryClient.clear();
-      if (mounted) setState({ status: 'unauthenticated', user: null, expiresAt: null });
-    };
     setAuthTokenGetter(() => inMemoryAccessToken);
     setUnauthorizedHandler(() => {
       // Clearing the whole query cache is intentional: query keys can contain
@@ -68,13 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })
       .then((session) => {
         if (!mounted) return;
-        const expiresInMs = Date.parse(session.expiresAt) - Date.now();
-        if (!Number.isFinite(expiresInMs) || expiresInMs <= 0) {
-          clearSession();
-          return;
-        }
-        setState({ status: 'authenticated', user: session.user, expiresAt: session.expiresAt });
-        expiryTimer = setTimeout(clearSession, expiresInMs);
+        applySession(session);
       })
       .catch((error: unknown) => {
         if (!mounted) return;
@@ -89,17 +109,61 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => {
       mounted = false;
-      if (expiryTimer) clearTimeout(expiryTimer);
+      if (expiryTimerRef.current) clearTimeout(expiryTimerRef.current);
       setAuthTokenGetter(null);
       setUnauthorizedHandler(null);
     };
-  }, [queryClient]);
+  }, [applySession, clearSession, queryClient]);
 
-  const value = useMemo(() => state, [state]);
+  const authRequest = useCallback(async (path: string, body?: Record<string, unknown>) => {
+    const response = await fetch(`/api/auth${path}`, {
+      method: body ? 'POST' : 'GET',
+      credentials: 'include',
+      headers: body ? { 'Content-Type': 'application/json', Accept: 'application/json' } : { Accept: 'application/json' },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+    const data = await response.json().catch(() => ({})) as { error?: string; message?: string; user?: SessionUser; expiresAt?: string };
+    return { response, data };
+  }, []);
+
+  const login = useCallback(async (email: string, password: string) => {
+    const { response, data } = await authRequest('/login', { email, password });
+    if (!response.ok || !data.user || !data.expiresAt) throw new Error('Unable to sign in with those credentials.');
+    queryClient.clear();
+    applySession({ authenticated: true, user: data.user, expiresAt: data.expiresAt });
+    return 'Your secure workspace is ready.';
+  }, [applySession, authRequest, queryClient]);
+  const logout = useCallback(async () => {
+    await authRequest('/logout', {});
+    clearSession();
+  }, [authRequest, clearSession]);
+  const register = useCallback(async (email: string, password: string) => {
+    const { response, data } = await authRequest('/register', { email, password });
+    if (!response.ok) throw new Error(data.error || 'The account request could not be submitted.');
+    return data.message || 'If the account can be created, verification and approval instructions will be sent.';
+  }, [authRequest]);
+  const requestPasswordReset = useCallback(async (email: string) => {
+    const { response, data } = await authRequest('/password-reset/request', { email });
+    if (!response.ok) throw new Error('The recovery request could not be submitted.');
+    return data.message || 'If an eligible account exists, password reset instructions will be sent.';
+  }, [authRequest]);
+  const verifyEmail = useCallback(async (token: string) => {
+    const { response, data } = await authRequest('/verify-email', { token });
+    if (!response.ok) throw new Error(data.error || 'The verification code is invalid or expired.');
+    return data.message || 'Email verified. An administrator must approve the account before sign-in.';
+  }, [authRequest]);
+  const resetPassword = useCallback(async (token: string, password: string) => {
+    const { response, data } = await authRequest('/password-reset/complete', { token, password });
+    if (!response.ok) throw new Error(data.error || 'The recovery code is invalid or expired.');
+    clearSession();
+    return data.message || 'Password updated. Sign in again on every device.';
+  }, [authRequest, clearSession]);
+
+  const value = useMemo(() => ({ ...state, login, logout, register, requestPasswordReset, verifyEmail, resetPassword }), [login, logout, register, requestPasswordReset, resetPassword, state, verifyEmail]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
-export function useAuth(): AuthState {
+export function useAuth(): AuthContextValue {
   const value = useContext(AuthContext);
   if (!value) throw new Error('useAuth must be used inside AuthProvider');
   return value;

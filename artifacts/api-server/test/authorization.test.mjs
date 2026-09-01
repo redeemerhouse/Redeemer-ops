@@ -20,7 +20,7 @@ test("rejects missing and client-supplied authentication", { skip: !canRun }, as
   assert.equal(forgedHeader.status, 401);
 });
 
-test("bootstraps a safe browser session from bearer or HttpOnly cookie credentials", { skip: !canRun }, async () => {
+test("bootstraps a safe browser session and rejects non-revocable cookie credentials", { skip: !canRun }, async () => {
   const headers = authHeaders({
     sub: "session-bootstrap-user",
     role: "house_manager",
@@ -48,7 +48,8 @@ test("bootstraps a safe browser session from bearer or HttpOnly cookie credentia
   const cookieSession = await request("/auth/session", {
     cookie: `__Host-recovery-session=${encodeURIComponent(token)}`,
   });
-  assert.equal(cookieSession.status, 200);
+  assert.equal(cookieSession.status, 401);
+  assert.equal(cookieSession.headers.get("www-authenticate"), "Bearer");
 
   const crossSiteMutation = await request("/residents", {
     cookie: `__Host-recovery-session=${encodeURIComponent(token)}`,
@@ -60,6 +61,15 @@ test("bootstraps a safe browser session from bearer or HttpOnly cookie credentia
   });
   assert.equal(crossSiteMutation.status, 403);
 
+  const missingOriginMutation = await request("/residents", {
+    cookie: `__Host-recovery-session=${encodeURIComponent(token)}`,
+    "content-type": "application/json",
+  }, {
+    method: "POST",
+    body: "{}",
+  });
+  assert.equal(missingOriginMutation.status, 403);
+
   const sameSiteMutation = await request("/residents", {
     cookie: `__Host-recovery-session=${encodeURIComponent(token)}`,
     origin: new URL(baseUrl).origin,
@@ -68,7 +78,7 @@ test("bootstraps a safe browser session from bearer or HttpOnly cookie credentia
     method: "POST",
     body: "{}",
   });
-  assert.equal(sameSiteMutation.status, 400);
+  assert.equal(sameSiteMutation.status, 401);
 
   const expiredHeaders = authHeaders({
     sub: "expired-session-user",
