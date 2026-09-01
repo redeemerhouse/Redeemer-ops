@@ -1,4 +1,4 @@
-import { check, date, integer, numeric, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { check, date, index, integer, numeric, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -18,6 +18,7 @@ export const expensesTable = pgTable("expenses", {
   check("expenses_amount_non_negative", sql`${table.amount} >= 0`),
   check("expenses_amount_maximum", sql`${table.amount} <= 99999999.99`),
   check("expenses_category_allowed", sql`${table.category} IN ('housing', 'utilities', 'food', 'transportation', 'programming', 'payroll', 'other')`),
+  index("expenses_house_date_idx").on(table.houseId, table.expenseDate),
 ]);
 
 export const incomeRecordsTable = pgTable("income_records", {
@@ -34,6 +35,7 @@ export const incomeRecordsTable = pgTable("income_records", {
   check("income_records_amount_non_negative", sql`${table.amount} >= 0`),
   check("income_records_amount_maximum", sql`${table.amount} <= 99999999.99`),
   check("income_records_category_allowed", sql`${table.category} IN ('admission_fee', 'program_fee', 'grant', 'other')`),
+  index("income_records_house_date_idx").on(table.houseId, table.receivedDate),
 ]);
 
 export const insertExpenseSchema = createInsertSchema(expensesTable).omit({

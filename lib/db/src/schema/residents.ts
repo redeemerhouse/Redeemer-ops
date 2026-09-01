@@ -1,4 +1,4 @@
-import { pgTable, serial, text, numeric, date, integer, timestamp, check } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, numeric, date, timestamp, check, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { sql } from "drizzle-orm";
 import { z } from "zod/v4";
@@ -22,6 +22,8 @@ export const residentsTable = pgTable("residents", {
   check("residents_status_allowed", sql`${table.status} IN ('active', 'pending', 'exited')`),
   check("residents_balance_non_negative", sql`${table.balance} >= 0`),
   check("residents_balance_maximum", sql`${table.balance} <= 99999999.99`),
+  index("residents_home_idx").on(table.home),
+  index("residents_email_idx").on(table.email),
 ]);
 
 export const insertResidentSchema = createInsertSchema(residentsTable).omit({

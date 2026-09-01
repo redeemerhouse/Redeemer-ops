@@ -50,12 +50,9 @@ if (isProduction) {
       "Production configuration is unsafe: SESSION_SECRET must be at least 32 characters; store it as a managed secret.",
     );
   }
-  if (
-    process.env.DB_SSL !== "true" &&
-    !process.env.DATABASE_URL?.toLowerCase().includes("sslmode=require")
-  ) {
+  if (process.env.DB_SSL !== "true") {
     throw new Error(
-      "Production configuration is unsafe: set DB_SSL=true or use a DATABASE_URL with sslmode=require.",
+      "Production configuration is unsafe: set DB_SSL=true to require certificate-verified database TLS.",
     );
   }
   for (const origin of corsOrigins) {

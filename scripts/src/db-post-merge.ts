@@ -8,6 +8,10 @@ import {
   inspectDatabaseSchema,
   type DrizzleSnapshot,
 } from "./db-schema-drift.js";
+import {
+  formatIntegrityViolations,
+  runIntegrityPreflight,
+} from "./db-integrity-preflight.js";
 
 const root = resolve(import.meta.dirname, "../..");
 const migrationDirectory = resolve(root, "lib/db/drizzle");
@@ -64,6 +68,11 @@ try {
   if (!state) fail("could not inspect migration state");
   if (state.public_ledger) {
     fail("a migration ledger exists in public instead of drizzle");
+  }
+
+  const violations = await runIntegrityPreflight(pool);
+  if (violations.length > 0) {
+    fail(`constraint-breaking rows detected: ${formatIntegrityViolations(violations)}. No rows were changed`);
   }
 
   if (!state.configured_ledger && Number(state.public_table_count) === 0) {

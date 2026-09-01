@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, text, numeric, date, check } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, numeric, date, check, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { sql } from "drizzle-orm";
 import { z } from "zod/v4";
@@ -18,6 +18,8 @@ export const paymentsTable = pgTable("payments", {
   check("payments_status_allowed", sql`${table.status} IN ('paid', 'due', 'overdue')`),
   check("payments_status_matches_paid_date", sql`(${table.status} = 'paid') = (${table.paidDate} IS NOT NULL)`),
   check("payments_method_length", sql`${table.method} IS NULL OR char_length(${table.method}) <= 80`),
+  index("payments_resident_due_date_idx").on(table.residentId, table.dueDate),
+  index("payments_status_due_date_idx").on(table.status, table.dueDate),
 ]);
 
 export const insertPaymentSchema = createInsertSchema(paymentsTable).omit({ id: true });

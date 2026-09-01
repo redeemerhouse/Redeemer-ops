@@ -14,6 +14,7 @@
     "test:retention": "node --experimental-strip-types --test test/retention-policy.test.ts",
     "test:security": "node --test test/security-controls.test.mjs",
     "test:documents": "node --test test/document-sharing.test.mjs",
+    "test:resident-import-integrity": "node --test test/resident-import-integrity.test.mjs",
     "test:overview": "node --test test/overview-metrics.test.mjs",
     "test:assessments": "node --test test/assessments.test.mjs",
     "test:policy": "node --experimental-strip-types --test test/policy.test.ts",

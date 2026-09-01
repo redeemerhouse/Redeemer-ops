@@ -52,7 +52,7 @@ managed secrets.
 | `NODE_ENV=production` | Enables production validation, fail-closed request protection, and TLS policy. | Without it, the process is not a production-equivalent release candidate. |
 | `PORT` | Supplies the listener port; the API binds it on `0.0.0.0`. | Startup throws before listening. |
 | `DATABASE_URL` | Selects the intended PostgreSQL target for application, session, and limiter state. | Production configuration throws before listening; the value is never logged. |
-| `DB_SSL=true` (or `sslmode=require`) | Requires encrypted PostgreSQL transport. | Production configuration throws before listening when neither form is present. |
+| `DB_SSL=true` | Requires certificate-verified PostgreSQL transport using the runtime's trusted CA store. | Production configuration throws before listening when absent. |
 | `SESSION_SECRET` | Signs authenticated access and session material; minimum 32 characters. | Production configuration throws before listening when missing or short. |
 | `CORS_ORIGINS` | Lists approved HTTPS browser origins. | Production configuration throws before listening when empty, invalid, or non-HTTPS. |
 | `API_RATE_LIMIT_STORE=postgres` | Requires the shared multi-instance protection store. | Production configuration throws before listening for missing, invalid, or memory values. |

@@ -9,6 +9,10 @@ import {
   inspectDatabaseSchema,
   type DrizzleSnapshot,
 } from "./db-schema-drift.js";
+import {
+  formatIntegrityViolations,
+  runIntegrityPreflight,
+} from "./db-integrity-preflight.js";
 
 const root = resolve(import.meta.dirname, "../..");
 const migrationDirectory = resolve(root, "lib/db/drizzle");
@@ -109,7 +113,7 @@ const poolConfig = {
   query_timeout: 20_000,
   statement_timeout: 15_000,
   ...(isProduction && process.env.DB_SSL === "true"
-    ? { ssl: { rejectUnauthorized: false } }
+    ? { ssl: { rejectUnauthorized: true } }
     : {}),
 };
 
@@ -167,7 +171,7 @@ const verifyTargetMigrationState = async () => {
       console.log(
         `Target has a compatible ${ledger.rows.length}-migration ledger prefix.`,
       );
-      return;
+      return "existing" as const;
     }
     if (state.public_ledger) {
       fail(
@@ -182,6 +186,7 @@ const verifyTargetMigrationState = async () => {
     console.log(
       "Target is a fresh database; the full checked-in migration chain will be applied.",
     );
+    return "fresh" as const;
   } finally {
     await pool.end();
   }
@@ -214,9 +219,30 @@ if (checkStatus !== 0) {
 console.log(
   "Checking whether the target is fresh or already on migration history...",
 );
-await verifyTargetMigrationState().catch((error: Error) => {
+const targetState = await verifyTargetMigrationState().catch((error: Error) => {
   fail(error.message);
 });
+if (targetState === "existing" && process.env.DB_WRITES_FROZEN !== "true") {
+  fail("DB_WRITES_FROZEN=true is required for an existing target after writes are stopped and the target is in a controlled migration window");
+}
+const migrationGuardPool = new Pool(poolConfig);
+if (targetState === "existing") {
+  await migrationGuardPool.query(
+    "SELECT pg_advisory_lock(1381250901, 732019447)",
+  );
+  console.log("Acquired the database migration guard; API mutation requests are blocked.");
+}
+
+console.log("Running read-only relationship and invariant preflight...");
+const preflightPool = new Pool(poolConfig);
+try {
+  const violations = await runIntegrityPreflight(preflightPool);
+  if (violations.length > 0) {
+    fail(`constraint-breaking rows detected: ${formatIntegrityViolations(violations)}. No rows were changed`);
+  }
+} finally {
+  await preflightPool.end();
+}
 
 console.log(
   `Applying ${sqlFiles.length} checked-in database migration(s) with the production command...`,
@@ -257,4 +283,10 @@ if (schemaComparisonFailure) {
   fail(schemaComparisonFailure);
 }
 
+if (targetState === "existing") {
+  await migrationGuardPool.query(
+    "SELECT pg_advisory_unlock(1381250901, 732019447)",
+  );
+}
+await migrationGuardPool.end();
 console.log("Database migration release check passed.");

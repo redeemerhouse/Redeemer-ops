@@ -32,6 +32,7 @@ export const authAccountsTable = pgTable("auth_accounts", {
 }, (table) => [
   uniqueIndex("auth_accounts_email_unique").on(table.email),
   check("auth_accounts_role_allowed", sql`${table.role} IN ('owner_admin', 'program_director', 'house_manager', 'resident')`),
+  index("auth_accounts_resident_idx").on(table.residentId),
 ]);
 
 export const authAccountHousesTable = pgTable("auth_account_houses", {
@@ -68,6 +69,7 @@ export const authActionTokensTable = pgTable("auth_action_tokens", {
 }, (table) => [
   uniqueIndex("auth_action_tokens_hash_unique").on(table.tokenHash),
   check("auth_action_tokens_type_allowed", sql`${table.type} IN ('email_verification', 'password_reset')`),
+  index("auth_action_tokens_account_idx").on(table.accountId),
 ]);
 
 export const insertAuthAccountSchema = createInsertSchema(authAccountsTable).omit({

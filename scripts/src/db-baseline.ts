@@ -883,7 +883,7 @@ const main = async () => {
     connectionTimeoutMillis: 5_000,
     idleTimeoutMillis: 5_000,
     ...(process.env.DB_SSL === "true"
-      ? { ssl: { rejectUnauthorized: false } }
+      ? { ssl: { rejectUnauthorized: true } }
       : {}),
   });
   const client = await pool.connect();

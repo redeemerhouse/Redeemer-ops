@@ -20,7 +20,7 @@ Configure ordinary environment values in the deployment settings:
 
 - `NODE_ENV=production`
 - `PORT` (the artifact supplies the service port)
-- `DB_SSL=true`
+- `DB_SSL=true` (requires certificate verification through the runtime's trusted CA store)
 - `CORS_ORIGINS=https://<the-private-pilot-web-origin>`
 - `API_RATE_LIMIT_STORE=postgres`
 - `TRUST_PROXY=true`

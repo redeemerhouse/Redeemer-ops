@@ -3,8 +3,8 @@ name: Replit production database TLS
 description: The node-postgres SSL policy required for Replit-managed PostgreSQL in production autoscale deployments.
 ---
 
-When production database SSL is enabled for node-postgres, use `ssl: { rejectUnauthorized: false }` for the Replit-managed production connection.
+Production node-postgres clients must use `ssl: { rejectUnauthorized: true }` and rely on the runtime's trusted CA store. `DB_SSL=true` is mandatory; a URL containing only `sslmode=require` is not accepted as a verification substitute.
 
-**Why:** Replit's managed production PostgreSQL endpoint requires SSL but uses a certificate setup that is incompatible with full certificate-chain verification in node-postgres. Requiring `rejectUnauthorized: true` prevents the API from connecting during startup, so the process exits before opening its deployment port.
+**Why:** Encryption without peer verification permits database endpoint impersonation and exposes resident, payment, and session data. A security review rejected the prior compatibility workaround that disabled certificate verification.
 
-**How to apply:** Keep the production-only SSL guard and encrypted connection, but do not tighten node-postgres certificate verification unless Replit's connection guidance or managed certificate chain changes. Verify changes with the exact production startup command and health endpoint.
+**How to apply:** Keep the policy consistent across runtime, integrity preflight, release checks, baselining, and post-merge tooling. Verify the exact production startup and health path before release; if the managed chain is not trusted, configure a trusted CA rather than disabling verification.

@@ -1,7 +1,8 @@
-import { pgTable, serial, text, integer, numeric, date, timestamp, boolean, jsonb, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, numeric, date, timestamp, boolean, jsonb, uniqueIndex, index, check } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { residentsTable } from "./residents";
 
 export const housesTable = pgTable("houses", {
   id: serial("id").primaryKey(),
@@ -21,7 +22,7 @@ export const applicationsTable = pgTable("applications", {
   applicantName: text("applicant_name").notNull(),
   email: text("email").notNull(),
   phone: text("phone"),
-  preferredHouseId: integer("preferred_house_id"),
+  preferredHouseId: integer("preferred_house_id").references(() => housesTable.id),
   status: text("status").notNull().default("draft"),
   familyInformation: jsonb("family_information"),
   referralHistory: text("referral_history"),
@@ -30,18 +31,22 @@ export const applicationsTable = pgTable("applications", {
   signedAcknowledgment: boolean("signed_acknowledgment").notNull().default(false),
   checklist: jsonb("checklist"),
   exceptionReason: text("exception_reason"),
-  convertedResidentId: integer("converted_resident_id"),
+  convertedResidentId: integer("converted_resident_id").references(() => residentsTable.id),
   source: text("source").notNull().default("direct"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index("applications_preferred_house_idx").on(table.preferredHouseId),
+  uniqueIndex("applications_converted_resident_unique").on(table.convertedResidentId),
+  index("applications_status_created_at_idx").on(table.status, table.createdAt),
+]);
 
 export const documentsTable = pgTable("documents", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
   category: text("category").notNull(),
-  residentId: integer("resident_id"),
-  applicationId: integer("application_id"),
+  residentId: integer("resident_id").references(() => residentsTable.id),
+  applicationId: integer("application_id").references(() => applicationsTable.id),
   objectPath: text("object_path"),
   fileName: text("file_name"),
   contentType: text("content_type"),
@@ -52,30 +57,42 @@ export const documentsTable = pgTable("documents", {
   sharedAt: timestamp("shared_at", { withTimezone: true }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  check(
+    "documents_single_owner_check",
+    sql`(CASE WHEN ${table.residentId} IS NULL THEN 0 ELSE 1 END + CASE WHEN ${table.applicationId} IS NULL THEN 0 ELSE 1 END) = 1`,
+  ),
+  index("documents_resident_created_at_idx").on(table.residentId, table.createdAt),
+  index("documents_application_created_at_idx").on(table.applicationId, table.createdAt),
+  index("documents_object_path_idx").on(table.objectPath),
+]);
 
 export const documentHistoryTable = pgTable("document_history", {
   id: serial("id").primaryKey(),
-  documentId: integer("document_id").notNull(),
+  documentId: integer("document_id").notNull().references(() => documentsTable.id),
   action: text("action").notNull(),
   actor: text("actor").notNull().default("system"),
   fromVisibility: text("from_visibility"),
   toVisibility: text("to_visibility"),
   objectPath: text("object_path"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index("document_history_document_created_at_idx").on(table.documentId, table.createdAt),
+]);
 
 export const operationsTable = pgTable("operations", {
   id: serial("id").primaryKey(),
   type: text("type").notNull(),
   title: text("title").notNull(),
-  residentId: integer("resident_id"),
+  residentId: integer("resident_id").references(() => residentsTable.id),
   scheduledDate: date("scheduled_date", { mode: "string" }),
   status: text("status").notNull().default("open"),
   notes: text("notes"),
   private: boolean("private").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index("operations_resident_scheduled_date_idx").on(table.residentId, table.scheduledDate),
+]);
 
 export const auditEventsTable = pgTable("audit_events", {
   id: serial("id").primaryKey(),
@@ -104,19 +121,24 @@ export const residentImportBatchesTable = pgTable("resident_import_batches", {
   failedRows: integer("failed_rows").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
-});
+}, (table) => [
+  index("resident_import_batches_status_created_at_idx").on(table.status, table.createdAt),
+]);
 
 export const residentImportRowsTable = pgTable("resident_import_rows", {
   id: serial("id").primaryKey(),
-  batchId: integer("batch_id").notNull(),
+  batchId: integer("batch_id").notNull().references(() => residentImportBatchesTable.id),
   rowNumber: integer("row_number").notNull(),
   sourceData: jsonb("source_data").notNull(),
   normalizedData: jsonb("normalized_data"),
   outcome: text("outcome").notNull().default("failed"),
   errors: jsonb("errors").notNull().default([]),
-  residentId: integer("resident_id"),
+  residentId: integer("resident_id").references(() => residentsTable.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  uniqueIndex("resident_import_rows_batch_row_unique").on(table.batchId, table.rowNumber),
+  index("resident_import_rows_resident_idx").on(table.residentId),
+]);
 
 export const assessmentTemplatesTable = pgTable("assessment_templates", {
   id: serial("id").primaryKey(),
@@ -137,8 +159,8 @@ export const assessmentTemplatesTable = pgTable("assessment_templates", {
 
 export const assessmentSubmissionsTable = pgTable("assessment_submissions", {
   id: serial("id").primaryKey(),
-  templateId: integer("template_id").notNull(),
-  residentId: integer("resident_id"),
+  templateId: integer("template_id").notNull().references(() => assessmentTemplatesTable.id),
+  residentId: integer("resident_id").references(() => residentsTable.id),
   status: text("status").notNull().default("draft"),
   answers: jsonb("answers").notNull().default({}),
   templateSnapshot: jsonb("template_snapshot"),
@@ -149,7 +171,10 @@ export const assessmentSubmissionsTable = pgTable("assessment_submissions", {
   submittedAt: timestamp("submitted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index("assessment_submissions_template_idx").on(table.templateId),
+  index("assessment_submissions_resident_created_at_idx").on(table.residentId, table.createdAt),
+]);
 
 export const insertHouseSchema = createInsertSchema(housesTable).omit({ id: true });
 export const insertApplicationSchema = createInsertSchema(applicationsTable).omit({ id: true, createdAt: true, updatedAt: true });

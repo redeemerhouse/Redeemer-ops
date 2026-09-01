@@ -1,4 +1,4 @@
-import { check, date, integer, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { check, date, index, integer, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -20,6 +20,7 @@ export const meetingAttendanceTable = pgTable("meeting_attendance", {
   check("meeting_attendance_women_attended_non_negative", sql`${table.womenAttended} >= 0`),
   check("meeting_attendance_women_eligible_non_negative", sql`${table.womenEligible} >= 0`),
   check("meeting_attendance_attended_within_eligible", sql`${table.womenAttended} <= ${table.womenEligible}`),
+  index("meeting_attendance_house_date_idx").on(table.houseId, table.meetingDate),
 ]);
 
 export const insertMeetingAttendanceSchema = createInsertSchema(meetingAttendanceTable).omit({

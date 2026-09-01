@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import * as XLSX from "xlsx";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import {
   db,
   housesTable,
@@ -49,7 +49,7 @@ type NormalizedRow = {
 };
 
 const requiredColumns: ImportColumn[] = ["name", "email", "phone", "home", "moveInDate", "status"];
-const identityRule = "Existing matches use normalized email; when email is unavailable, normalized name plus phone is used. Matching rows are skipped and never overwrite protected fields.";
+const identityRule = "Existing matches use normalized email. Matching rows are skipped and never overwrite protected fields.";
 const MAX_IMPORT_BYTES = 700_000;
 
 const trim = (value: unknown): string => String(value ?? "").trim();
@@ -234,9 +234,13 @@ router.post("/residents/import/preview", async (req, res): Promise<void> => {
     db.select({ id: residentsTable.id, name: residentsTable.name, email: residentsTable.email, phone: residentsTable.phone }).from(residentsTable),
   ]);
   const rows = validateRows(parsed.rows, houses, residents);
-  const [batch] = await db.insert(residentImportBatchesTable).values({ sourceFilename: filename.slice(0, 255), actor: res.locals.actorId ?? principal.sub, totalRows: rows.length, validRows: rows.filter((row) => row.valid).length }).returning();
-  await db.insert(residentImportRowsTable).values(rows.map((row) => ({ batchId: batch.id, rowNumber: row.rowNumber, sourceData: row.sourceData, normalizedData: row.normalizedData, outcome: row.valid ? "ready" : "failed", errors: row.errors })));
-  await db.insert(auditEventsTable).values({ action: "Resident import previewed", entityType: "resident_import", entityId: batch.id, actor: res.locals.actorId ?? principal.sub, metadata: { sourceFilename: batch.sourceFilename, totalRows: rows.length, validRows: rows.filter((row) => row.valid).length, failedRows: rows.filter((row) => !row.valid).length, identityRule } });
+
+  const batch = await db.transaction(async (tx) => {
+    const [created] = await tx.insert(residentImportBatchesTable).values({ sourceFilename: filename.slice(0, 255), actor: res.locals.actorId ?? principal.sub, totalRows: rows.length, validRows: rows.filter((row) => row.valid).length }).returning();
+    await tx.insert(residentImportRowsTable).values(rows.map((row) => ({ batchId: created.id, rowNumber: row.rowNumber, sourceData: row.sourceData, normalizedData: row.normalizedData, outcome: row.valid ? "ready" : "failed", errors: row.errors })));
+    await tx.insert(auditEventsTable).values({ action: "Resident import previewed", entityType: "resident_import", entityId: created.id, actor: res.locals.actorId ?? principal.sub, metadata: { sourceFilename: created.sourceFilename, totalRows: rows.length, validRows: rows.filter((row) => row.valid).length, failedRows: rows.filter((row) => !row.valid).length, identityRule } });
+    return created;
+  });
   res.status(201).json({
     batchId: batch.id,
     sourceFilename: batch.sourceFilename,
@@ -251,28 +255,71 @@ router.post("/residents/import/:batchId/confirm", async (req, res): Promise<void
   const principal = getPrincipal(res);
   if (!canUseImport(principal)) { problem(req, res, 403); return; }
   const batchId = Number(req.params.batchId);
-  const approvedRowNumbers = Array.isArray(req.body?.approvedRowNumbers) ? req.body.approvedRowNumbers.filter((value: unknown): value is number => Number.isInteger(value)) : [];
-  if (!Number.isInteger(batchId) || batchId <= 0 || !approvedRowNumbers.length) { res.status(400).json({ error: "Explicitly approve at least one valid row before importing.", correlationId: res.locals.correlationId }); return; }
-  const [batch] = await db.select().from(residentImportBatchesTable).where(eq(residentImportBatchesTable.id, batchId));
-  if (!batch || batch.status !== "preview") { problem(req, res, 404); return; }
-  if (principal.role === "house_manager" && batch.actor !== principal.sub) { problem(req, res, 404); return; }
-  const rows = await db.select().from(residentImportRowsTable).where(and(eq(residentImportRowsTable.batchId, batchId), inArray(residentImportRowsTable.rowNumber, approvedRowNumbers)));
-  if (!rows.length || rows.some((row) => row.outcome !== "ready" || !row.normalizedData)) { res.status(400).json({ error: "Only rows that passed preview validation can be approved.", correlationId: res.locals.correlationId }); return; }
-  if (principal.role === "house_manager" && rows.some((row) => !hasHouseScope(principal, (row.normalizedData as NormalizedRow).home))) { problem(req, res, 403); return; }
+
+  const requestedRowNumbers = Array.isArray(req.body?.approvedRowNumbers) ? req.body.approvedRowNumbers : [];
+  const approvedRowNumbers = requestedRowNumbers.filter((value: unknown): value is number => Number.isInteger(value) && Number(value) > 0);
+  if (!Number.isInteger(batchId) || batchId <= 0 || !approvedRowNumbers.length || approvedRowNumbers.length !== requestedRowNumbers.length || new Set(approvedRowNumbers).size !== approvedRowNumbers.length) {
+    res.status(400).json({ error: "Explicitly approve distinct valid row numbers before importing.", correlationId: res.locals.correlationId }); return;
+  }
   const result = await db.transaction(async (tx) => {
+    const [batch] = await tx.select().from(residentImportBatchesTable).where(eq(residentImportBatchesTable.id, batchId)).for("update");
+    if (!batch) {
+      const notFound = new Error("Resident import batch was not found.") as Error & { status: number };
+      notFound.status = 404;
+      throw notFound;
+    }
+    if (batch.status !== "preview") {
+      const conflict = new Error("Resident import batch was already confirmed.") as Error & { status: number };
+      conflict.status = 409;
+      throw conflict;
+    }
+    if (principal.role === "house_manager" && batch.actor !== principal.sub) {
+      const notFound = new Error("Resident import batch was not found.") as Error & { status: number };
+      notFound.status = 404;
+      throw notFound;
+    }
+    const rows = await tx.select().from(residentImportRowsTable).where(and(eq(residentImportRowsTable.batchId, batchId), inArray(residentImportRowsTable.rowNumber, approvedRowNumbers)));
+    if (rows.length !== approvedRowNumbers.length || rows.some((row) => row.outcome !== "ready" || !row.normalizedData)) {
+      const invalid = new Error("Only rows that passed preview validation can be approved.") as Error & { status: number };
+      invalid.status = 400;
+      throw invalid;
+    }
+    if (principal.role === "house_manager" && rows.some((row) => !hasHouseScope(principal, (row.normalizedData as NormalizedRow).home))) {
+      const forbidden = new Error("Approved rows are outside the assigned house scope.") as Error & { status: number };
+      forbidden.status = 403;
+      throw forbidden;
+    }
+    const identities = [...new Set(rows.map((row) => normalized((row.normalizedData as NormalizedRow).email)))].sort();
+    for (const identity of identities) {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${identity}, 0))`);
+    }
     const imported: number[] = [];
     for (const row of rows) {
       const data = row.normalizedData as NormalizedRow;
+      const [existing] = await tx
+        .select({ id: residentsTable.id })
+        .from(residentsTable)
+        .where(sql`lower(trim(${residentsTable.email})) = ${normalized(data.email)}`)
+        .limit(1);
+      if (existing) {
+        await tx.update(residentImportRowsTable).set({ outcome: "skipped" }).where(eq(residentImportRowsTable.id, row.id));
+        continue;
+      }
       const [created] = await tx.insert(residentsTable).values({ ...data, balance: data.balance, nextPaymentDate: data.nextPaymentDate }).returning({ id: residentsTable.id });
       await tx.update(residentImportRowsTable).set({ outcome: "imported", residentId: created.id }).where(eq(residentImportRowsTable.id, row.id));
       imported.push(created.id);
     }
     await tx.update(residentImportRowsTable).set({ outcome: "skipped" }).where(and(eq(residentImportRowsTable.batchId, batchId), eq(residentImportRowsTable.outcome, "ready")));
-    await tx.update(residentImportBatchesTable).set({ status: "confirmed", importedRows: imported.length, failedRows: batch.totalRows - imported.length, confirmedAt: new Date() }).where(eq(residentImportBatchesTable.id, batchId));
-    return imported;
+    const [confirmed] = await tx.update(residentImportBatchesTable).set({ status: "confirmed", importedRows: imported.length, failedRows: batch.totalRows - imported.length, confirmedAt: new Date() }).where(and(eq(residentImportBatchesTable.id, batchId), eq(residentImportBatchesTable.status, "preview"))).returning();
+    if (!confirmed) {
+      const conflict = new Error("Resident import batch was confirmed concurrently.") as Error & { status: number };
+      conflict.status = 409;
+      throw conflict;
+    }
+    await tx.insert(auditEventsTable).values({ action: "Resident import confirmed", entityType: "resident_import", entityId: batchId, actor: res.locals.actorId ?? principal.sub, metadata: { importedRows: imported.length, skippedRows: batch.totalRows - imported.length } });
+    return { imported, totalRows: batch.totalRows };
   });
-  await db.insert(auditEventsTable).values({ action: "Resident import confirmed", entityType: "resident_import", entityId: batchId, actor: res.locals.actorId ?? principal.sub, metadata: { importedRows: result.length, skippedRows: batch.totalRows - result.length } });
-  res.json({ batchId, status: "confirmed", importedResidentIds: result, imported: result.length, skipped: batch.totalRows - result.length });
+  res.json({ batchId, status: "confirmed", importedResidentIds: result.imported, imported: result.imported.length, skipped: result.totalRows - result.imported.length });
 });
 
 export default router;

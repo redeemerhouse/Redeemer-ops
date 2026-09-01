@@ -191,3 +191,44 @@ test("does not expose staff-only documents in resident listings", { skip: !canRu
   assert.equal(otherResidentDocuments.status, 200);
   assert.ok(!(await json(otherResidentDocuments)).some((document) => document.id === created.id));
 });
+
+test("serializes competing document visibility history", { skip: !canRun }, async () => {
+  const residentId = await findResidentId();
+  const title = `${unique}-concurrent`;
+  const createdResponse = await request("/documents", {
+    method: "POST",
+    headers: authHeaders({ sub: actor }),
+    body: JSON.stringify(documentPayload({ title, residentId })),
+  });
+  assert.equal(createdResponse.status, 201);
+  const created = await json(createdResponse);
+
+  const [residentUpdate, staffUpdate] = await Promise.all([
+    request(`/documents/${created.id}`, {
+      method: "PATCH",
+      headers: authHeaders({ sub: actor }),
+      body: JSON.stringify({ visibility: "resident" }),
+    }),
+    request(`/documents/${created.id}`, {
+      method: "PATCH",
+      headers: authHeaders({ sub: actor }),
+      body: JSON.stringify({ visibility: "staff" }),
+    }),
+  ]);
+  assert.equal(residentUpdate.status, 200);
+  assert.equal(staffUpdate.status, 200);
+
+  const historyResponse = await request(`/documents/${created.id}/history`, {
+    headers: authHeaders({ sub: actor }),
+  });
+  assert.equal(historyResponse.status, 200);
+  const history = (await json(historyResponse)).slice().reverse();
+  assert.equal(history[0].action, "uploaded");
+  for (let index = 2; index < history.length; index += 1) {
+    assert.equal(
+      history[index].fromVisibility,
+      history[index - 1].toVisibility,
+      "each serialized history event must start from the prior committed visibility",
+    );
+  }
+});

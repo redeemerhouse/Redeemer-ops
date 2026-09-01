@@ -190,15 +190,18 @@ const safeActor = (req: Request): string =>
 
 const audit = async (req: Request, action: string, entityType: string, entityId?: number, metadata?: Record<string, string | number | boolean | null>) => 
 {
+  await db.insert(auditEventsTable).values(auditValues(req, action, entityType, entityId, metadata));
+}
+;
 
+const auditValues = (req: Request, action: string, entityType: string, entityId?: number, metadata?: Record<string, string | number | boolean | null>) => {
   const retentionUntil = new Date()
 ;
 
   retentionUntil.setUTCFullYear(retentionUntil.getUTCFullYear() + AUDIT_RETENTION_YEARS)
 ;
 
-  await db.insert(auditEventsTable).values(
-{
+  return {
 
     action,
     entityType,
@@ -215,10 +218,7 @@ const audit = async (req: Request, action: string, entityType: string, entityId?
 }
 ,
   
-}
-)
-;
-
+};
 }
 ;
 
@@ -610,8 +610,19 @@ router.post("/residents", async (req, res): Promise<void> => {
   const parsed = CreateResidentBody.strict().safeParse(req.body);
   if (!parsed.success) { problem(req, res, 400); return; }
   if (!authorize(principal, "resident:create", { targetHouseName: parsed.data.home })) { problem(req, res, 403); return; }
-  const [created] = await db.insert(residentsTable).values({ ...parsed.data, nextPaymentDate: parsed.data.moveInDate }).returning();
-  await audit(req, "Resident added", "resident", created.id);
+  const created = await db.transaction(async (tx) => {
+    const identity = parsed.data.email.trim().toLocaleLowerCase();
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${identity}, 0))`);
+    const [existing] = await tx.select({ id: residentsTable.id }).from(residentsTable).where(sql`lower(trim(${residentsTable.email})) = ${identity}`).limit(1);
+    if (existing) {
+      const conflict = new Error("A resident with this normalized email already exists.") as Error & { status: number };
+      conflict.status = 409;
+      throw conflict;
+    }
+    const [record] = await tx.insert(residentsTable).values({ ...parsed.data, nextPaymentDate: parsed.data.moveInDate }).returning();
+    await tx.insert(auditEventsTable).values(auditValues(req, "Resident added", "resident", record.id));
+    return record;
+  });
   res.status(201).json(asResident(created, principal));
 });
 
@@ -713,9 +724,11 @@ router.post("/payments", async (req, res): Promise<void> => {
         })
         .where(eq(residentsTable.id, resident.id));
     }
+    await tx.insert(auditEventsTable).values(
+      auditValues(req, "Payment recorded", "payment", payment.id, { method: parsed.data.method ?? null }),
+    );
     return payment;
   });
-  await audit(req, "Payment recorded", "payment", created.id, { method: parsed.data.method ?? null });
   res.status(201).json(CreatePaymentResponse.parse({
     id: created.id,
     residentId: created.residentId,
@@ -946,9 +959,12 @@ router.post("/documents", async (req, res): Promise<void> => {
     problem(req, res, 404);
     return;
   }
-  const [created] = await db.insert(documentsTable).values(document).returning();
-  await db.insert(documentHistoryTable).values({ documentId: created.id, action: "uploaded", actor: safeActor(req), objectPath: created.objectPath });
-  await audit(req, "Document uploaded", "document", created.id, { category: created.category });
+  const created = await db.transaction(async (tx) => {
+    const [record] = await tx.insert(documentsTable).values(document).returning();
+    await tx.insert(documentHistoryTable).values({ documentId: record.id, action: "uploaded", actor: safeActor(req), objectPath: record.objectPath });
+    await tx.insert(auditEventsTable).values(auditValues(req, "Document uploaded", "document", record.id, { category: record.category }));
+    return record;
+  });
   res.status(201).json(created);
 });
 router.get("/documents/:id/history", async (req, res): Promise<void> => {
@@ -970,12 +986,7 @@ router.patch("/documents/:id", async (req, res): Promise<void> => {
   const principal = getPrincipal(res);
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) { problem(req, res, 404); return; }
-  const [current] = await db.select(getTableColumns(documentsTable)).from(documentsTable).where(eq(documentsTable.id, id));
-  if (!current || principal.role === "resident") { problem(req, res, 404); return; }
-  const [currentResident] = current.residentId
-    ? await db.select({ id: residentsTable.id, home: residentsTable.home }).from(residentsTable).where(eq(residentsTable.id, current.residentId))
-    : [];
-  if (!currentResident || !canAccessResident(principal, currentResident, true)) { problem(req, res, 404); return; }
+  if (principal.role === "resident") { problem(req, res, 404); return; }
 
   const immutableFields = ["status", "objectPath", "fileName", "contentType", "fileSize", "applicationId", "uploadedBy"] as const;
   if (immutableFields.some((key) => Object.prototype.hasOwnProperty.call(req.body ?? {}, key))) {
@@ -997,38 +1008,66 @@ router.patch("/documents/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  const nextVisibility = changes.visibility ?? current.visibility;
-  const nextResidentId = changes.residentId === undefined ? current.residentId : changes.residentId;
-  const candidateFile = {
-    objectPath: changes.objectPath ?? current.objectPath,
-    fileName: changes.fileName ?? current.fileName,
-    contentType: changes.contentType ?? current.contentType,
-    fileSize: changes.fileSize ?? current.fileSize,
-  };
-  if (!isValidDocumentVisibility(nextVisibility) || (nextVisibility === "resident" && (!Number.isInteger(nextResidentId) || Number(nextResidentId) <= 0)) || !hasCompleteFileMetadata(candidateFile)) {
-    res.status(400).json({ error: documentMetadataError });
-    return;
-  }
-  const [targetResident] = Number.isInteger(nextResidentId)
-    ? await db.select({ id: residentsTable.id, home: residentsTable.home }).from(residentsTable).where(eq(residentsTable.id, Number(nextResidentId)))
-    : [];
-  if (!targetResident || !canAccessResident(principal, targetResident, true)) { problem(req, res, 404); return; }
-
-  const [updated] = await db.update(documentsTable).set({
-    ...changes,
-    sharedAt: nextVisibility === "resident" && current.visibility !== "resident" ? new Date() : current.sharedAt,
-    updatedAt: new Date(),
-  }).where(eq(documentsTable.id, id)).returning();
-  const accessChanged = nextVisibility !== current.visibility;
-  await db.insert(documentHistoryTable).values({
-    documentId: id,
-    action: accessChanged ? "access_changed" : "updated",
-    actor: safeActor(req),
-    fromVisibility: current.visibility,
-    toVisibility: updated.visibility,
-    objectPath: updated.objectPath,
+  const updated = await db.transaction(async (tx) => {
+    const [current] = await tx.select(getTableColumns(documentsTable)).from(documentsTable).where(eq(documentsTable.id, id)).for("update");
+    if (!current) {
+      const notFound = new Error("Document no longer exists.") as Error & { status: number };
+      notFound.status = 404;
+      throw notFound;
+    }
+    const [currentResident] = current.residentId
+      ? await tx.select({ id: residentsTable.id, home: residentsTable.home }).from(residentsTable).where(eq(residentsTable.id, current.residentId))
+      : [];
+    if (!currentResident || !canAccessResident(principal, currentResident, true)) {
+      const notFound = new Error("Document was not found in the authorized scope.") as Error & { status: number };
+      notFound.status = 404;
+      throw notFound;
+    }
+    const nextVisibility = changes.visibility ?? current.visibility;
+    const nextResidentId = changes.residentId === undefined ? current.residentId : changes.residentId;
+    const candidateFile = {
+      objectPath: changes.objectPath ?? current.objectPath,
+      fileName: changes.fileName ?? current.fileName,
+      contentType: changes.contentType ?? current.contentType,
+      fileSize: changes.fileSize ?? current.fileSize,
+    };
+    if (!isValidDocumentVisibility(nextVisibility) || (nextVisibility === "resident" && (!Number.isInteger(nextResidentId) || Number(nextResidentId) <= 0)) || !hasCompleteFileMetadata(candidateFile)) {
+      const invalid = new Error(documentMetadataError) as Error & { status: number };
+      invalid.status = 400;
+      throw invalid;
+    }
+    const [targetResident] = Number.isInteger(nextResidentId)
+      ? await tx.select({ id: residentsTable.id, home: residentsTable.home }).from(residentsTable).where(eq(residentsTable.id, Number(nextResidentId)))
+      : [];
+    if (!targetResident || !canAccessResident(principal, targetResident, true)) {
+      const notFound = new Error("Target resident was not found in the authorized scope.") as Error & { status: number };
+      notFound.status = 404;
+      throw notFound;
+    }
+    const accessChanged = nextVisibility !== current.visibility;
+    const [record] = await tx.update(documentsTable).set({
+      ...changes,
+      sharedAt: nextVisibility === "resident" && current.visibility !== "resident" ? new Date() : current.sharedAt,
+      updatedAt: new Date(),
+    }).where(eq(documentsTable.id, id)).returning();
+    if (!record) {
+      const notFound = new Error("Document no longer exists.") as Error & { status: number };
+      notFound.status = 404;
+      throw notFound;
+    }
+    await tx.insert(documentHistoryTable).values({
+      documentId: id,
+      action: accessChanged ? "access_changed" : "updated",
+      actor: safeActor(req),
+      fromVisibility: current.visibility,
+      toVisibility: record.visibility,
+      objectPath: record.objectPath,
+    });
+    await tx.insert(auditEventsTable).values(
+      auditValues(req, accessChanged ? "Document access changed" : "Document updated", "document", id),
+    );
+    return record;
   });
-  await audit(req, accessChanged ? "Document access changed" : "Document updated", "document", id);
   res.json(updated);
 });
 router.get("/operations", async (_req, res): Promise<void> => {

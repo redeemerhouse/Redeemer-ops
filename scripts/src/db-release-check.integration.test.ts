@@ -84,6 +84,7 @@ const runReleaseCheck = async (
   runCommand("pnpm", ["run", "db:release-check"], {
     ...process.env,
     DATABASE_URL: databaseUrl,
+    DB_WRITES_FROZEN: "true",
     FORCE_COLOR: "0",
   });
 
@@ -458,6 +459,64 @@ test(
       assert.match(
         reconciledResult.output,
         /Database migration release check passed\./,
+      );
+    } finally {
+      if (databaseCreated) {
+        await adminPool.query(
+          `DROP DATABASE ${quoteIdentifier(databaseName)} WITH (FORCE)`,
+        );
+      }
+      await adminPool.end();
+    }
+  },
+);
+
+test(
+  "integrity preflight blocks constraint-breaking legacy rows without mutation",
+  { skip: !configuredDatabaseUrl, timeout: 180_000 },
+  async () => {
+    assert.ok(configuredDatabaseUrl);
+    const databaseName = `integrity_gate_${process.pid}_${randomUUID().slice(0, 8)}`;
+    const adminUrl = temporaryDatabaseUrl(configuredDatabaseUrl, "postgres");
+    const testUrl = temporaryDatabaseUrl(configuredDatabaseUrl, databaseName);
+    const adminPool = new Pool({
+      connectionString: adminUrl,
+      max: 1,
+      connectionTimeoutMillis: 5_000,
+    });
+    let databaseCreated = false;
+
+    try {
+      await adminPool.query(`CREATE DATABASE ${quoteIdentifier(databaseName)}`);
+      databaseCreated = true;
+      await applyMigrationPrefix(testUrl, checkedInMigrationCount - 1);
+      await queryDatabase(testUrl, `
+        INSERT INTO documents (title, category, visibility, status)
+        VALUES ('INVALID_FIXTURE_VALUE', 'fixture', 'staff', 'requested')
+      `);
+      const before = await queryDatabase<{ count: string }>(
+        testUrl,
+        `SELECT count(*)::text AS count FROM documents`,
+      );
+
+      const result = await runReleaseCheck(testUrl);
+      assert.notEqual(result.status, 0, result.output);
+      assert.match(result.output, /documents_without_single_owner=1/);
+      assert.match(result.output, /No rows were changed/);
+      assert.doesNotMatch(result.output, /INVALID_FIXTURE_VALUE/);
+      assert.deepEqual(
+        await queryDatabase<{ count: string }>(
+          testUrl,
+          `SELECT count(*)::text AS count FROM documents`,
+        ),
+        before,
+      );
+      assert.deepEqual(
+        await queryDatabase<{ count: string }>(
+          testUrl,
+          `SELECT count(*)::text AS count FROM "drizzle"."__drizzle_migrations"`,
+        ),
+        [{ count: String(checkedInMigrationCount - 1) }],
       );
     } finally {
       if (databaseCreated) {

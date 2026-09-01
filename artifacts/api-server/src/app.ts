@@ -8,6 +8,7 @@ import { errorHandler, notFoundHandler } from "./middlewares/errors";
 import { requestId, requestParameterLimit, requestTimeout, responseSizeLimit, createRouteRateLimit, routeRateLimit, securityHeaders } from "./middlewares/security";
 import type { RateLimitStore } from "./lib/rateLimitStore";
 import { createHealthRouter, type ReadinessChecks } from "./routes/health";
+import { databaseMigrationGuard } from "./middlewares/database-migration-lock";
 
 export type AppOptions = {
   rateLimitStore?: RateLimitStore;
@@ -59,6 +60,7 @@ export function createApp(options: AppOptions = {}): Express {
   app.use(express.json({ limit: serverConfig.bodyLimit, strict: true }));
   app.use(express.urlencoded({ extended: false, limit: serverConfig.bodyLimit, parameterLimit: serverConfig.maxParameters }));
   app.use(requestParameterLimit);
+  app.use("/api", databaseMigrationGuard);
 
   app.use("/api", createHealthRouter(options.readinessChecks, options.rateLimitStore));
   app.use("/api", options.rateLimitStore ? createRouteRateLimit(options.rateLimitStore) : routeRateLimit, router);

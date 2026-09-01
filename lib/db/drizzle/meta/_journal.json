@@ -57,6 +57,13 @@
       "when": 1788288927305,
       "tag": "0007_sour_jigsaw",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1788293036848,
+      "tag": "0008_tired_anita_blake",
+      "breakpoints": true
     }
   ]
 }
