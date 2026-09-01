@@ -6,7 +6,8 @@ ONEsource gives Redeemer House teams a dependable workspace for resident intake,
 
 - `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
 - `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
+- `pnpm run build` — typecheck + build the deployable Recovery Housing Operations web app and API; the development-only Canvas artifact is excluded
+- `pnpm run build:production` — build only the web and API production artifacts without repeating typecheck
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run generate` — generate a reviewed SQL migration after schema changes
 - `pnpm --filter @workspace/db run migrate` — apply checked-in migrations non-interactively
@@ -53,7 +54,7 @@ _Populate as you build — explicit user instructions worth remembering across s
 
 - Generate and review a migration after schema changes, then run `pnpm --filter @workspace/db run migrate`, `pnpm run typecheck`, and restart managed workflows.
 - Run `pnpm --filter @workspace/api-server run test:retention` for the focused 15-day quarantine/legal-hold policy checks.
-- Vite builds require the workflow-injected `PORT`; use the artifact workflow or provide `PORT` and `BASE_PATH` for a standalone build.
+- Vite development and preview servers require their workflow-injected `PORT` and `BASE_PATH`. Production builds use the artifact-safe defaults (`24336`/`/` for Recovery Housing Operations and `8081`/`/__mockup` for Canvas), while Canvas has no production service.
 
 ## Pointers
 

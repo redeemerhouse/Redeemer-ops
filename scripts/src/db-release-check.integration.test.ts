@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { spawn } from "node:child_process";
@@ -7,6 +8,10 @@ import test from "node:test";
 
 const root = resolve(import.meta.dirname, "../..");
 const configuredDatabaseUrl = process.env.DATABASE_URL;
+const migrationJournal = JSON.parse(
+  readFileSync(resolve(root, "lib/db/drizzle/meta/_journal.json"), "utf8"),
+) as { entries?: unknown[] };
+const checkedInMigrationCount = migrationJournal.entries?.length ?? 0;
 
 type DatabasePool = {
   query<T>(text: string): Promise<{ rows: T[] }>;
@@ -84,7 +89,9 @@ test(
       assert.equal(cleanResult.status, 0, cleanResult.output);
       assert.match(
         cleanResult.output,
-        /Applying 5 checked-in database migration\(s\) with the production command/,
+        new RegExp(
+          `Applying ${checkedInMigrationCount} checked-in database migration\\(s\\) with the production command`,
+        ),
       );
       assert.match(
         cleanResult.output,

@@ -35,13 +35,25 @@ include its value.
 
 ## 3. Release and migration
 
-1. Run `pnpm run codegen:check`.
-2. Run `pnpm run build` with the artifact-provided ports (`PORT` and `BASE_PATH`).
+1. Run `pnpm run release:verify` after configuring `DATABASE_URL`. This is the complete
+   pre-publish gate: it runs `codegen:check`, the deployable production builds, the database
+   release check, and the security release gate.
+2. If a phase needs to be isolated, use the same commands used by the root build:
+   `PORT=24336 BASE_PATH=/ pnpm --filter @workspace/recovery-housing-operations run build`
+   and `NODE_ENV=production pnpm --filter @workspace/api-server run build`. These commands
+   build the web and API artifacts only; the development-only Canvas preview is not a
+   production service.
 3. Use the API production start command, which runs `pnpm run db:release-check` before the
    server accepts traffic. It validates the journal, applies only checked-in migrations, and
    compares the target catalog with the committed snapshot.
 4. Confirm publish configuration contains no `drizzle-kit push` or `push-force` command.
 5. Confirm API startup creates no seed houses, residents, payments, operations, or templates.
+
+If publishing fails, identify the phase before changing configuration: build failures are
+reported by `pnpm run build` and name the affected artifact; release-start failures come from
+`start:release` or its database check and identify the missing production prerequisite without
+printing secret values; health verification failures are checked through `/api/healthz` after
+the service is listening.
 
 ## 4. Health and smoke test
 
