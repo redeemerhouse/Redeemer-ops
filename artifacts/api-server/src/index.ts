@@ -21,8 +21,8 @@ let server: Server | null = null;
 let shuttingDown = false;
 
 try {
-  server = app.listen(port, () => {
-    logger.info({ port }, "Server listening");
+  server = app.listen(port, "0.0.0.0", () => {
+    logger.info({ host: "0.0.0.0", port }, "Server listening");
   });
   server.on("error", (error) => {
     logger.error({ errorType: error instanceof Error ? error.name : typeof error }, "Error listening on port");

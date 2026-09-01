@@ -55,7 +55,48 @@ Publish flow; startup failures come from the API process and identify missing pr
 configuration without printing secret values; health verification failures are checked through
 `/api/healthz` after the service is listening.
 
+Preserve the first API process line before the repeated router health errors:
+
+- no `Server listening` line means the failure is in configuration, release work, dependency
+  loading, or database setup before port binding;
+- `Server listening` followed by a failing `/api/healthz` request means the listener is healthy
+  and the failure is in readiness, routing, or the shared protection store;
+- a router error for `/api` before the process starts is secondary evidence, not the root API
+  process error;
+- API startup must run `pnpm --filter @workspace/api-server run start` only. Run
+  `pnpm run db:release-check` as a separate release phase; never wrap it into the server start
+  command.
+
+See `docs/api-publish-health-debugging-report.md` for the captured failure and correction.
+
 ## 4. Health and smoke test
+
+Before publish, run the production-equivalent API acceptance path from the repository root:
+
+```sh
+pnpm install --frozen-lockfile
+NODE_ENV=production pnpm --filter @workspace/api-server run build
+NODE_ENV=production \
+  PORT=8080 \
+  DB_SSL=true \
+  CORS_ORIGINS=https://redeemerhouse.replit.app,https://app.redeemerhouse.com \
+  API_RATE_LIMIT_STORE=postgres \
+  TRUST_PROXY=true \
+  pnpm --filter @workspace/api-server run start
+```
+
+Keep `DATABASE_URL` and `SESSION_SECRET` in managed secrets; do not paste them into the
+command or an operator log. In a second shell, confirm the listener and public boundary:
+
+```sh
+curl --fail --silent --show-error http://127.0.0.1:8080/api/healthz
+curl --silent --show-error --output /dev/null --write-out '%{http_code}\n' \
+  http://127.0.0.1:8080/api/residents
+```
+
+The first command must return `{ "status": "ok" }`; the protected route must return `401`.
+Leave the process running long enough to confirm it does not exit after initial requests, then
+send `SIGTERM` and require a clean exit after the listener and PostgreSQL pool close.
 
 After publish, verify `GET /api/healthz` returns `200` and `{ "status": "ok" }`. Then verify:
 
