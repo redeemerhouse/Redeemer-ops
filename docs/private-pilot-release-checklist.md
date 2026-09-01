@@ -85,7 +85,58 @@ responses, resident notes, payment values, or document contents into the operato
 3. If schema recovery is required, stop writes and use an approved restore/PITR or a reviewed
    forward migration after reconciling writes. Do not drop tables or delete operational data.
 
-## 6. Incident response
+
+## 6. Disposable recovery drill
+
+Run the recovery drill before the private pilot and after changing the migration, backup, restore,
+or shutdown procedure:
+
+```sh
+pnpm run test:db-release-check
+```
+
+`DATABASE_URL` must point to a non-client PostgreSQL server where the test role may create and
+drop databases. PostgreSQL `pg_dump` and `pg_restore` must be available. The drill never restores
+over the configured database. It creates uniquely named disposable source and restore databases,
+uses synthetic `.invalid` fixture data only, and removes the databases and temporary custom-format
+backup afterward.
+
+The compatible rollback artifact is built in a detached temporary worktree from the pinned
+revision `5d20712b9737ede530e00067a41181ee744bfe8e`. This is the reviewed non-seeding private-pilot
+release immediately before the current candidate. A reviewed replacement can be selected with
+`RECOVERY_DRILL_COMPATIBLE_REVISION`; the chosen revision must be a full commit ID that remains
+available in the repository and is known to be an approved fallback. The drill records both the
+current release-candidate revision and the separately built compatible revision.
+
+The drill:
+
+1. creates a target on a compatible checked-in migration-ledger prefix;
+2. records a database recovery-point timestamp and takes a custom-format backup;
+3. applies the remaining checked-in migration through `db:release-check`;
+4. restores the pre-migration backup into a second empty database;
+5. runs `db:release-check` on the restored prefix to reconcile it forward;
+6. compares only synthetic row counts and a one-way fingerprint, then verifies the complete
+   migration ledger and committed catalog snapshot;
+7. builds and starts the current release-candidate revision, sends `SIGTERM`, and confirms a clean
+   exit; and
+8. separately checks out, installs, builds, and starts the selected compatible revision against
+   the same forward-migrated schema with production-equivalent TLS, HTTPS CORS, session-secret,
+   and PostgreSQL rate-limit settings; confirms health; sends `SIGTERM`; proves all business-table
+   counts are unchanged; and proves the migration ledger was not reversed.
+
+Passing output records only the recovery point, migration counts, synthetic row count, restore and
+verification status, candidate and compatible revision IDs, shutdown result, and the fact that no
+reverse migration was attempted. It must not print database URLs, credentials, fixture values,
+resident data, or backup contents. Treat a skipped test as no evidence: provision a disposable
+PostgreSQL target and rerun it.
+
+## 7. Incident response
+
+For unauthorized access, cross-house disclosure, payment tampering, malware bypass, export
+leakage, or unsafe notifications: contain access, preserve correlation IDs and audit evidence,
+notify the owner administrator, and stop the release. Do not include sensitive payloads in
+incident chat or routine logs.
+## 7. Incident response
 
 For unauthorized access, cross-house disclosure, payment tampering, malware bypass, export
 leakage, or unsafe notifications: contain access, preserve correlation IDs and audit evidence,
