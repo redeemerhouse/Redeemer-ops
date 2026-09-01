@@ -6,6 +6,7 @@
   "scripts": {
     "hello": "tsx ./src/hello.ts",
     "db:baseline": "tsx ./src/db-baseline.ts",
+    "db:post-merge": "tsx ./src/db-post-merge.ts",
     "db:release-check": "tsx ./src/db-release-check.ts",
     "test:db-baseline-integration": "bash ./test/db-baseline-integration.sh",
     "test:db-release-check": "node --import tsx --test src/db-release-check.integration.test.ts",
