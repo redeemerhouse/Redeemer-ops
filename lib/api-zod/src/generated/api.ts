@@ -18,6 +18,19 @@ export const HealthCheckResponse = zod.object({
 
 
 /**
+ * Reports whether PostgreSQL and shared request-protection infrastructure can serve application traffic.
+ * @summary Readiness check
+ */
+export const ReadinessCheckResponse = zod.object({
+  "status": zod.enum(['ready', 'not_ready']),
+  "dependencies": zod.object({
+  "database": zod.enum(['ok', 'unavailable']),
+  "rateLimitStore": zod.enum(['ok', 'unavailable'])
+})
+})
+
+
+/**
  * Returns only the safe identity and scope needed to render the authenticated workspace. Session credentials remain in an HttpOnly cookie.
  * @summary Verify the current browser session
  */
@@ -1315,5 +1328,3 @@ export const GetReportResponse = zod.object({
 }),
   "rows": zod.array(zod.record(zod.string(), zod.unknown()))
 })
-
-

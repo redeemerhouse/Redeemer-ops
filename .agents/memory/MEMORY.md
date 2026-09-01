@@ -15,3 +15,4 @@
 - [Account session boundary](account-session-boundary.md) — production browser access requires revocable DB sessions; assignment changes revoke stale principals.
 - [Orval dependency patching](orval-dependency-patching.md) — keep Orval exact when patching transitives; range upgrades can alter generated fetch header code.
 - [Dependency source integrity](dependency-source-integrity.md) — security upgrades must resolve through integrity-verified registry artifacts, not mutable remote tarball URLs.
+- [Liveness and readiness boundaries](liveness-readiness-boundaries.md) — keep process probes dependency-free; bound readiness work while proving every privilege used by protected traffic.

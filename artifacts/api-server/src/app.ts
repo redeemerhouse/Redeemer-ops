@@ -7,9 +7,11 @@ import { corsOrigins, serverConfig } from "./lib/config";
 import { errorHandler, notFoundHandler } from "./middlewares/errors";
 import { requestId, requestParameterLimit, requestTimeout, responseSizeLimit, createRouteRateLimit, routeRateLimit, securityHeaders } from "./middlewares/security";
 import type { RateLimitStore } from "./lib/rateLimitStore";
+import { createHealthRouter, type ReadinessChecks } from "./routes/health";
 
 export type AppOptions = {
   rateLimitStore?: RateLimitStore;
+  readinessChecks?: ReadinessChecks;
 };
 
 export function createApp(options: AppOptions = {}): Express {
@@ -58,6 +60,7 @@ export function createApp(options: AppOptions = {}): Express {
   app.use(express.urlencoded({ extended: false, limit: serverConfig.bodyLimit, parameterLimit: serverConfig.maxParameters }));
   app.use(requestParameterLimit);
 
+  app.use("/api", createHealthRouter(options.readinessChecks, options.rateLimitStore));
   app.use("/api", options.rateLimitStore ? createRouteRateLimit(options.rateLimitStore) : routeRateLimit, router);
   app.use(notFoundHandler);
   app.use(errorHandler);

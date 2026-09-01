@@ -9,6 +9,7 @@ import {
   type RateLimitStore,
 } from "../lib/rateLimitStore";
 import { problem } from "./errors";
+import { classifyDependencyFailure } from "../lib/dependencyDiagnostics";
 
 const memoryStore = createMemoryRateLimitStore();
 let postgresStorePromise: Promise<RateLimitStore> | undefined;
@@ -44,7 +45,11 @@ function noteSharedStoreFailure(error: unknown, now: number): void {
   if (lastSharedStoreFailureLogAt > now) return;
   lastSharedStoreFailureLogAt = sharedStoreUnavailableUntil;
   logger.error(
-    { errorType: error instanceof Error ? error.name : typeof error },
+    {
+      dependency: "rateLimitStore",
+      failureCategory: classifyDependencyFailure(error),
+      errorType: error instanceof Error ? error.name : typeof error,
+    },
     "Shared rate-limit store unavailable",
   );
 }
@@ -180,15 +185,13 @@ export function rateLimit(
 
 export function createRouteRateLimit(store?: RateLimitStore): RequestHandler {
   return (req, res, next) => {
-    const limiter = req.path.endsWith("/healthz")
-      ? rateLimit(serverConfig.healthRateLimit, "health", store)
-      : rateLimit(
-          ["GET", "HEAD"].includes(req.method)
-            ? serverConfig.readRateLimit
-            : serverConfig.mutationRateLimit,
-          "api",
-          store,
-        );
+    const limiter = rateLimit(
+      ["GET", "HEAD"].includes(req.method)
+        ? serverConfig.readRateLimit
+        : serverConfig.mutationRateLimit,
+      "api",
+      store,
+    );
     limiter(req, res, next);
   };
 }

@@ -50,6 +50,34 @@ test("fails closed during a shared-store outage and recovers without restarting"
     assert.ok(readyMatch, `outage test server did not start: ${logs}`);
     const baseUrl = `http://127.0.0.1:${readyMatch[1]}/api`;
 
+    for (let probe = 0; probe < 3; probe += 1) {
+      const livenessResponse = await fetch(`${baseUrl}/healthz`);
+      assert.equal(livenessResponse.status, 200);
+      assert.deepEqual(await livenessResponse.json(), { status: "ok" });
+    }
+
+    const readinessBurst = await Promise.all(
+      Array.from({ length: 20 }, (_, index) =>
+        fetch(`${baseUrl}/readyz`, {
+          headers: {
+            "X-Request-ID": index === 0
+              ? "readiness-outage-correlation"
+              : `readiness-burst-${index}`,
+          },
+        }),
+      ),
+    );
+    assert.ok(readinessBurst.every((response) => response.status === 503));
+    const unavailableReadinessResponse = readinessBurst[0]!;
+    assert.equal(unavailableReadinessResponse.status, 503);
+    assert.deepEqual(await unavailableReadinessResponse.json(), {
+      status: "not_ready",
+      dependencies: {
+        database: "ok",
+        rateLimitStore: "unavailable",
+      },
+    });
+
     const outageResponse = await fetch(`${baseUrl}/residents`, {
       headers: { "X-Request-ID": "outage-e2e-correlation" },
     });
@@ -70,6 +98,16 @@ test("fails closed during a shared-store outage and recovers without restarting"
 
     await new Promise((resolve) => setTimeout(resolve, 1_150));
 
+    const recoveredReadinessResponse = await fetch(`${baseUrl}/readyz`);
+    assert.equal(recoveredReadinessResponse.status, 200);
+    assert.deepEqual(await recoveredReadinessResponse.json(), {
+      status: "ready",
+      dependencies: {
+        database: "ok",
+        rateLimitStore: "ok",
+      },
+    });
+
     const recoveredResponse = await fetch(`${baseUrl}/residents`);
     const recoveredBody = await recoveredResponse.json();
     assert.equal(recoveredResponse.status, 401);
@@ -79,7 +117,11 @@ test("fails closed during a shared-store outage and recovers without restarting"
     await new Promise((resolve) => setTimeout(resolve, 25));
     assert.doesNotMatch(logs, /postgresql:\/\/|sensitive\.example|simulated shared-store outage|stack|sql/i);
     assert.match(logs, /Shared rate-limit store unavailable/);
+    assert.match(logs, /Dependency readiness check failed/);
+    assert.match(logs, /"dependency":"rateLimitStore"/);
+    assert.match(logs, /"failureCategory":"connectivity"/);
     assert.match(logs, /OUTAGE_TEST_STORE_RECOVERED/);
+    assert.equal(logs.match(/OUTAGE_TEST_READINESS_CHECK/g)?.length, 2);
   } finally {
     if (child.exitCode === null && child.signalCode === null) {
       child.kill("SIGTERM");
@@ -123,6 +165,58 @@ test("shares a counter between store instances backed by the same deployment sto
     count: 3,
     resetAt: 61_000,
   });
+});
+
+test("checks the shared rate-limit table and required privileges without changing a bucket", async () => {
+  const healthyStore = createPostgresRateLimitStore({
+    async query<T extends Record<string, unknown>>(): Promise<{ rows: T[] }> {
+      return {
+        rows: [{
+          tableName: "api_rate_limit_buckets",
+          canSelect: true,
+          canInsert: true,
+          canUpdate: true,
+          canDelete: true,
+        } as T],
+      };
+    },
+  });
+  await healthyStore.check?.();
+
+  const missingStore = createPostgresRateLimitStore({
+    async query<T extends Record<string, unknown>>(): Promise<{ rows: T[] }> {
+      return {
+        rows: [{
+          tableName: null,
+          canSelect: false,
+          canInsert: false,
+          canUpdate: false,
+          canDelete: false,
+        } as T],
+      };
+    },
+  });
+  await assert.rejects(missingStore.check?.(), /unavailable/);
+});
+
+test("shared rate-limit readiness requires every privilege used by production traffic", async () => {
+  for (const missingPrivilege of ["canSelect", "canInsert", "canUpdate", "canDelete"] as const) {
+    const store = createPostgresRateLimitStore({
+      async query<T extends Record<string, unknown>>(): Promise<{ rows: T[] }> {
+        return {
+          rows: [{
+            tableName: "api_rate_limit_buckets",
+            canSelect: true,
+            canInsert: true,
+            canUpdate: true,
+            canDelete: true,
+            [missingPrivilege]: false,
+          } as T],
+        };
+      },
+    });
+    await assert.rejects(store.check?.(), /unavailable/, missingPrivilege);
+  }
 });
 
 test("memory store expires buckets without requiring external infrastructure", async () => {

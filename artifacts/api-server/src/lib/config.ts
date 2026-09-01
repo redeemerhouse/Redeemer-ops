@@ -84,13 +84,13 @@ export const serverConfig = {
   maxResponseBytes: Number(process.env.API_RESPONSE_LIMIT_BYTES ?? 2_000_000),
   requestTimeoutMs: Number(process.env.API_REQUEST_TIMEOUT_MS ?? 30_000),
   rateWindowMs: Number(process.env.API_RATE_WINDOW_MS ?? 60_000),
-  healthRateLimit: Number(process.env.API_HEALTH_RATE_LIMIT ?? 60),
   readRateLimit: Number(process.env.API_READ_RATE_LIMIT ?? 120),
   // Keep local development and integration tests usable without weakening the
   // production default. Production always uses the bounded deployment value.
   mutationRateLimit: Number(process.env.API_MUTATION_RATE_LIMIT ?? (isProduction ? 30 : 300)),
   rateLimitStore: configuredRateLimitStore as "memory" | "postgres",
   rateLimitStoreRetryMs: Number(process.env.API_RATE_LIMIT_STORE_RETRY_MS ?? 5_000),
+  readinessCacheMs: Number(process.env.API_READINESS_CACHE_MS ?? 1_000),
 };
 
 for (const [name, value] of Object.entries(serverConfig)) {

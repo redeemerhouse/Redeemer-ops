@@ -43,6 +43,40 @@ export interface HealthStatus {
   status: string;
 }
 
+export type ReadinessStatusStatus = typeof ReadinessStatusStatus[keyof typeof ReadinessStatusStatus];
+
+
+export const ReadinessStatusStatus = {
+  ready: 'ready',
+  not_ready: 'not_ready',
+} as const;
+
+export type ReadinessStatusDependenciesDatabase = typeof ReadinessStatusDependenciesDatabase[keyof typeof ReadinessStatusDependenciesDatabase];
+
+
+export const ReadinessStatusDependenciesDatabase = {
+  ok: 'ok',
+  unavailable: 'unavailable',
+} as const;
+
+export type ReadinessStatusDependenciesRateLimitStore = typeof ReadinessStatusDependenciesRateLimitStore[keyof typeof ReadinessStatusDependenciesRateLimitStore];
+
+
+export const ReadinessStatusDependenciesRateLimitStore = {
+  ok: 'ok',
+  unavailable: 'unavailable',
+} as const;
+
+export type ReadinessStatusDependencies = {
+  database: ReadinessStatusDependenciesDatabase;
+  rateLimitStore: ReadinessStatusDependenciesRateLimitStore;
+};
+
+export interface ReadinessStatus {
+  status: ReadinessStatusStatus;
+  dependencies: ReadinessStatusDependencies;
+}
+
 export type DashboardStatusCounts = {[key: string]: number};
 
 export type DashboardPeriod = {
@@ -888,4 +922,3 @@ house?: string;
 from?: string;
 to?: string;
 };
-

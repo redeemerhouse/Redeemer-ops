@@ -23,6 +23,7 @@ Configure ordinary environment values in the deployment settings:
 - `DB_SSL=true`
 - `CORS_ORIGINS=https://<the-private-pilot-web-origin>`
 - `API_RATE_LIMIT_STORE=postgres`
+- `TRUST_PROXY=true`
 
 Configure these as managed secrets, without putting their values in source control or logs:
 
@@ -31,7 +32,8 @@ Configure these as managed secrets, without putting their values in source contr
 
 The API refuses to start if the database URL, TLS posture, session secret, rate-limit store,
 or HTTPS CORS origin is missing or unsafe. Startup messages name the missing setting but never
-include its value.
+include its value. `TRUST_PROXY=true` is required by the approved one-proxy deployment topology;
+an unset value does not stop startup, so the release audit must reject it explicitly.
 
 ## 3. Release and migration
 
@@ -52,15 +54,15 @@ include its value.
 If publishing fails, identify the phase before changing configuration: build failures are
 reported by `pnpm run build` and name the affected artifact; schema changes are handled by the
 Publish flow; startup failures come from the API process and identify missing production
-configuration without printing secret values; health verification failures are checked through
-`/api/healthz` after the service is listening.
+configuration without printing secret values; process liveness is checked through
+`/api/healthz`, while dependency readiness is checked through `/api/readyz`.
 
 Preserve the first API process line before the repeated router health errors:
 
 - no `Server listening` line means the failure is in configuration, release work, dependency
   loading, or database setup before port binding;
-- `Server listening` followed by a failing `/api/healthz` request means the listener is healthy
-  and the failure is in readiness, routing, or the shared protection store;
+- `Server listening` followed by a passing `/api/healthz` and failing `/api/readyz` means the
+  process is alive but PostgreSQL or shared request protection is not ready;
 - a router error for `/api` before the process starts is secondary evidence, not the root API
   process error;
 - API startup must run `pnpm --filter @workspace/api-server run start` only. Run
@@ -90,15 +92,19 @@ command or an operator log. In a second shell, confirm the listener and public b
 
 ```sh
 curl --fail --silent --show-error http://127.0.0.1:8080/api/healthz
+curl --fail --silent --show-error http://127.0.0.1:8080/api/readyz
 curl --silent --show-error --output /dev/null --write-out '%{http_code}\n' \
   http://127.0.0.1:8080/api/residents
 ```
 
-The first command must return `{ "status": "ok" }`; the protected route must return `401`.
+The liveness command must return `{ "status": "ok" }`. Readiness must return `200` with both
+dependencies `ok`; the protected route must return `401`.
 Leave the process running long enough to confirm it does not exit after initial requests, then
 send `SIGTERM` and require a clean exit after the listener and PostgreSQL pool close.
 
-After publish, verify `GET /api/healthz` returns `200` and `{ "status": "ok" }`. Then verify:
+After publish, verify `GET /api/healthz` repeatedly returns `200` and
+`{ "status": "ok" }`, and `GET /api/readyz` returns `200` with both dependencies `ok`.
+Then verify:
 
 - a request to `/api/residents` without an approved bearer token or session cookie returns `401`;
 - a forged `X-User-Role` or `X-Actor` header does not grant access;
@@ -111,8 +117,32 @@ After publish, verify `GET /api/healthz` returns `200` and `{ "status": "ok" }`.
 - a simulated unavailable shared rate-limit store returns the safe `503` maintenance response:
   `Retry-After` is present, the response has a correlation ID, and neither the protected route
   nor dependency details are exposed;
-- after the retry window, repeat the request without restarting the API and confirm the shared
-  store recovers and the protected route returns its normal unauthenticated response.
+- the same outage leaves `/api/healthz` at `200`, degrades `/api/readyz` to a non-sensitive
+  `503`, and after the bounded retry interval both readiness and protected-route authentication
+  recover without restarting the process.
+
+### Acceptance result record
+
+Record the date, commit, environment, and pass/fail result without secret values or client data:
+
+| Check | Required result | Recorded result |
+| --- | --- | --- |
+| `pnpm install --frozen-lockfile` | Exact lockfile install succeeds | PASS — 2026-09-01 |
+| API production build | Deployable bundle succeeds | PASS — 2026-09-01 |
+| Web production build | Static production build succeeds | PASS — 2026-09-01 |
+| Bind supplied port on `0.0.0.0` | Listener opens and remains up | PASS — 2026-09-01 |
+| Repeated `/api/healthz` | Always `200` during dependency outage | PASS — five production-mode probes |
+| `/api/readyz` healthy/outage/recovery | `200` / safe `503` / `200` | PASS — managed workflow plus outage suite |
+| Protected route outage/recovery | Safe maintenance `503`, then normal `401` without restart | PASS — outage suite |
+| Database and migration prerequisites | Connectivity, compatible ledger, and limiter table confirmed | **FAIL** — connected target has an empty ledger and no limiter table |
+| Web homepage | Published entry page returns successfully | PASS — HTTP and browser acceptance |
+| Sustained uptime | Process remains running after probes and smoke checks | PASS — 2026-09-01 |
+| Graceful `SIGTERM` | Listener and pool close within ten seconds; exit `0` | PASS — exit `0` |
+
+**2026-09-01 decision: NO-GO for the connected target.** Complete the documented
+operator-confirmed baseline/release migration procedure, rerun the full release gate, and require
+both readiness dependencies to report `ok` before promotion. Do not use startup DDL, schema push,
+or manual migration-ledger edits as a shortcut.
 
 Use synthetic IDs and non-client test data for smoke tests. Never paste secrets, tokens, raw
 responses, resident notes, payment values, or document contents into the operator log.

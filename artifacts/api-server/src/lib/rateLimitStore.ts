@@ -6,6 +6,7 @@ export type RateLimitBucket = {
 export interface RateLimitStore {
   increment(key: string, windowMs: number, now: number): Promise<RateLimitBucket>;
   reset?(key: string): Promise<void>;
+  check?(): Promise<void>;
 }
 
 export type RateLimitQueryExecutor = {
@@ -52,6 +53,10 @@ export function createMemoryRateLimitStore(): RateLimitStore {
     async reset(key) {
       buckets.delete(key);
     },
+    async check() {
+      // The in-memory store is intentionally available only for local
+      // development and tests, where no shared dependency needs probing.
+    },
   };
 }
 
@@ -76,6 +81,33 @@ export function createPostgresRateLimitStore(
     },
     async reset(key) {
       await executor.query("DELETE FROM api_rate_limit_buckets WHERE key = $1", [key]);
+    },
+    async check() {
+      const result = await executor.query<{
+        tableName: string | null;
+        canSelect: boolean;
+        canInsert: boolean;
+        canUpdate: boolean;
+        canDelete: boolean;
+      }>(`
+        SELECT
+          to_regclass('public.api_rate_limit_buckets')::text AS "tableName",
+          has_table_privilege(current_user, 'public.api_rate_limit_buckets', 'SELECT') AS "canSelect",
+          has_table_privilege(current_user, 'public.api_rate_limit_buckets', 'INSERT') AS "canInsert",
+          has_table_privilege(current_user, 'public.api_rate_limit_buckets', 'UPDATE') AS "canUpdate",
+          has_table_privilege(current_user, 'public.api_rate_limit_buckets', 'DELETE') AS "canDelete"
+      `);
+      const row = result.rows[0];
+      if (
+        !row ||
+        !row.tableName ||
+        row.canSelect !== true ||
+        row.canInsert !== true ||
+        row.canUpdate !== true ||
+        row.canDelete !== true
+      ) {
+        throw new Error("Rate-limit store table is unavailable.");
+      }
     },
   };
 }

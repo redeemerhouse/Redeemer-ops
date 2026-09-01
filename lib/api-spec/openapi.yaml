@@ -45,6 +45,26 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /readyz:
+    get:
+      operationId: readinessCheck
+      tags: [health]
+      summary: Readiness check
+      description: Reports whether PostgreSQL and shared request-protection infrastructure can serve application traffic.
+      security: []
+      responses:
+        "200":
+          description: Dependencies are ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadinessStatus"
+        "503":
+          description: One or more dependencies are unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadinessStatus"
   /auth/session:
     get:
       operationId: getSession
@@ -775,6 +795,23 @@ components:
           type: string
       required:
         - status
+    ReadinessStatus:
+      type: object
+      required: [status, dependencies]
+      properties:
+        status:
+          type: string
+          enum: [ready, not_ready]
+        dependencies:
+          type: object
+          required: [database, rateLimitStore]
+          properties:
+            database:
+              type: string
+              enum: [ok, unavailable]
+            rateLimitStore:
+              type: string
+              enum: [ok, unavailable]
     Dashboard:
       type: object
       required: [activeResidents, bedsAvailable, paymentsDue, paymentsCollected, occupancyRate, period, week, capacity, income, expenses, meetings, weeklyAttendance, weeklyMeetings, dataQuality, progress]

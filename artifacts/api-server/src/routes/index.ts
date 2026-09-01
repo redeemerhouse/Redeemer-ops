@@ -1,5 +1,4 @@
 import { Router, type IRouter } from "express";
-import healthRouter from "./health";
 import operationsRouter from "./operations";
 import residentImportRouter from "./resident-import";
 import storageRouter from "./storage";
@@ -9,7 +8,6 @@ import authRouter from "./auth";
 import { authenticate, csrfProtection } from "../middlewares/auth";
 
 const router: IRouter = Router();
-router.use(healthRouter);
 router.use(csrfProtection);
 // Session bootstrap is authenticated by the route itself so an expired
 // browser cookie receives a safe 401 rather than a sensitive payload.
