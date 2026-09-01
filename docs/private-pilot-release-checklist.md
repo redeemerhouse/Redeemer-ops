@@ -43,17 +43,17 @@ include its value.
    and `NODE_ENV=production pnpm --filter @workspace/api-server run build`. These commands
    build the web and API artifacts only; the development-only Canvas preview is not a
    production service.
-3. Use the API production start command, which runs `pnpm run db:release-check` before the
-   server accepts traffic. It validates the journal, applies only checked-in migrations, and
-   compares the target catalog with the committed snapshot.
+3. Confirm the Publish flow applies the reviewed development-to-production schema diff.
+   The API production start command only starts the server; it must not run migrations or
+   perform startup-time DDL.
 4. Confirm publish configuration contains no `drizzle-kit push` or `push-force` command.
 5. Confirm API startup creates no seed houses, residents, payments, operations, or templates.
 
 If publishing fails, identify the phase before changing configuration: build failures are
-reported by `pnpm run build` and name the affected artifact; release-start failures come from
-`start:release` or its database check and identify the missing production prerequisite without
-printing secret values; health verification failures are checked through `/api/healthz` after
-the service is listening.
+reported by `pnpm run build` and name the affected artifact; schema changes are handled by the
+Publish flow; startup failures come from the API process and identify missing production
+configuration without printing secret values; health verification failures are checked through
+`/api/healthz` after the service is listening.
 
 ## 4. Health and smoke test
 

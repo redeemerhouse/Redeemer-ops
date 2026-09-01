@@ -12,8 +12,8 @@ ONEsource gives Redeemer House teams a dependable workspace for resident intake,
 - `pnpm --filter @workspace/db run generate` — generate a reviewed SQL migration after schema changes
 - `pnpm --filter @workspace/db run migrate` — apply checked-in migrations non-interactively
 - `pnpm run db:baseline -- --target <host:port/database> --backup-confirmed --recovery-confirmed` — one-time, verified baseline for a legacy schema-push database; never use for a fresh database
-- `pnpm run db:release-check` — validate the migration journal and apply the same migration command used for release (requires `DATABASE_URL`)
-- Private-pilot release startup runs `db:release-check` before the API accepts traffic; API startup itself never migrates or seeds data.
+- `pnpm run db:release-check` — validate the development migration journal and catalog before publishing (requires `DATABASE_URL`)
+- Replit Publish owns production schema application. API startup only starts the server and never migrates or seeds data.
 - Required production configuration: `DATABASE_URL` and `SESSION_SECRET` are managed secrets; `DB_SSL=true`, `CORS_ORIGINS`, and `API_RATE_LIMIT_STORE=postgres` are ordinary deployment settings.
 - Production startup rejects missing/unsafe configuration with a non-sensitive message. `CORS_ORIGINS` must be an HTTPS origin for the same private-pilot web app.
 

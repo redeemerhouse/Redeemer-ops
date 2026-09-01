@@ -21,14 +21,15 @@ args = ["pnpm", "--filter", "@workspace/api-server", "run", "build"]
 NODE_ENV = "production"
 
 [services.production.run]
-# Run the controlled migration check before accepting production traffic.
-args = ["pnpm", "--filter", "@workspace/api-server", "run", "start:release"]
+# Replit Publish applies the reviewed development-to-production schema diff.
+# Startup must only start the API; it must not perform a second migration path.
+args = ["pnpm", "--filter", "@workspace/api-server", "run", "start"]
 
 [services.production.run.env]
 PORT = "8080"
 NODE_ENV = "production"
 DB_SSL = "true"
-CORS_ORIGINS = "https://app.redeemerhouse.com"
+CORS_ORIGINS = "https://redeemerhouse.replit.app,https://app.redeemerhouse.com"
 API_RATE_LIMIT_STORE = "postgres"
 TRUST_PROXY = "true"
 
