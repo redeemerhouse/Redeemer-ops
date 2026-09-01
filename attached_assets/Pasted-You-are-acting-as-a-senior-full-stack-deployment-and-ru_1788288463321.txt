@@ -1,0 +1,85 @@
+You are acting as a senior full-stack deployment and runtime debugging engineer for the Redeemer House recovery housing application being built in Replit.
+
+The application is currently functioning partially or fully inside the Replit development environment, but I am encountering runtime/script errors when attempting to publish or deploy the application.
+
+Your job is to systematically diagnose and resolve the publishing/runtime issue without unnecessarily rebuilding or restructuring working portions of the application.
+
+Begin by inspecting the entire application's deployment path, including:
+
+* package.json scripts
+* build commands
+* start commands
+* runtime commands
+* Replit deployment configuration
+* .replit configuration
+* replit.nix or equivalent environment configuration, if present
+* environment variables and secrets
+* database initialization
+* database migrations
+* frontend build output
+* backend server startup
+* API routes
+* port configuration
+* host binding
+* dependency versions
+* devDependencies versus production dependencies
+* TypeScript compilation
+* Node version
+* imports and module resolution
+* ESM versus CommonJS conflicts
+* file path and case-sensitivity issues
+* missing runtime files
+* authentication initialization
+* external service/API initialization
+
+Pay particular attention to differences between the development environment and the production/published runtime.
+
+IMPORTANT INSTRUCTIONS:
+
+1. Diagnose before modifying.
+2. Do not rewrite large working sections of the application unless absolutely necessary.
+3. Identify the exact error or failure point.
+4. Trace the error backward to its root cause rather than applying temporary patches.
+5. Check the deployment logs and runtime logs carefully.
+6. Verify whether the application is actually building successfully before determining whether the problem occurs during BUILD or STARTUP.
+7. Check whether required environment variables are available in the deployment environment.
+8. Check that the application binds to 0.0.0.0 and uses the port supplied by the Replit environment when required.
+9. Confirm that production dependencies required at runtime are not incorrectly listed only under devDependencies.
+10. Check that database migrations and database connections are production-safe.
+11. Do not expose, remove, or hard-code secrets.
+12. Preserve the existing architecture, database structure, resident records, authentication system, and application functionality whenever possible.
+
+Create a debugging report before implementing major changes containing:
+
+ROOT ERROR:
+State the primary error preventing deployment.
+
+WHERE IT OCCURS:
+Build, startup, database initialization, frontend, backend, routing, authentication, environment configuration, or another location.
+
+ROOT CAUSE:
+Explain what is causing it.
+
+PROPOSED FIX:
+Explain the minimum changes necessary.
+
+RISK:
+Explain whether the fix could affect existing application functionality or data.
+
+Then implement the safest fix.
+
+After making changes, run the appropriate production-equivalent commands and verify:
+
+* dependencies install successfully
+* application builds successfully
+* production start command executes successfully
+* server stays running
+* expected port is listening
+* database connection succeeds
+* application homepage loads
+* authentication loads
+* major API routes initialize without crashing
+
+If the first issue exposes another runtime issue, continue debugging sequentially until the application reaches a stable deployable state.
+
+Do not declare the issue resolved merely because the code compiles. The application must successfully start under production-like conditions.
