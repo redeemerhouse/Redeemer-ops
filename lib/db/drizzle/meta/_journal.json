@@ -50,6 +50,13 @@
       "when": 1788213107992,
       "tag": "0006_lethal_jubilee",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1788288927305,
+      "tag": "0007_sour_jigsaw",
+      "breakpoints": true
     }
   ]
 }

@@ -24,3 +24,4 @@ export * from "./financials";
 export * from "./meeting-attendance";
 export * from "./retention";
 export * from "./auth";
+export * from "./rate-limit";

@@ -15,14 +15,6 @@ export type RateLimitQueryExecutor = {
   ): Promise<{ rows: T[] }>;
 };
 
-const createTableSql = `
-  CREATE TABLE IF NOT EXISTS api_rate_limit_buckets (
-    key text PRIMARY KEY,
-    count integer NOT NULL,
-    reset_at timestamptz NOT NULL
-  )
-`;
-
 const incrementSql = `
   INSERT INTO api_rate_limit_buckets (key, count, reset_at)
   VALUES (
@@ -66,22 +58,8 @@ export function createMemoryRateLimitStore(): RateLimitStore {
 export function createPostgresRateLimitStore(
   executor: RateLimitQueryExecutor,
 ): RateLimitStore {
-  let tableReady: Promise<void> | undefined;
-
-  const ensureTable = (): Promise<void> => {
-    tableReady ??= executor.query(createTableSql).then(
-      () => undefined,
-      (error) => {
-        tableReady = undefined;
-        throw error;
-      },
-    );
-    return tableReady;
-  };
-
   return {
     async increment(key, windowMs, now) {
-      await ensureTable();
       const result = await executor.query<{
         count: number | string;
         resetAt: number | string;
