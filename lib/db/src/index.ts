@@ -6,13 +6,15 @@ const { Pool } = pg;
 
 if (!process.env.DATABASE_URL) {
   throw new Error(
-    "DATABASE_URL must be set. Did you forget to provision a database?",
+    "Database configuration is incomplete: DATABASE_URL must be configured before the API can start.",
   );
 }
 
 const isProduction = process.env.NODE_ENV === "production";
 if (isProduction && process.env.DB_SSL !== "true" && !process.env.DATABASE_URL?.includes("sslmode=require")) {
-  throw new Error("DB_SSL=true or DATABASE_URL sslmode=require is required in production.");
+  throw new Error(
+    "Database configuration is unsafe: production requires DB_SSL=true or DATABASE_URL with sslmode=require.",
+  );
 }
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,

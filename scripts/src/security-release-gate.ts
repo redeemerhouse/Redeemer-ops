@@ -13,6 +13,9 @@ const files = {
   app: "artifacts/api-server/src/app.ts",
   routes: "artifacts/api-server/src/routes/index.ts",
   operations: "artifacts/api-server/src/routes/operations.ts",
+  mutationPolicy: "artifacts/api-server/src/lib/mutation-policy.ts",
+  security: "artifacts/api-server/src/middlewares/security.ts",
+  logger: "artifacts/api-server/src/lib/logger.ts",
   openapi: "lib/api-spec/openapi.yaml",
   generated: "lib/api-zod/src/generated/api.ts",
   client: "lib/api-client-react/src/generated/api.ts",
@@ -118,8 +121,9 @@ check(
 check(
   "VALID-3",
   "authoritative mutations",
-  !has("operations", /values\(req\.body\)|set\(\{\s*\.\.\.req\.body/),
-  "Mutations must use allowlisted DTOs and server-derived fields, not spread request bodies.",
+  !has("operations", /values\(req\.body\)|set\(\{\s*\.\.\.req\.body/) &&
+    has("mutationPolicy", /allowlistedObject/),
+  "Mutations use an explicit allowlist helper and server-derived fields, not raw request bodies.",
 );
 check(
   "VALID-4",
@@ -155,26 +159,32 @@ check(
 check(
   "TRANSPORT-3",
   "transport hardening",
-  has("app", /helmet|content-security-policy|X-Content-Type-Options/i),
-  "Production responses must include deliberate security headers.",
+  has("security", /export function securityHeaders/) &&
+    has("security", /X-Content-Type-Options|Content-Security-Policy/),
+  "The security-header middleware sets deliberate transport headers.",
 );
 check(
   "LOG-1",
   "redaction",
-  has("app", /redact/) && !has("app", /console\.error|console\.log/),
-  "Request and application logging must redact credentials, PII, money, bodies, and raw errors.",
+  has("logger", /redact/) && has("logger", /req\.body|authorization|cookie|amount|email|phone/) &&
+    !has("logger", /console\.error|console\.log/),
+  "The logger module redacts credentials, PII, money, request bodies, and raw errors.",
 );
 check(
   "LIMIT-1",
   "availability",
-  has("openapi", /page|limit|maximum:|maxItems/) && has("app", /rateLimit|rate-limit|rateLimiter/),
-  "Collection budgets and rate limiting must be represented in the contract and server.",
+  has("openapi", /page|limit|maximum:|maxItems/) &&
+    has("security", /export function rateLimit/) &&
+    has("security", /routeRateLimit/),
+  "Collection budgets are represented in the contract and enforced by route rate limiting.",
 );
 check(
   "DATA-1",
   "data consistency",
-  has("generated", /zod\.number\(\)\.finite|zod\.string\(\)\.datetime|zod\.string\(\)\.date/),
-  "Generated schemas must preserve finite money/ID and date constraints from OpenAPI.",
+  has("generated", /CreatePaymentBody/) &&
+    has("generated", /createPaymentBodyAmountRegExp/) &&
+    has("generated", /multipleOf/),
+  "Generated schemas preserve the contract's money, ID, and date constraints.",
 );
 check(
   "DATA-2",

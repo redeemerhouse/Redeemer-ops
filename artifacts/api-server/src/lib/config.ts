@@ -1,5 +1,22 @@
 const isProduction = process.env.NODE_ENV === "production";
-const configuredRateLimitStore = process.env.API_RATE_LIMIT_STORE ?? (isProduction ? "postgres" : "memory");
+
+function requiredProductionEnv(name: string): string {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    throw new Error(
+      `Production configuration is incomplete: ${name} must be configured in the deployment environment.`,
+    );
+  }
+  return value;
+}
+
+const rawRateLimitStore = process.env.API_RATE_LIMIT_STORE?.trim();
+if (isProduction && !rawRateLimitStore) {
+  throw new Error(
+    "Production configuration is incomplete: API_RATE_LIMIT_STORE must be explicitly set to postgres.",
+  );
+}
+const configuredRateLimitStore = rawRateLimitStore ?? "memory";
 
 if (configuredRateLimitStore !== "memory" && configuredRateLimitStore !== "postgres") {
   throw new Error("API_RATE_LIMIT_STORE must be either memory or postgres.");
@@ -17,10 +34,45 @@ function listFromEnv(name: string): string[] {
 }
 
 export const corsOrigins = listFromEnv("CORS_ORIGINS");
-if (corsOrigins.length === 0) corsOrigins.push(...listFromEnv("ALLOWED_ORIGINS"));
+if (!isProduction && corsOrigins.length === 0) corsOrigins.push(...listFromEnv("ALLOWED_ORIGINS"));
 
 if (isProduction && corsOrigins.length === 0) {
-  throw new Error("CORS_ORIGINS must be configured in production.");
+  throw new Error(
+    "Production configuration is incomplete: CORS_ORIGINS must contain the HTTPS origin of the private-pilot web app.",
+  );
+}
+
+if (isProduction) {
+  requiredProductionEnv("DATABASE_URL");
+  const sessionSecret = requiredProductionEnv("SESSION_SECRET");
+  if (sessionSecret.length < 32) {
+    throw new Error(
+      "Production configuration is unsafe: SESSION_SECRET must be at least 32 characters; store it as a managed secret.",
+    );
+  }
+  if (
+    process.env.DB_SSL !== "true" &&
+    !process.env.DATABASE_URL?.toLowerCase().includes("sslmode=require")
+  ) {
+    throw new Error(
+      "Production configuration is unsafe: set DB_SSL=true or use a DATABASE_URL with sslmode=require.",
+    );
+  }
+  for (const origin of corsOrigins) {
+    let parsed: URL;
+    try {
+      parsed = new URL(origin);
+    } catch {
+      throw new Error(
+        "Production configuration is invalid: CORS_ORIGINS must contain valid HTTPS origins only.",
+      );
+    }
+    if (parsed.protocol !== "https:" || parsed.pathname !== "/" || parsed.search || parsed.hash) {
+      throw new Error(
+        "Production configuration is invalid: CORS_ORIGINS must contain valid HTTPS origins only.",
+      );
+    }
+  }
 }
 
 export const serverConfig = {
@@ -34,7 +86,9 @@ export const serverConfig = {
   rateWindowMs: Number(process.env.API_RATE_WINDOW_MS ?? 60_000),
   healthRateLimit: Number(process.env.API_HEALTH_RATE_LIMIT ?? 60),
   readRateLimit: Number(process.env.API_READ_RATE_LIMIT ?? 120),
-  mutationRateLimit: Number(process.env.API_MUTATION_RATE_LIMIT ?? 30),
+  // Keep local development and integration tests usable without weakening the
+  // production default. Production always uses the bounded deployment value.
+  mutationRateLimit: Number(process.env.API_MUTATION_RATE_LIMIT ?? (isProduction ? 30 : 300)),
   rateLimitStore: configuredRateLimitStore as "memory" | "postgres",
   rateLimitStoreRetryMs: Number(process.env.API_RATE_LIMIT_STORE_RETRY_MS ?? 5_000),
 };

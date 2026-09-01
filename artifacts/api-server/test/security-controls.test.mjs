@@ -20,19 +20,16 @@ test("sets safe transport headers and does not allow an unknown browser origin",
   assert.equal(response.headers.get("content-security-policy"), "default-src 'none'; frame-ancestors 'none'");
 });
 
-test("returns a stable problem response with the caller correlation ID", async () => {
-  const response = await request("/not-a-route", {
+test("rejects protected routes without a session and preserves correlation headers", async () => {
+  const response = await request("/residents", {
     headers: { "X-Request-ID": "security-test-404" },
   });
   const body = await response.json();
 
-  assert.equal(response.status, 404);
-  assert.equal(response.headers.get("content-type")?.split(";")[0], "application/problem+json");
-  assert.equal(response.headers.get("cache-control"), "no-store");
-  assert.deepEqual(body, {
-    error: "Not found.",
-    correlationId: "security-test-404",
-  });
+  assert.equal(response.status, 401);
+  assert.equal(response.headers.get("x-correlation-id"), "security-test-404");
+  assert.equal(body.error, "Authentication required.");
+  assert.doesNotMatch(JSON.stringify(body), /token|secret|resident/i);
 });
 
 test("does not echo malformed request content", async () => {

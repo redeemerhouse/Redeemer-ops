@@ -18,6 +18,7 @@ import
 }
  from "@workspace/db"
 ;
+import type { InsertApplication, InsertOperation } from "@workspace/db";
 
 import 
 {
@@ -62,6 +63,7 @@ import
 }
  from "../middlewares/errors"
 ;
+import { allowlistedObject } from "../lib/mutation-policy";
 
 
 const router: IRouter = Router()
@@ -242,6 +244,35 @@ const audit = async (req: Request, action: string, entityType: string, entityId?
 
 const reportTypes = ["occupancy", "roster", "payments", "revenue", "compliance", "referral", "audit"] as const
 ;
+
+const applicationCreateKeys = [
+  "applicantName", "email", "phone", "preferredHouseId", "familyInformation",
+  "referralHistory", "treatmentHistory", "spiritualReflection", "checklist",
+  "exceptionReason", "source",
+] as const;
+const applicationUpdateKeys = [
+  "applicantName", "email", "phone", "preferredHouseId", "familyInformation",
+  "referralHistory", "treatmentHistory", "spiritualReflection", "checklist",
+  "exceptionReason", "source",
+] as const;
+const operationCreateKeys = [
+  "type", "title", "residentId", "scheduledDate", "status", "notes", "private",
+] as const;
+
+const applicationBody = (input: unknown, keys: readonly string[], requireIdentity: boolean) => {
+  const value = allowlistedObject(input, keys);
+  if (!value || (requireIdentity && (typeof value.applicantName !== "string" || !value.applicantName.trim()))) return null;
+  if (value.applicantName !== undefined &&
+      (typeof value.applicantName !== "string" || !value.applicantName.trim())) return null;
+  if (requireIdentity && (typeof value.email !== "string" || !value.email.includes("@"))) return null;
+  if (value.email !== undefined &&
+      (typeof value.email !== "string" || !value.email.includes("@"))) return null;
+  if (value.phone !== undefined && value.phone !== null && typeof value.phone !== "string") return null;
+  if (value.preferredHouseId !== undefined && value.preferredHouseId !== null &&
+      (!Number.isInteger(value.preferredHouseId) || Number(value.preferredHouseId) <= 0)) return null;
+  if (!requireIdentity && Object.keys(value).length === 0) return null;
+  return value;
+};
 
 type ReportType = typeof reportTypes[number]
 ;
@@ -858,17 +889,21 @@ router.get("/applications", async (_req, res): Promise<void> => {
 router.post("/applications", async (req, res): Promise<void> => {
   const principal = getPrincipal(res);
   if (principal.role === "resident") { problem(req, res, 403); return; }
+  const input = applicationBody(req.body, applicationCreateKeys, true);
+  if (!input) { problem(req, res, 400); return; }
   if (!isAdministrator(principal)) {
-    const [house] = await db.select({ name: housesTable.name }).from(housesTable).where(eq(housesTable.id, Number(req.body?.preferredHouseId)));
+    const [house] = await db.select({ name: housesTable.name }).from(housesTable).where(eq(housesTable.id, Number(input.preferredHouseId)));
     if (!house || !hasHouseScope(principal, house.name)) { problem(req, res, 403); return; }
   }
-  const [created] = await db.insert(applicationsTable).values(req.body).returning();
+  const [created] = await db.insert(applicationsTable).values(input as InsertApplication).returning();
   await audit(req, "Application submitted", "application", created.id);
   res.status(201).json(created);
 });
 router.patch("/applications/:id", async (req, res): Promise<void> => {
   const principal = getPrincipal(res);
   if (principal.role === "resident") { problem(req, res, 403); return; }
+  const input = applicationBody(req.body, applicationUpdateKeys, false);
+  if (!input) { problem(req, res, 400); return; }
   if (!isAdministrator(principal)) {
     const [existing] = await db.select({ preferredHouseId: applicationsTable.preferredHouseId }).from(applicationsTable).where(eq(applicationsTable.id, Number(req.params.id)));
     const [house] = existing?.preferredHouseId
@@ -876,7 +911,7 @@ router.patch("/applications/:id", async (req, res): Promise<void> => {
       : [];
     if (!existing || !house || !hasHouseScope(principal, house.name)) { problem(req, res, 404); return; }
   }
-  const [updated] = await db.update(applicationsTable).set({ ...req.body, updatedAt: new Date() }).where(eq(applicationsTable.id, Number(req.params.id))).returning();
+  const [updated] = await db.update(applicationsTable).set({ ...input, updatedAt: new Date() }).where(eq(applicationsTable.id, Number(req.params.id))).returning();
   if (!updated) { problem(req, res, 404); return; }
   await audit(req, "Application updated", "application", updated.id);
   res.json(updated);
@@ -1036,11 +1071,18 @@ router.get("/operations", async (_req, res): Promise<void> => {
 });
 router.post("/operations", async (req, res): Promise<void> => {
   const principal = getPrincipal(res);
-  const [resident] = req.body?.residentId
-    ? await db.select({ id: residentsTable.id, home: residentsTable.home }).from(residentsTable).where(eq(residentsTable.id, Number(req.body.residentId)))
+  const input = allowlistedObject(req.body, operationCreateKeys);
+  if (!input || typeof input.type !== "string" || !input.type.trim() ||
+      typeof input.title !== "string" || !input.title.trim() ||
+      (input.residentId !== undefined && input.residentId !== null &&
+        (!Number.isInteger(input.residentId) || Number(input.residentId) <= 0))) {
+    problem(req, res, 400); return;
+  }
+  const [resident] = input.residentId
+    ? await db.select({ id: residentsTable.id, home: residentsTable.home }).from(residentsTable).where(eq(residentsTable.id, Number(input.residentId)))
     : [];
   if (!resident || !canAccessResident(principal, resident, true)) { problem(req, res, 404); return; }
-  const [created] = await db.insert(operationsTable).values(req.body).returning();
+  const [created] = await db.insert(operationsTable).values(input as InsertOperation).returning();
   await audit(req, "Operation logged", "operation", created.id);
   res.status(201).json(created);
 });

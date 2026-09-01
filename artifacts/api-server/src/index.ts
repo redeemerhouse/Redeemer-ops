@@ -1,6 +1,5 @@
 import app from "./app";
 import { logger } from "./lib/logger";
-import { seedPilotData } from "./lib/seed";
 import { pool } from "@workspace/db";
 import type { Server } from "node:http";
 
@@ -22,7 +21,6 @@ let server: Server | null = null;
 let shuttingDown = false;
 
 try {
-  await seedPilotData();
   server = app.listen(port, () => {
     logger.info({ port }, "Server listening");
   });

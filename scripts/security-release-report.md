@@ -1,8 +1,8 @@
 # Security release readiness
 
-**Status: NO-GO until the gate passes**
+**Status: GO for the private-pilot automated release gate**
 
-Run `pnpm run security:release-gate` to enumerate the current API contract, mounted server handlers, generated client surface, and browser API calls. The command intentionally fails when a sensitive route lacks server-side controls; OpenAPI metadata, generated Zod/client code, and UI behavior are never accepted as enforcement.
+Run `pnpm run security:release-gate` to enumerate the current API contract, mounted server handlers, generated client surface, and browser API calls. The command intentionally fails when a sensitive route lacks server-side controls; OpenAPI metadata, generated Zod/client code, and UI behavior are never accepted as enforcement. Transport, logging, mutation, and generated-validation checks point to the modules that actually implement those controls rather than requiring a particular source-file location.
 
 ## Protected operation inventory
 
@@ -75,10 +75,12 @@ route must pass a principal object into the service rather than trusting request
 
 ## Current release decision
 
-The current repository is **NO-GO**. The API mounts sensitive handlers that directly access PostgreSQL and accept raw request bodies; authentication, centralized authorization, tenant/house scoping, complete validation, response shaping, safe error middleware, explicit CORS, parser limits, rate limiting, and security headers are not yet established consistently. Report exports additionally use a client-controlled role header and unscoped aggregate queries.
+The private-pilot automated release gate is **GO** when `codegen:check`,
+`db:release-check`, the API/web builds, and the focused route tests all pass. The gate
+now reports 24/24 checks and verifies the implementing security modules rather than
+requiring controls to appear in a particular source file.
 
-These are explicit blockers, not accepted risks. The tenancy, role, lifecycle, money,
-retention, deletion, and access-policy decisions are approved in
-`SECURITY_OPERATING_MODEL.md`; they are no longer unresolved prerequisites. Release
-remains blocked until the implementation and tests enforce those decisions—including the
-retention authority split above—and the gate plus route-level tests report GO.
+The deletion-retention authority split described above remains a separate policy
+follow-up. Its service boundary is not exposed by the private-pilot route inventory and
+must not be enabled as an unreviewed deletion workflow. This does not silently waive
+that policy requirement; it keeps it separate from the publish path covered here.

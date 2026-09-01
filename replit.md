@@ -12,7 +12,9 @@ ONEsource gives Redeemer House teams a dependable workspace for resident intake,
 - `pnpm --filter @workspace/db run migrate` — apply checked-in migrations non-interactively
 - `pnpm run db:baseline -- --target <host:port/database> --backup-confirmed --recovery-confirmed` — one-time, verified baseline for a legacy schema-push database; never use for a fresh database
 - `pnpm run db:release-check` — validate the migration journal and apply the same migration command used for release (requires `DATABASE_URL`)
-- Required env: `DATABASE_URL` — Postgres connection string
+- Private-pilot release startup runs `db:release-check` before the API accepts traffic; API startup itself never migrates or seeds data.
+- Required production configuration: `DATABASE_URL` and `SESSION_SECRET` are managed secrets; `DB_SSL=true`, `CORS_ORIGINS`, and `API_RATE_LIMIT_STORE=postgres` are ordinary deployment settings.
+- Production startup rejects missing/unsafe configuration with a non-sensitive message. `CORS_ORIGINS` must be an HTTPS origin for the same private-pilot web app.
 
 ## Stack
 
@@ -34,7 +36,7 @@ ONEsource gives Redeemer House teams a dependable workspace for resident intake,
 
 - Calendar dates use PostgreSQL `date`; timestamps are reserved for audit and event history.
 - Numeric payment values are converted at the API boundary before responses reach the UI.
-- Pilot seed data only initializes an empty houses table and never overwrites operational records.
+- Pilot seed data is available only as an intentional development/operator action; it is never called by API startup or a production release.
 - `SECURITY_OPERATING_MODEL.md` is the approved source of truth for identity, roles, house
   scope, resident lifecycle, documents, payments, exports, notifications, retention, and
   deletion. Sensitive route work must reference it and enforce policy server-side.
