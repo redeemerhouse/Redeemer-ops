@@ -33,21 +33,9 @@ import {
 } from "@workspace/api-zod";
 import { canAccessResident, getPrincipal, isAdministrator, requirePermission, type Principal } from "../middlewares/auth";
 import { problem } from "../middlewares/errors";
+import { missingRequired, type AssessmentSchema } from "../lib/assessment-policy";
 
 const router: IRouter = Router();
-
-type FormField = {
-  id: string;
-  label: string;
-  type: string;
-  required: boolean;
-  sensitive: boolean;
-  helpText?: string | null;
-  options?: string[];
-  itemFields?: FormField[];
-};
-type FormSection = { id: string; title: string; instructions?: string | null; fields: FormField[] };
-type FormSchema = FormSection[];
 
 const actor = (req: Request): string => {
   const value = req.res?.locals.actorId;
@@ -72,8 +60,8 @@ const audit = async (req: Request, action: string, entityId?: number, metadata?:
   });
 };
 
-const schemaFor = (template: AssessmentTemplate): FormSchema =>
-  Array.isArray(template.schema) ? template.schema as FormSchema : [];
+const schemaFor = (template: AssessmentTemplate): AssessmentSchema =>
+  Array.isArray(template.schema) ? template.schema as AssessmentSchema : [];
 
 const asTemplate = (template: AssessmentTemplate) => ({
   id: template.id,
@@ -154,27 +142,6 @@ const canRead = (principal: Principal, resident: { id: number; home: string }, t
 const canWrite = (principal: Principal, resident: { id: number; home: string }, template: AssessmentTemplate) =>
   canAccessResident(principal, resident, principal.role !== "resident") &&
   (principal.role !== "resident" || template.audience === "resident");
-
-const missingRequired = (schema: FormSchema, answers: Record<string, unknown>): string[] => {
-  const missing: string[] = [];
-  const visit = (field: FormField, value: unknown, prefix = "") => {
-    const label = prefix ? `${prefix}: ${field.label}` : field.label;
-    const empty = value === undefined || value === null || value === "" ||
-      (Array.isArray(value) && value.length === 0);
-    if (field.required && empty) missing.push(label);
-    if (field.type === "repeating_group" && Array.isArray(value)) {
-      value.forEach((row, index) => {
-        if (row && typeof row === "object") {
-          for (const child of field.itemFields ?? []) visit(child, (row as Record<string, unknown>)[child.id], `${field.label} ${index + 1}`);
-        }
-      });
-    }
-  };
-  for (const section of schema) {
-    for (const field of section.fields) visit(field, answers[field.id]);
-  }
-  return missing;
-};
 
 const loadSubmission = async (id: number) => {
   const [row] = await db.select().from(assessmentSubmissionsTable).where(eq(assessmentSubmissionsTable.id, id));

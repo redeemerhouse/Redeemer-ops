@@ -64,6 +64,7 @@ import
  from "../middlewares/errors"
 ;
 import { allowlistedObject } from "../lib/mutation-policy";
+import { hasCompleteFileMetadata, isCalendarDate, isInteger, isValidDocumentVisibility } from "../lib/domain-validation";
 
 
 const router: IRouter = Router()
@@ -77,27 +78,6 @@ const organizationScope = sql`TRUE`
 ;
 
 const today = () => new Date().toISOString().slice(0, 10)
-;
-
-const isInteger = (value: number) => Number.isInteger(value)
-;
-
-const isCalendarDate = (value: unknown) => 
-{
-
-  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
-;
-
-  const [year, month, day] = value.split("-").map(Number)
-;
-
-  const candidate = new Date(Date.UTC(year, month - 1, day))
-;
-
-  return candidate.getUTCFullYear() === year && candidate.getUTCMonth() === month - 1 && candidate.getUTCDate() === day
-;
-
-}
 ;
 
 const sqlDate = (value: Date) => value.toISOString().slice(0, 10)
@@ -936,24 +916,6 @@ router.get("/documents", async (_req, res): Promise<void> => {
 });
 
 const documentMetadataError = "Document metadata, object path, and a resident are required for shared documents";
-const hasCompleteFileMetadata = (document: {
-  objectPath?: unknown;
-  fileName?: unknown;
-  contentType?: unknown;
-  fileSize?: unknown;
-}) =>
-  typeof document.objectPath === "string" &&
-  document.objectPath.startsWith("/objects/") &&
-  document.objectPath.length > "/objects/".length &&
-  typeof document.fileName === "string" &&
-  document.fileName.trim().length > 0 &&
-  typeof document.contentType === "string" &&
-  document.contentType.trim().length > 0 &&
-  Number.isInteger(document.fileSize) &&
-  Number(document.fileSize) > 0;
-const isValidDocumentVisibility = (visibility: unknown): visibility is "staff" | "resident" =>
-  visibility === "staff" || visibility === "resident";
-
 router.post("/documents", async (req, res): Promise<void> => {
   const principal = getPrincipal(res);
   const serverControlledFields = ["status", "uploadedBy", "applicationId"] as const;
