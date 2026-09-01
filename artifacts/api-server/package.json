@@ -17,13 +17,14 @@
     "test:resident-import-integrity": "node --test test/resident-import-integrity.test.mjs",
     "test:overview": "node --test test/overview-metrics.test.mjs",
     "test:assessments": "node --test test/assessments.test.mjs",
+    "test:architecture": "node --test test/architecture-cleanup.test.mjs",
     "test:policy": "node --experimental-strip-types --test test/policy.test.ts",
     "test:critical-workflows": "bash test/run-critical-workflows.sh",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@google-cloud/storage": "^7.16.0",
-    "@replit/connectors-sdk": "latest",
+    "@replit/connectors-sdk": "0.4.3",
     "@workspace/api-zod": "workspace:*",
     "@workspace/db": "workspace:*",
     "cookie-parser": "^1.4.7",

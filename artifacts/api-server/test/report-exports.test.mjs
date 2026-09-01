@@ -84,6 +84,7 @@ test("records the actor and ISO timestamp for successful exports", async () => {
   assert.equal(auditExport.status, 200);
 
   const csv = await auditExport.text();
+  assert.match(csv, /unattributed/);
   assert.match(csv, new RegExp(actor));
   assert.match(csv, /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z/);
 });
