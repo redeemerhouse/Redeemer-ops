@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { authHeaders } from "./auth-test-helpers.mjs";
 
-const baseUrl = (process.env.AUTH_API_BASE_URL ?? "http://127.0.0.1:5000/api").replace(/\/$/, "");
+const baseUrl = (process.env.AUTH_API_BASE_URL ?? "http://127.0.0.1:8080/api").replace(/\/$/, "");
 const canRun = Boolean(process.env.SESSION_SECRET);
 
 async function request(path, headers = {}, init = {}) {
@@ -18,6 +18,12 @@ test("rejects missing and client-supplied authentication", { skip: !canRun }, as
     "X-Actor": "forged-actor",
   });
   assert.equal(forgedHeader.status, 401);
+
+  const malformedCookie = await request("/auth/session", {
+    cookie: "__Host-recovery-session=%E0%A4%A",
+  });
+  assert.equal(malformedCookie.status, 401);
+  assert.equal(malformedCookie.headers.get("www-authenticate"), "Bearer");
 });
 
 test("bootstraps a safe browser session and rejects non-revocable cookie credentials", { skip: !canRun }, async () => {
@@ -125,12 +131,26 @@ test("enforces house scope for resident and payment reads", { skip: !canRun }, a
     houseNames: ["Northside House"],
   }));
   assert.equal(crossHousePayments.status, 404);
+
+  const residentHeaders = authHeaders({
+    sub: "resident-horizontal-test",
+    role: "resident",
+    houseNames: [northsideResident.home],
+    residentId: northsideResident.id,
+  });
+  const crossResident = await request(`/residents/${otherHouseResident.id}`, residentHeaders);
+  assert.equal(crossResident.status, 404);
+
+  const predictableMissingResident = await request("/residents/2147483647", residentHeaders);
+  assert.equal(predictableMissingResident.status, 404);
 });
 
 test("prevents vertical escalation from resident and manager roles", { skip: !canRun }, async () => {
   const allResidents = await request("/residents", authHeaders());
   const residents = await allResidents.json();
   const ownResident = residents[0];
+  const otherHouseResident = residents.find((resident) => resident.home !== ownResident.home);
+  assert.ok(otherHouseResident);
 
   const residentHeaders = authHeaders({
     sub: "resident-portal-user",
@@ -160,4 +180,69 @@ test("prevents vertical escalation from resident and manager roles", { skip: !ca
     houseNames: [ownResident.home],
   }));
   assert.equal(managerExport.status, 403);
+
+  const managerHeaders = authHeaders({
+    sub: "context-free-manager",
+    role: "house_manager",
+    houseNames: [ownResident.home],
+  });
+  const contextFreeMeeting = await request("/meetings", managerHeaders, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      meetingType: "house_meeting",
+      meetingDate: "2026-08-18",
+      womenAttended: 1,
+      womenEligible: 1,
+    }),
+  });
+  assert.equal(contextFreeMeeting.status, 403);
+
+  const accountAdministration = await request("/auth/admin/accounts", managerHeaders);
+  assert.equal(accountAdministration.status, 403);
+
+  const housesResponse = await request("/houses", authHeaders());
+  assert.equal(housesResponse.status, 200);
+  const houses = await housesResponse.json();
+  const sourceHouse = houses.find((house) => house.name === ownResident.home);
+  const targetHouse = houses.find((house) => house.name === otherHouseResident.home);
+  assert.ok(sourceHouse);
+  assert.ok(targetHouse);
+
+  const applicationResponse = await request("/applications", authHeaders(), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      applicantName: "Authorization scope test",
+      email: `auth-scope-${process.pid}@example.invalid`,
+      preferredHouseId: sourceHouse.id,
+      source: "test",
+    }),
+  });
+  assert.equal(applicationResponse.status, 201);
+  const application = await applicationResponse.json();
+  const crossHouseRetarget = await request(`/applications/${application.id}`, managerHeaders, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ preferredHouseId: targetHouse.id }),
+  });
+  assert.equal(crossHouseRetarget.status, 403);
+
+  const privateOperationResponse = await request("/operations", authHeaders(), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      type: "case_management",
+      title: `Private authorization test ${process.pid}`,
+      residentId: ownResident.id,
+      status: "open",
+      notes: "staff-only regression marker",
+      private: true,
+    }),
+  });
+  assert.equal(privateOperationResponse.status, 201);
+  const privateOperation = await privateOperationResponse.json();
+  const residentOperations = await request("/operations", residentHeaders);
+  assert.equal(residentOperations.status, 200);
+  assert.ok(!(await residentOperations.json()).some((operation) => operation.id === privateOperation.id));
 });

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { authHeaders } from "./auth-test-helpers.mjs";
 
-const baseUrl = (process.env.AUTH_API_BASE_URL ?? "http://127.0.0.1:5000/api").replace(/\/$/, "");
+const baseUrl = (process.env.AUTH_API_BASE_URL ?? "http://127.0.0.1:8080/api").replace(/\/$/, "");
 const canRun = Boolean(process.env.SESSION_SECRET);
 
 async function request(path, headers = {}, init = {}) {

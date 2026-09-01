@@ -44,6 +44,19 @@ function documentPayload({ title, residentId, visibility = "staff", objectPath =
 
 test("rejects incomplete shared document records", { skip: !canRun }, async () => {
   const residentId = await findResidentId();
+  const forgedProvenance = await request("/documents", {
+    method: "POST",
+    headers: authHeaders({ sub: actor }),
+    body: JSON.stringify({
+      ...documentPayload({ title: `${unique}-forged`, residentId }),
+      uploadedBy: "forged-uploader",
+      applicationId: 1,
+      status: "approved",
+    }),
+  });
+  assert.equal(forgedProvenance.status, 400);
+  assert.equal((await json(forgedProvenance)).error, "Document provenance and approval state are server-controlled.");
+
   const response = await request("/documents", {
     method: "POST",
     headers: { ...authHeaders({ sub: actor }), "X-User-Role": "staff", "X-User-Id": actor },
@@ -60,7 +73,7 @@ test("rejects incomplete shared document records", { skip: !canRun }, async () =
   });
 });
 
-test("persists direct-storage metadata and keeps upload, replacement, sharing, and history in sync", { skip: !canRun }, async () => {
+test("persists direct-storage metadata while keeping file bytes immutable and sharing history in sync", { skip: !canRun }, async () => {
   const residentId = await findResidentId();
   const title = `${unique}-shared`;
   const uploadPath = `/objects/${unique}/uploaded`;
@@ -103,10 +116,9 @@ test("persists direct-storage metadata and keeps upload, replacement, sharing, a
       fileSize: 4096,
     }),
   });
-  assert.equal(replacementResponse.status, 200);
-  const replaced = await json(replacementResponse);
-  assert.equal(replaced.objectPath, replacementPath);
-  assert.equal(replaced.fileSize, 4096);
+  assert.equal(replacementResponse.status, 400);
+  const replacementError = await json(replacementResponse);
+  assert.equal(replacementError.error, "Uploaded file metadata and approval state are server-controlled.");
 
   const shareResponse = await request(`/documents/${created.id}`, {
     method: "PATCH",
@@ -122,7 +134,7 @@ test("persists direct-storage metadata and keeps upload, replacement, sharing, a
     headers: authHeaders({ sub: `${actor}-resident`, role: "resident", residentId }),
   });
   assert.equal(residentDocuments.status, 200);
-  assert.ok((await json(residentDocuments)).some((document) => document.id === created.id));
+  assert.ok(!(await json(residentDocuments)).some((document) => document.id === created.id));
 
   const staffDocuments = await request(`/documents?role=staff&residentId=${residentId}`, {
     headers: authHeaders({ sub: actor }),
@@ -135,8 +147,7 @@ test("persists direct-storage metadata and keeps upload, replacement, sharing, a
   });
   assert.equal(historyResponse.status, 200);
   const history = await json(historyResponse);
-  assert.deepEqual(history.map((entry) => entry.action).reverse(), ["uploaded", "replaced", "access_changed"]);
-  assert.equal(history.find((entry) => entry.action === "replaced").objectPath, replacementPath);
+  assert.deepEqual(history.map((entry) => entry.action).reverse(), ["uploaded", "access_changed"]);
 
   const unshareResponse = await request(`/documents/${created.id}`, {
     method: "PATCH",
@@ -161,6 +172,12 @@ test("does not expose staff-only documents in resident listings", { skip: !canRu
   });
   assert.equal(response.status, 201);
   const created = await json(response);
+
+  const unapprovedObject = await request(`/storage${created.objectPath}`, {
+    headers: authHeaders({ sub: actor }),
+  });
+  assert.equal(unapprovedObject.status, 404);
+  assert.match(unapprovedObject.headers.get("cache-control") ?? "", /(?:^|,\s*)no-store(?:,|$)/);
 
   const residentDocuments = await request(`/documents?role=resident&residentId=${residentId}`, {
     headers: authHeaders({ sub: `${actor}-resident`, role: "resident", residentId }),

@@ -162,7 +162,12 @@ export function hashSessionToken(token: string): string {
 function sessionCookie(req: Request): string | null {
   const header = req.header("cookie");
   const match = header?.match(new RegExp(`(?:^|;\\s*)${SESSION_COOKIE_NAME}=([^;]+)`));
-  return match ? decodeURIComponent(match[1]) : null;
+  if (!match) return null;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return null;
+  }
 }
 
 function sessionCookieOptions() {
@@ -372,8 +377,9 @@ export function authorize(principal: Principal, permission: Permission, context:
   if (permission === "expense:list" || permission === "expense:create" || permission === "income:list" || permission === "income:create") {
     return isAdmin;
   }
-  if (permission === "meeting:list" || permission === "meeting:create") {
-    return (isAdmin || isManager) && (!context.houseName || hasHouseScope(principal, context.houseName));
+  if (permission === "meeting:list") return isAdmin || isManager;
+  if (permission === "meeting:create") {
+    return isAdmin || (isManager && Boolean(context.houseName) && hasHouseScope(principal, context.houseName!));
   }
   if (permission === "house:list") return isAdmin || isManager || isResident;
   if (permission === "assessment:read" || permission === "assessment:create" || permission === "assessment:update" || permission === "assessment:submit") {

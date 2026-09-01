@@ -84,3 +84,10 @@ The deletion-retention authority split described above remains a separate policy
 follow-up. Its service boundary is not exposed by the private-pilot route inventory and
 must not be enabled as an unreviewed deletion workflow. This does not silently waive
 that policy requirement; it keeps it separate from the publish path covered here.
+
+## Access-control audit
+
+The effective role/action inventory, sensitive-data mapping, authentication lifecycle
+evidence, direct-ID findings, remediation status, and residual server-check gaps are
+recorded in [`ACCESS_CONTROL_AUDIT.md`](../ACCESS_CONTROL_AUDIT.md). The automated gate
+is intentionally not treated as a substitute for that route-level evidence.

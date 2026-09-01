@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { authHeaders } from "./auth-test-helpers.mjs";
 
-const baseUrl = (process.env.REPORT_API_BASE_URL ?? "http://127.0.0.1:5000/api").replace(/\/$/, "");
+const baseUrl = (process.env.REPORT_API_BASE_URL ?? "http://127.0.0.1:8080/api").replace(/\/$/, "");
 const reportTypes = ["occupancy", "roster", "payments", "revenue", "compliance", "referral", "audit"];
 const actor = `report-regression-${process.pid}`;
 const administratorHeaders = authHeaders({ sub: actor, role: "owner_admin" });
@@ -84,7 +84,6 @@ test("records the actor and ISO timestamp for successful exports", async () => {
   assert.equal(auditExport.status, 200);
 
   const csv = await auditExport.text();
-  assert.match(csv, /unattributed/);
-  assert.doesNotMatch(csv, new RegExp(actor));
+  assert.match(csv, new RegExp(actor));
   assert.match(csv, /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z/);
 });

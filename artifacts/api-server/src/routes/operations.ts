@@ -612,19 +612,14 @@ router.get("/residents", async (req, res): Promise<void> => {
   if (principal.role === "house_manager") filters.push(inArray(residentsTable.home, principal.houseNames));
   if (principal.role === "resident") filters.push(eq(residentsTable.id, principal.residentId!));
   if (status !== "all") filters.push(eq(residentsTable.status, status));
-  if (search) filters.push(or(ilike(residentsTable.name, `%$
-{
-search
-}
-%`), ilike(residentsTable.email, `%$
-{
-search
-}
-%`), ilike(residentsTable.home, `%$
-{
-search
-}
-%`)));
+  if (search) {
+    const searchPattern = `%${search}%`;
+    filters.push(or(
+      ilike(residentsTable.name, searchPattern),
+      ilike(residentsTable.email, searchPattern),
+      ilike(residentsTable.home, searchPattern),
+    ));
+  }
   const rows = await db.select(getTableColumns(residentsTable)).from(residentsTable).where(filters.length ? and(...filters) : organizationScope).orderBy(asc(residentsTable.name));
   res.json(rows.map((row) => asResident(row, principal)));
   await audit(req, "Resident list viewed", "resident");
@@ -906,10 +901,16 @@ router.patch("/applications/:id", async (req, res): Promise<void> => {
   if (!input) { problem(req, res, 400); return; }
   if (!isAdministrator(principal)) {
     const [existing] = await db.select({ preferredHouseId: applicationsTable.preferredHouseId }).from(applicationsTable).where(eq(applicationsTable.id, Number(req.params.id)));
-    const [house] = existing?.preferredHouseId
+    const [currentHouse] = existing?.preferredHouseId
       ? await db.select({ name: housesTable.name }).from(housesTable).where(eq(housesTable.id, existing.preferredHouseId))
       : [];
-    if (!existing || !house || !hasHouseScope(principal, house.name)) { problem(req, res, 404); return; }
+    if (!existing || !currentHouse || !hasHouseScope(principal, currentHouse.name)) { problem(req, res, 404); return; }
+    if (Object.prototype.hasOwnProperty.call(input, "preferredHouseId")) {
+      const [targetHouse] = Number.isInteger(input.preferredHouseId)
+        ? await db.select({ name: housesTable.name }).from(housesTable).where(eq(housesTable.id, Number(input.preferredHouseId)))
+        : [];
+      if (!targetHouse || !hasHouseScope(principal, targetHouse.name)) { problem(req, res, 403); return; }
+    }
   }
   const [updated] = await db.update(applicationsTable).set({ ...input, updatedAt: new Date() }).where(eq(applicationsTable.id, Number(req.params.id))).returning();
   if (!updated) { problem(req, res, 404); return; }
@@ -927,8 +928,10 @@ router.get("/documents", async (_req, res): Promise<void> => {
   const residents = await db.select({ id: residentsTable.id, home: residentsTable.home }).from(residentsTable);
   const visibleIds = residents.filter((resident) => canAccessResident(principal, resident)).map(({ id }) => id);
   const scope = visibleIds.length ? inArray(documentsTable.residentId, visibleIds) : sql`false`;
-  const visibility = principal.role === "resident" ? eq(documentsTable.visibility, "resident") : undefined;
-  res.json(await db.select(getTableColumns(documentsTable)).from(documentsTable).where(visibility ? and(scope, visibility) : scope).orderBy(desc(documentsTable.createdAt)));
+  const residentVisibility = principal.role === "resident"
+    ? and(eq(documentsTable.visibility, "resident"), eq(documentsTable.status, "approved"))
+    : undefined;
+  res.json(await db.select(getTableColumns(documentsTable)).from(documentsTable).where(residentVisibility ? and(scope, residentVisibility) : scope).orderBy(desc(documentsTable.createdAt)));
   await audit(_req, "Document list viewed", "document");
 });
 
@@ -953,7 +956,17 @@ const isValidDocumentVisibility = (visibility: unknown): visibility is "staff" |
 
 router.post("/documents", async (req, res): Promise<void> => {
   const principal = getPrincipal(res);
-  const parsed = insertDocumentSchema.safeParse({ ...req.body, status: "uploaded" });
+  const serverControlledFields = ["status", "uploadedBy", "applicationId"] as const;
+  if (serverControlledFields.some((key) => Object.prototype.hasOwnProperty.call(req.body ?? {}, key))) {
+    res.status(400).json({ error: "Document provenance and approval state are server-controlled." });
+    return;
+  }
+  const parsed = insertDocumentSchema.safeParse({
+    ...req.body,
+    status: "uploaded",
+    uploadedBy: safeActor(req),
+    applicationId: null,
+  });
   const document = parsed.success ? parsed.data : null;
   const residentId = document?.residentId;
   if (
@@ -1002,7 +1015,12 @@ router.patch("/documents/:id", async (req, res): Promise<void> => {
     : [];
   if (!currentResident || !canAccessResident(principal, currentResident, true)) { problem(req, res, 404); return; }
 
-  const allowed = ["title", "category", "visibility", "status", "residentId", "objectPath", "fileName", "contentType", "fileSize"] as const;
+  const immutableFields = ["status", "objectPath", "fileName", "contentType", "fileSize", "applicationId", "uploadedBy"] as const;
+  if (immutableFields.some((key) => Object.prototype.hasOwnProperty.call(req.body ?? {}, key))) {
+    res.status(400).json({ error: "Uploaded file metadata and approval state are server-controlled." });
+    return;
+  }
+  const allowed = ["title", "category", "visibility", "residentId"] as const;
   const changes: Record<string, unknown> = {};
   for (const key of allowed) {
     if (Object.prototype.hasOwnProperty.call(req.body ?? {}, key)) changes[key] = req.body[key];
@@ -1010,13 +1028,8 @@ router.patch("/documents/:id", async (req, res): Promise<void> => {
   if (
     ("title" in changes && (typeof changes.title !== "string" || !changes.title.trim())) ||
     ("category" in changes && (typeof changes.category !== "string" || !changes.category.trim())) ||
-    ("status" in changes && (typeof changes.status !== "string" || !changes.status.trim())) ||
     ("visibility" in changes && !isValidDocumentVisibility(changes.visibility)) ||
-    ("residentId" in changes && changes.residentId !== null && (!Number.isInteger(changes.residentId) || Number(changes.residentId) <= 0)) ||
-    ("fileSize" in changes && (!Number.isInteger(changes.fileSize) || Number(changes.fileSize) <= 0)) ||
-    ("objectPath" in changes && (typeof changes.objectPath !== "string" || !changes.objectPath.startsWith("/objects/"))) ||
-    ("fileName" in changes && (typeof changes.fileName !== "string" || !changes.fileName.trim())) ||
-    ("contentType" in changes && (typeof changes.contentType !== "string" || !changes.contentType.trim()))
+    ("residentId" in changes && changes.residentId !== null && (!Number.isInteger(changes.residentId) || Number(changes.residentId) <= 0))
   ) {
     res.status(400).json({ error: documentMetadataError });
     return;
@@ -1044,17 +1057,16 @@ router.patch("/documents/:id", async (req, res): Promise<void> => {
     sharedAt: nextVisibility === "resident" && current.visibility !== "resident" ? new Date() : current.sharedAt,
     updatedAt: new Date(),
   }).where(eq(documentsTable.id, id)).returning();
-  const replacement = Object.prototype.hasOwnProperty.call(changes, "objectPath");
   const accessChanged = nextVisibility !== current.visibility;
   await db.insert(documentHistoryTable).values({
     documentId: id,
-    action: accessChanged ? "access_changed" : replacement ? "replaced" : "updated",
+    action: accessChanged ? "access_changed" : "updated",
     actor: safeActor(req),
     fromVisibility: current.visibility,
     toVisibility: updated.visibility,
     objectPath: updated.objectPath,
   });
-  await audit(req, accessChanged ? "Document access changed" : replacement ? "Document replaced" : "Document updated", "document", id);
+  await audit(req, accessChanged ? "Document access changed" : "Document updated", "document", id);
   res.json(updated);
 });
 router.get("/operations", async (_req, res): Promise<void> => {
@@ -1066,7 +1078,10 @@ router.get("/operations", async (_req, res): Promise<void> => {
   }
   const residents = await db.select({ id: residentsTable.id, home: residentsTable.home }).from(residentsTable);
   const visibleIds = residents.filter((resident) => canAccessResident(principal, resident)).map(({ id }) => id);
-  res.json(await db.select(getTableColumns(operationsTable)).from(operationsTable).where(inArray(operationsTable.residentId, visibleIds)).orderBy(asc(operationsTable.scheduledDate), desc(operationsTable.createdAt)));
+  const operationScope = principal.role === "resident"
+    ? and(inArray(operationsTable.residentId, visibleIds), eq(operationsTable.private, false))
+    : inArray(operationsTable.residentId, visibleIds);
+  res.json(await db.select(getTableColumns(operationsTable)).from(operationsTable).where(operationScope).orderBy(asc(operationsTable.scheduledDate), desc(operationsTable.createdAt)));
   await audit(_req, "Operations list viewed", "operation");
 });
 router.post("/operations", async (req, res): Promise<void> => {

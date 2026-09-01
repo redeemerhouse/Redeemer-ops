@@ -255,6 +255,7 @@ router.post("/residents/import/:batchId/confirm", async (req, res): Promise<void
   if (!Number.isInteger(batchId) || batchId <= 0 || !approvedRowNumbers.length) { res.status(400).json({ error: "Explicitly approve at least one valid row before importing.", correlationId: res.locals.correlationId }); return; }
   const [batch] = await db.select().from(residentImportBatchesTable).where(eq(residentImportBatchesTable.id, batchId));
   if (!batch || batch.status !== "preview") { problem(req, res, 404); return; }
+  if (principal.role === "house_manager" && batch.actor !== principal.sub) { problem(req, res, 404); return; }
   const rows = await db.select().from(residentImportRowsTable).where(and(eq(residentImportRowsTable.batchId, batchId), inArray(residentImportRowsTable.rowNumber, approvedRowNumbers)));
   if (!rows.length || rows.some((row) => row.outcome !== "ready" || !row.normalizedData)) { res.status(400).json({ error: "Only rows that passed preview validation can be approved.", correlationId: res.locals.correlationId }); return; }
   if (principal.role === "house_manager" && rows.some((row) => !hasHouseScope(principal, (row.normalizedData as NormalizedRow).home))) { problem(req, res, 403); return; }
