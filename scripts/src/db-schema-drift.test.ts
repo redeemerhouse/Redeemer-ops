@@ -117,6 +117,102 @@ test("matching catalog metadata has no drift", () => {
   assert.deepEqual(findSchemaDrift(snapshot, matchingLiveSchema()), []);
 });
 
+test("index and policy metadata drift is reported without row values", () => {
+  const expectedIndex = {
+    name: "assessment_templates_slug_version_unique",
+    columns: [
+      {
+        expression: "slug",
+        isExpression: false,
+        asc: true,
+        nulls: "last",
+      },
+      {
+        expression: "version",
+        isExpression: false,
+        asc: true,
+        nulls: "last",
+      },
+    ],
+    isUnique: true,
+    method: "btree",
+  };
+  const expected: DrizzleSnapshot = {
+    tables: {
+      "public.assessment_templates": {
+        name: "assessment_templates",
+        schema: "public",
+        columns: {},
+        indexes: {
+          assessment_templates_slug_version_unique: expectedIndex,
+        },
+        foreignKeys: {},
+        uniqueConstraints: {},
+        checkConstraints: {},
+        policies: {},
+        isRLSEnabled: false,
+      },
+    },
+  };
+  const live: LiveSchema = {
+    tables: {
+      "public.assessment_templates": {
+        columns: {},
+        indexes: {
+          assessment_templates_slug_version_unique: {
+            ...expectedIndex,
+            columns: [expectedIndex.columns[0]],
+            where: null,
+            with: {},
+          },
+          release_check_extra_index: {
+            name: "release_check_extra_index",
+            columns: [expectedIndex.columns[0]],
+            isUnique: false,
+            method: "btree",
+            where: null,
+            with: {},
+          },
+        },
+        foreignKeys: {},
+        uniqueConstraints: {},
+        checkConstraints: {},
+        policies: {
+          release_check_extra_policy: {
+            name: "release_check_extra_policy",
+            as: "PERMISSIVE",
+            for: "SELECT",
+            to: ["public"],
+            using: "true",
+            withCheck: null,
+          },
+        },
+        isRLSEnabled: false,
+      },
+    },
+  };
+
+  const report = formatSchemaDrift(
+    findSchemaDrift(expected, live),
+    "lib/db/drizzle/meta/0004_snapshot.json",
+  );
+
+  assert.match(
+    report,
+    /changed public\.assessment_templates\.index assessment_templates_slug_version_unique \(definition differs\)/,
+  );
+  assert.match(
+    report,
+    /unexpected public\.assessment_templates\.index release_check_extra_index/,
+  );
+  assert.match(
+    report,
+    /unexpected public\.assessment_templates\.policy release_check_extra_policy/,
+  );
+  assert.match(report, /catalog metadata only/);
+  assert.doesNotMatch(report, /RELEASE_CHECK_ROW_VALUE|987654\.32/);
+});
+
 test("missing, unexpected, and changed objects produce non-sensitive drift", () => {
   const live = matchingLiveSchema();
   live.tables["public.residents"].columns.status.notNull = false;

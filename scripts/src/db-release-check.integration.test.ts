@@ -124,6 +124,23 @@ test(
           ADD CONSTRAINT "residents_status_allowed"
           CHECK ("residents"."status" IN ('active', 'pending', 'exited', 'archived'))
         `);
+        await databasePool.query(
+          'CREATE INDEX "release_check_extra_index" ON "residents" ("email")',
+        );
+        await databasePool.query(`
+          DROP INDEX "assessment_templates_slug_version_unique"
+        `);
+        await databasePool.query(`
+          CREATE UNIQUE INDEX "assessment_templates_slug_version_unique"
+          ON "assessment_templates" USING btree ("slug")
+        `);
+        await databasePool.query(`
+          CREATE POLICY "release_check_extra_policy"
+          ON "residents"
+          FOR SELECT
+          TO public
+          USING (true)
+        `);
       } finally {
         await databasePool.end();
       }
@@ -145,6 +162,18 @@ test(
       assert.match(
         driftResult.output,
         /changed public\.residents\.check constraint residents_status_allowed \(definition differs\)/,
+      );
+      assert.match(
+        driftResult.output,
+        /unexpected public\.residents\.index release_check_extra_index/,
+      );
+      assert.match(
+        driftResult.output,
+        /changed public\.assessment_templates\.index assessment_templates_slug_version_unique \(definition differs\)/,
+      );
+      assert.match(
+        driftResult.output,
+        /unexpected public\.residents\.policy release_check_extra_policy/,
       );
       assert.doesNotMatch(
         driftResult.output,
@@ -176,6 +205,19 @@ test(
           ADD CONSTRAINT "residents_status_allowed"
           CHECK ("residents"."status" IN ('active', 'pending', 'exited'))
         `);
+        await reconciliationPool.query(
+          'DROP INDEX "release_check_extra_index"',
+        );
+        await reconciliationPool.query(
+          'DROP INDEX "assessment_templates_slug_version_unique"',
+        );
+        await reconciliationPool.query(`
+          CREATE UNIQUE INDEX "assessment_templates_slug_version_unique"
+          ON "assessment_templates" USING btree ("slug", "version")
+        `);
+        await reconciliationPool.query(
+          'DROP POLICY "release_check_extra_policy" ON "residents"',
+        );
       } finally {
         await reconciliationPool.end();
       }
