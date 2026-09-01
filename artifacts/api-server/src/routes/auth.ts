@@ -115,7 +115,7 @@ async function revokeAccountSessions(accountId: number): Promise<void> {
 
 function publicPrincipal(scope: NonNullable<Awaited<ReturnType<typeof loadAccountScope>>>) {
   return {
-    id: scope.account.id,
+    id: String(scope.account.id),
     email: scope.account.email,
     role: scope.account.role as Role,
     organizationId: scope.account.organizationId,
@@ -345,20 +345,6 @@ router.post("/auth/login", async (req, res) => {
   await loginStore.reset?.(key);
   await audit(req, "auth.login", account.id, "success", String(account.id));
   res.json({ user: publicPrincipal(scope), expiresAt: expiresAt.toISOString() });
-});
-
-router.get("/auth/session", async (req, res) => {
-  authenticate(req, res, async () => {
-    const principal = getPrincipal(res);
-    const scope = await loadAccountScope(Number(principal.sub));
-    if (!scope) {
-      clearSessionCookie(res);
-      res.status(401).json({ error: "Authentication is required." });
-      return;
-    }
-    res.setHeader("Cache-Control", "no-store, private");
-    res.json({ user: publicPrincipal(scope) });
-  });
 });
 
 router.post("/auth/logout", async (req, res) => {

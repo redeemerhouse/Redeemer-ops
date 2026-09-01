@@ -19,7 +19,7 @@ import {
 export type SessionRole = 'owner_admin' | 'program_director' | 'house_manager' | 'resident';
 
 export type SessionUser = {
-  id: string | number;
+  id: string;
   email?: string;
   role: SessionRole;
   organizationId: string;
@@ -60,13 +60,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({ status: 'checking', user: null, expiresAt: null });
   const expiryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const clearSession = useCallback(() => {
+  const clearSession = useCallback((status: 'unauthenticated' | 'error' = 'unauthenticated') => {
     inMemoryAccessToken = null;
     queryClient.clear();
     if (expiryTimerRef.current) clearTimeout(expiryTimerRef.current);
     expiryTimerRef.current = null;
-    setState({ status: 'unauthenticated', user: null, expiresAt: null });
+    setState({ status, user: null, expiresAt: null });
   }, [queryClient]);
+  const verifySessionRef = useRef<(signal?: AbortSignal) => Promise<void>>(async () => undefined);
 
   const applySession = useCallback((session: SessionResponse) => {
     const expiresInMs = Date.parse(session.expiresAt) - Date.now();
@@ -76,11 +77,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     if (expiryTimerRef.current) clearTimeout(expiryTimerRef.current);
     setState({ status: 'authenticated', user: session.user, expiresAt: session.expiresAt });
-    expiryTimerRef.current = setTimeout(clearSession, expiresInMs);
+    // The server extends the idle expiry on every authenticated request. Recheck
+    // at the last confirmed boundary instead of logging out an active session
+    // using a stale timestamp from login or page bootstrap.
+    expiryTimerRef.current = setTimeout(() => {
+      void verifySessionRef.current();
+    }, expiresInMs);
   }, [clearSession]);
 
+  const verifySession = useCallback(async (signal?: AbortSignal) => {
+    try {
+      const session = await customFetch<SessionResponse>('/api/auth/session', {
+        credentials: 'include',
+        responseType: 'json',
+        signal,
+      });
+      if (!signal?.aborted) applySession(session);
+    } catch (error: unknown) {
+      if (signal?.aborted) return;
+      if (error instanceof ApiError && error.status === 401) {
+        clearSession();
+        return;
+      }
+      // Verification failures stay fail-closed: hide records and clear every
+      // user-scoped cache entry until the session can be checked again.
+      clearSession('error');
+    }
+  }, [applySession, clearSession]);
+
   useEffect(() => {
-    let mounted = true;
+    const controller = new AbortController();
+    verifySessionRef.current = verifySession;
     setAuthTokenGetter(() => inMemoryAccessToken);
     setUnauthorizedHandler(() => {
       // Clearing the whole query cache is intentional: query keys can contain
@@ -88,32 +115,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearSession();
     });
 
-    void customFetch<SessionResponse>('/api/auth/session', {
-      credentials: 'include',
-      responseType: 'json',
-    })
-      .then((session) => {
-        if (!mounted) return;
-        applySession(session);
-      })
-      .catch((error: unknown) => {
-        if (!mounted) return;
-        if (error instanceof ApiError && error.status === 401) {
-          setState({ status: 'unauthenticated', user: null, expiresAt: null });
-          return;
-        }
-        // A failed verification must never fall through to the protected
-        // router. Keep records hidden and offer a retry-safe error state.
-        setState({ status: 'error', user: null, expiresAt: null });
-      });
+    void verifySession(controller.signal);
 
     return () => {
-      mounted = false;
+      controller.abort();
       if (expiryTimerRef.current) clearTimeout(expiryTimerRef.current);
       setAuthTokenGetter(null);
       setUnauthorizedHandler(null);
     };
-  }, [applySession, clearSession, queryClient]);
+  }, [clearSession, verifySession]);
 
   const authRequest = useCallback(async (path: string, body?: Record<string, unknown>) => {
     const response = await fetch(`/api/auth${path}`, {

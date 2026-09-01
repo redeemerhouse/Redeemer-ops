@@ -103,3 +103,52 @@ reviewed migration path must create `api_rate_limit_buckets`. No startup DDL, sc
 ledger entry, or hard-coded credential workaround was used. After that prerequisite is repaired,
 rerun `pnpm run release:verify` and require `/api/readyz` to return both dependencies `ok` before
 promotion.
+
+## Subsequent production launch acceptance
+
+The production lifecycle was reproduced independently with the workspace Node 24 runtime and
+pnpm frozen lockfile. The artifact-specific API and web builds produced `dist/index.mjs` and
+`dist/public/index.html` plus hashed assets. Package ownership, ESM output, the API start script,
+port 8080 binding on `0.0.0.0`, static web root, SPA rewrite, and same-origin `/api` paths agree.
+
+Two authentication contract blockers were confirmed and corrected:
+
+1. **Identity changed type after reload.** Login serialized the database account ID as a number,
+   while the documented session bootstrap serialized it as a string. Login now uses the same
+   string identity as the OpenAPI/session contract.
+2. **Active sessions used a stale browser expiry.** The server extends the revocable database
+   session's idle expiry on authenticated requests, but the browser previously logged out at the
+   last bootstrap timestamp. At that boundary the browser now revalidates the HttpOnly-cookie
+   session, applies the refreshed expiry, and fails closed on rejection or verification errors.
+
+The obsolete duplicate `/auth/session` handler in the account router was removed so the
+Zod-validated session route is the single response contract. Secure `__Host-` cookie flags,
+database-backed revocation, authorization checks, cache clearing, and fail-closed behavior remain
+unchanged. The auth lifecycle acceptance test now verifies login and reload bootstrap return the
+same string identity and a valid expiry timestamp.
+
+
+### Blocker evidence and disposition
+
+| Area | Symptom | Root cause | Minimum correction | Risk and verification |
+| --- | --- | --- | --- | --- |
+| Auth identity | User identity changed shape after page reload. | Login bypassed the canonical string-ID session contract. | Serialize login IDs as strings and verify reload equality. | Low response-shape correction; auth lifecycle test covers login/bootstrap. |
+| Auth expiry | Active users could be hidden at the original idle deadline although the server session had renewed. | Browser timer cleared state without rechecking the sliding DB session. | Revalidate at the confirmed expiry and apply the server's new expiry. | Fail-closed behavior retained; 401 and verification failure still clear user data. |
+| Environment | API cannot listen without production database/session configuration. | Required managed settings are intentionally not source-controlled. | Configure `DATABASE_URL` and `SESSION_SECRET`; retain reviewed TLS/CORS/store settings. | Expected fail-closed requirement; values must never enter logs or source. |
+| Object storage/email/connectors | A route-specific integration may be unavailable. | These dependencies are lazy/degraded-service boundaries, not listener prerequisites. | Configure before enabling the affected workflow; do not disguise failures as startup health. | Core API remains available; affected route must fail explicitly. |
+
+Large frontend chunks and source-map reporting warnings remain non-blocking build warnings. The
+private pilot is **not ready**. The complete `release:verify` command passed codegen, typecheck,
+and both production builds, then stopped at `db:release-check` because the configured development
+target has an empty or incompatible migration ledger. The reviewed target, backup, and baseline
+steps must be operator-confirmed before the gate is rerun. Production-equivalent startup also
+bound `0.0.0.0:8080` and remained alive, but routed smoke requests received the known shared
+rate-limit-store `503` being corrected separately; this task did not alter that out-of-scope
+behavior. A direct database query succeeded, and a separate production process exited cleanly on
+`SIGTERM`.
+
+The application router returned the web root and deep links `/residents` and `/auth/sign-in` as
+the SPA. In a real browser, unauthenticated session bootstrap used same-origin `/api/auth/session`,
+returned the expected `401`, and exposed no protected data. No additional application launch
+blocker was found in build, packaging, static routing, port binding, or the corrected browser/API
+session contract.

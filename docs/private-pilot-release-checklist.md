@@ -35,6 +35,20 @@ or HTTPS CORS origin is missing or unsafe. Startup messages name the missing set
 include its value. `TRUST_PROXY=true` is required by the approved one-proxy deployment topology;
 an unset value does not stop startup, so the release audit must reject it explicitly.
 
+
+### Component environment matrix
+
+| Component | Setting | Classification | Failure behavior |
+| --- | --- | --- | --- |
+| API | `PORT`, `NODE_ENV`, `DB_SSL`, `CORS_ORIGINS`, `API_RATE_LIMIT_STORE`, `DATABASE_URL`, `SESSION_SECRET` | Required | Startup fails closed before listening when absent or unsafe. |
+| API | `TRUST_PROXY` | Required for the reviewed Replit topology | Secure origin and client-address handling no longer matches the production proxy when omitted. |
+| API | `DB_POOL_*`, `DB_*_TIMEOUT_MS`, `API_*_LIMIT*`, `API_REQUEST_TIMEOUT_MS` | Optional tuning | Reviewed bounded defaults apply. |
+| Web build | `PORT`, `BASE_PATH` | Required by the artifact; build defaults are `24336` and `/` | Development/preview startup fails clearly if omitted; the production artifact supplies both. |
+| Object storage routes | `PRIVATE_OBJECT_DIR`; Replit object-storage sidecar | Degraded service | API startup and non-document routes remain available; storage requests fail explicitly. |
+| Email delivery | Resend connection/environment | Degraded service | API startup remains available; verification/reset delivery fails without exposing tokens. |
+| QuickBooks | `QUICKBOOKS_API_KEY` | Optional, feature not launched | No startup dependency in the current private-pilot API. |
+| Connector-backed services | `CONNECTORS_HOSTNAME` / `REPLIT_CONNECTORS_HOSTNAME` | Degraded service where used | Core database/auth startup remains independent; connector calls fail explicitly. |
+
 ## 3. Release and migration
 
 1. Run `pnpm run release:verify` after configuring `DATABASE_URL`. This is the complete

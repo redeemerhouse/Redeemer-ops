@@ -88,6 +88,17 @@ grep -qi '^set-cookie: __Host-recovery-session=' "$TEMP_DIR/admin-login-headers.
 grep -qi '^set-cookie: .*; Secure;' "$TEMP_DIR/admin-login-headers.txt"
 grep -qi '^set-cookie: .*; HttpOnly;' "$TEMP_DIR/admin-login-headers.txt"
 grep -qi '^set-cookie: .*; SameSite=Lax' "$TEMP_DIR/admin-login-headers.txt"
+curl -fsS -o "$TEMP_DIR/admin-session.json" \
+  -H "cookie: $ADMIN_COOKIE" "$BASE_URL/auth/session"
+node - "$TEMP_DIR/admin-login.json" "$TEMP_DIR/admin-session.json" <<'NODE'
+const fs = require("node:fs");
+const login = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const session = JSON.parse(fs.readFileSync(process.argv[3], "utf8"));
+if (typeof login.user?.id !== "string") throw new Error("login user id must be a string");
+if (session.authenticated !== true) throw new Error("session bootstrap must confirm authentication");
+if (session.user?.id !== login.user.id) throw new Error("login and session user ids must match");
+if (!Number.isFinite(Date.parse(session.expiresAt))) throw new Error("session expiry must be an ISO timestamp");
+NODE
 
 curl -sS -o /dev/null \
   -H 'content-type: application/json' \
