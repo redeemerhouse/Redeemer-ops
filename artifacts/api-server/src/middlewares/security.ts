@@ -150,7 +150,7 @@ export function rateLimit(
       );
       bucket = await selectedStore.increment(key, serverConfig.rateWindowMs, now);
     } catch (error) {
-      if (serverConfig.isProduction && serverConfig.rateLimitStore === "postgres" && !store) {
+      if (serverConfig.isProduction && serverConfig.rateLimitStore === "postgres") {
         noteSharedStoreFailure(error, now);
         res.setHeader("Retry-After", Math.max(1, Math.ceil(serverConfig.rateLimitStoreRetryMs / 1000)));
         res.status(503).json({
@@ -178,14 +178,19 @@ export function rateLimit(
   };
 }
 
-export const routeRateLimit: RequestHandler = (req, res, next) => {
-  const limiter = req.path.endsWith("/healthz")
-    ? rateLimit(serverConfig.healthRateLimit, "health")
-    : rateLimit(
-        ["GET", "HEAD"].includes(req.method)
-          ? serverConfig.readRateLimit
-          : serverConfig.mutationRateLimit,
-        "api",
-      );
-  limiter(req, res, next);
-};
+export function createRouteRateLimit(store?: RateLimitStore): RequestHandler {
+  return (req, res, next) => {
+    const limiter = req.path.endsWith("/healthz")
+      ? rateLimit(serverConfig.healthRateLimit, "health", store)
+      : rateLimit(
+          ["GET", "HEAD"].includes(req.method)
+            ? serverConfig.readRateLimit
+            : serverConfig.mutationRateLimit,
+          "api",
+          store,
+        );
+    limiter(req, res, next);
+  };
+}
+
+export const routeRateLimit: RequestHandler = createRouteRateLimit();

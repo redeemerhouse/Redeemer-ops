@@ -1,10 +1,92 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
+import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import {
   createMemoryRateLimitStore,
   createPostgresRateLimitStore,
   type RateLimitQueryExecutor,
 } from "../src/lib/rateLimitStore.ts";
+
+test("fails closed during a shared-store outage and recovers without restarting", async () => {
+  const serverPath = fileURLToPath(new URL("./security-rate-limit-outage-server.ts", import.meta.url));
+  const workspaceRoot = fileURLToPath(new URL("../../..", import.meta.url));
+  const child = spawn("pnpm", ["--filter", "@workspace/scripts", "exec", "tsx", serverPath], {
+    cwd: workspaceRoot,
+    env: {
+      ...process.env,
+      NODE_ENV: "production",
+      DATABASE_URL: "postgresql://outage-test:outage-test@127.0.0.1:1/outage_test",
+      DB_SSL: "true",
+      SESSION_SECRET: "outage-test-session-secret-is-long-enough",
+      CORS_ORIGINS: "https://private-pilot.example",
+      API_RATE_LIMIT_STORE: "postgres",
+      API_RATE_LIMIT_STORE_RETRY_MS: "100",
+      LOG_LEVEL: "error",
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  let logs = "";
+  child.stdout?.on("data", (chunk) => { logs += chunk.toString(); });
+  child.stderr?.on("data", (chunk) => { logs += chunk.toString(); });
+
+  try {
+    const readyLine = await Promise.race([
+      once(child.stdout!, "data").then(([chunk]) => String(chunk)),
+      once(child, "exit").then(([code, signal]) => {
+        throw new Error(`outage test server exited before startup (${code ?? signal}): ${logs}`);
+      }),
+      new Promise<never>((_, reject) => {
+        const timer = setTimeout(
+          () => reject(new Error(`outage test server startup timed out: ${logs}`)),
+          10_000,
+        );
+        timer.unref();
+      }),
+    ]);
+    const readyMatch = readyLine.match(/OUTAGE_TEST_READY (\d+)/);
+    assert.ok(readyMatch, `outage test server did not start: ${logs}`);
+    const baseUrl = `http://127.0.0.1:${readyMatch[1]}/api`;
+
+    const outageResponse = await fetch(`${baseUrl}/residents`, {
+      headers: { "X-Request-ID": "outage-e2e-correlation" },
+    });
+    const outageBody = await outageResponse.json();
+
+    assert.equal(outageResponse.status, 503);
+    assert.equal(outageResponse.headers.get("retry-after"), "1");
+    assert.equal(outageResponse.headers.get("x-correlation-id"), "outage-e2e-correlation");
+    assert.deepEqual(outageBody, {
+      error: "Request protection is temporarily unavailable. Please try again later.",
+      correlationId: "outage-e2e-correlation",
+    });
+    assert.doesNotMatch(JSON.stringify(outageBody), /postgres|sensitive|simulated|stack|sql/i);
+
+    const cooldownResponse = await fetch(`${baseUrl}/residents`);
+    assert.equal(cooldownResponse.status, 503);
+    assert.equal((await cooldownResponse.json()).error, outageBody.error);
+
+    await new Promise((resolve) => setTimeout(resolve, 1_150));
+
+    const recoveredResponse = await fetch(`${baseUrl}/residents`);
+    const recoveredBody = await recoveredResponse.json();
+    assert.equal(recoveredResponse.status, 401);
+    assert.equal(recoveredBody.error, "Authentication required.");
+    assert.equal(child.exitCode, null);
+
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    assert.doesNotMatch(logs, /postgresql:\/\/|sensitive\.example|simulated shared-store outage|stack|sql/i);
+    assert.match(logs, /Shared rate-limit store unavailable/);
+    assert.match(logs, /OUTAGE_TEST_STORE_RECOVERED/);
+  } finally {
+    if (child.exitCode === null && child.signalCode === null) {
+      child.kill("SIGTERM");
+      await once(child, "exit");
+    }
+  }
+});
 
 test("shares a counter between store instances backed by the same deployment store", async () => {
   const rows = new Map<string, { count: number; resetAt: number }>();

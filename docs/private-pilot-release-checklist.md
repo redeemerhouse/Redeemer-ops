@@ -55,7 +55,11 @@ After publish, verify `GET /api/healthz` returns `200` and `{ "status": "ok" }`.
 - security headers, `Cache-Control: no-store` problem responses, and correlation IDs exist;
 - oversized bodies/query collections are rejected before route work;
 - repeated requests eventually receive `429` while the shared protection store is healthy;
-- a simulated unavailable shared rate-limit store returns the safe `503` maintenance response.
+- a simulated unavailable shared rate-limit store returns the safe `503` maintenance response:
+  `Retry-After` is present, the response has a correlation ID, and neither the protected route
+  nor dependency details are exposed;
+- after the retry window, repeat the request without restarting the API and confirm the shared
+  store recovers and the protected route returns its normal unauthenticated response.
 
 Use synthetic IDs and non-client test data for smoke tests. Never paste secrets, tokens, raw
 responses, resident notes, payment values, or document contents into the operator log.
