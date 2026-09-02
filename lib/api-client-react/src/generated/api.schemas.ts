@@ -809,6 +809,16 @@ export interface Activity {
  */
 export type MonthParameter = string;
 
+/**
+ * Maximum records to return. Defaults to 100 and cannot exceed 100.
+ */
+export type PageLimitParameter = number;
+
+/**
+ * Number of stable, ordered records to skip before returning this page.
+ */
+export type PageOffsetParameter = number;
+
 export type GetDashboardParams = {
 /**
  * Calendar month used for monthly totals, in YYYY-MM format. Defaults to the current UTC month.
@@ -820,6 +830,18 @@ month?: MonthParameter;
 export type ListResidentsParams = {
 search?: string;
 status?: ListResidentsStatus;
+/**
+ * Maximum records to return. Defaults to 100 and cannot exceed 100.
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: PageLimitParameter;
+/**
+ * Number of stable, ordered records to skip before returning this page.
+ * @minimum 0
+ * @maximum 10000
+ */
+offset?: PageOffsetParameter;
 };
 
 export type ListResidentsStatus = typeof ListResidentsStatus[keyof typeof ListResidentsStatus];
@@ -831,6 +853,21 @@ export const ListResidentsStatus = {
   pending: 'pending',
   exited: 'exited',
 } as const;
+
+export type ListResidentAssessmentsParams = {
+/**
+ * Maximum records to return. Defaults to 100 and cannot exceed 100.
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: PageLimitParameter;
+/**
+ * Number of stable, ordered records to skip before returning this page.
+ * @minimum 0
+ * @maximum 10000
+ */
+offset?: PageOffsetParameter;
+};
 
 export type DownloadResidentImportTemplateParams = {
 format: DownloadResidentImportTemplateFormat;
@@ -872,6 +909,18 @@ export type ListPaymentsParams = {
  */
 residentId?: number;
 status?: ListPaymentsStatus;
+/**
+ * Maximum records to return. Defaults to 100 and cannot exceed 100.
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: PageLimitParameter;
+/**
+ * Number of stable, ordered records to skip before returning this page.
+ * @minimum 0
+ * @maximum 10000
+ */
+offset?: PageOffsetParameter;
 };
 
 export type ListPaymentsStatus = typeof ListPaymentsStatus[keyof typeof ListPaymentsStatus];

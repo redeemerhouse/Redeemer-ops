@@ -5,17 +5,10 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-import type { ListPaymentsStatus } from './listPaymentsStatus';
 import type { PageLimitParameter } from './pageLimitParameter';
 import type { PageOffsetParameter } from './pageOffsetParameter';
 
-export type ListPaymentsParams = {
-/**
- * @minimum 1
- * @maximum 2147483647
- */
-residentId?: number;
-status?: ListPaymentsStatus;
+export type ListResidentAssessmentsParams = {
 /**
  * Maximum records to return. Defaults to 100 and cannot exceed 100.
  * @minimum 1

@@ -43,6 +43,7 @@ import type {
   ListIncomeParams,
   ListMeetingAttendanceParams,
   ListPaymentsParams,
+  ListResidentAssessmentsParams,
   ListResidentsParams,
   MeetingAttendance,
   MeetingAttendanceInput,
@@ -1076,20 +1077,29 @@ export const useRetireAssessmentTemplate = <TError = ErrorType<void>,
       return useMutation(getRetireAssessmentTemplateMutationOptions(options));
     }
 
-export const getListResidentAssessmentsUrl = (id: number,) => {
+export const getListResidentAssessmentsUrl = (id: number,
+    params?: ListResidentAssessmentsParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/residents/${id}/assessments`
+  return stringifiedParams.length > 0 ? `/api/residents/${id}/assessments?${stringifiedParams}` : `/api/residents/${id}/assessments`
 }
 
 /**
  * @summary List assessments for a resident
  */
-export const listResidentAssessments = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<AssessmentSummary[]> => {
+export const listResidentAssessments = async (id: number,
+    params?: ListResidentAssessmentsParams, options?: Parameters<typeof customFetch>[1]): Promise<AssessmentSummary[]> => {
 
-  return customFetch<AssessmentSummary[]>(getListResidentAssessmentsUrl(id),
+  return customFetch<AssessmentSummary[]>(getListResidentAssessmentsUrl(id,params),
   {
     ...options,
     method: 'GET'
@@ -1102,23 +1112,25 @@ export const listResidentAssessments = async (id: number, options?: Parameters<t
 
 
 
-export const getListResidentAssessmentsQueryKey = (id: number,) => {
+export const getListResidentAssessmentsQueryKey = (id: number,
+    params?: ListResidentAssessmentsParams,) => {
     return [
-    `/api/residents/${id}/assessments`
+    `/api/residents/${id}/assessments`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getListResidentAssessmentsQueryOptions = <TData = Awaited<ReturnType<typeof listResidentAssessments>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listResidentAssessments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getListResidentAssessmentsQueryOptions = <TData = Awaited<ReturnType<typeof listResidentAssessments>>, TError = ErrorType<void>>(id: number,
+    params?: ListResidentAssessmentsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listResidentAssessments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getListResidentAssessmentsQueryKey(id);
+  const queryKey =  queryOptions?.queryKey ?? getListResidentAssessmentsQueryKey(id,params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listResidentAssessments>>> = ({ signal }) => listResidentAssessments(id, { signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listResidentAssessments>>> = ({ signal }) => listResidentAssessments(id,params, { signal, ...requestOptions });
 
 
 
@@ -1136,11 +1148,12 @@ export type ListResidentAssessmentsQueryError = ErrorType<void>
  */
 
 export function useListResidentAssessments<TData = Awaited<ReturnType<typeof listResidentAssessments>>, TError = ErrorType<void>>(
- id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listResidentAssessments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ id: number,
+    params?: ListResidentAssessmentsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listResidentAssessments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getListResidentAssessmentsQueryOptions(id,options)
+  const queryOptions = getListResidentAssessmentsQueryOptions(id,params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

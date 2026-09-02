@@ -145,6 +145,43 @@ test("enforces house scope for resident and payment reads", { skip: !canRun }, a
   assert.equal(predictableMissingResident.status, 404);
 });
 
+test("bounds collection pages with stable ordering and unchanged scope", { skip: !canRun }, async () => {
+  const headers = authHeaders();
+  const first = await request("/residents?limit=1&offset=0", headers);
+  const second = await request("/residents?limit=1&offset=1", headers);
+  assert.equal(first.status, 200);
+  assert.equal(second.status, 200);
+  assert.equal(first.headers.get("x-page-limit"), "1");
+  assert.equal(first.headers.get("x-page-offset"), "0");
+  assert.equal(first.headers.get("x-has-more"), "true");
+  const [firstResident] = await first.json();
+  const [secondResident] = await second.json();
+  assert.notEqual(firstResident.id, secondResident.id);
+  assert.ok(
+    firstResident.name.localeCompare(secondResident.name) < 0 ||
+    (firstResident.name === secondResident.name && firstResident.id < secondResident.id),
+  );
+
+  const invalid = await request("/residents?limit=101", headers);
+  assert.equal(invalid.status, 400);
+  const tooDeep = await request("/residents?offset=10001", headers);
+  assert.equal(tooDeep.status, 400);
+
+  const scopedHeaders = authHeaders({
+    sub: "paged-northside-manager",
+    role: "house_manager",
+    houseNames: ["Northside House"],
+  });
+  const scoped = await request("/residents?limit=1&offset=0", scopedHeaders);
+  assert.equal(scoped.status, 200);
+  assert.ok((await scoped.json()).every((resident) => resident.home === "Northside House"));
+
+  const payments = await request("/payments?limit=1&offset=0", headers);
+  assert.equal(payments.status, 200);
+  assert.equal(payments.headers.get("x-page-limit"), "1");
+  assert.equal((await payments.json()).length, 1);
+});
+
 test("prevents vertical escalation from resident and manager roles", { skip: !canRun }, async () => {
   const allResidents = await request("/residents", authHeaders());
   const residents = await allResidents.json();

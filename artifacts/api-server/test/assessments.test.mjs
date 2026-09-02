@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
+import { createRequire } from "node:module";
 import { test } from "node:test";
 import { authHeaders } from "./auth-test-helpers.mjs";
+
+const requireFromDbPackage = createRequire(new URL("../../../lib/db/package.json", import.meta.url));
+const pg = requireFromDbPackage("pg");
+const { Client } = pg;
 
 const baseUrl = (process.env.AUTH_API_BASE_URL ?? "http://127.0.0.1:8080/api").replace(/\/$/, "");
 const canRun = Boolean(process.env.SESSION_SECRET);
@@ -43,6 +48,55 @@ test("exposes resident and restricted assessment catalogs by role", { skip: !can
   const residentTemplates = await resident.json();
   assert.ok(residentTemplates.length >= 3);
   assert.ok(residentTemplates.every((template) => template.audience === "resident"));
+});
+
+test("paginates resident assessment history after audience filtering", { skip: !canRun }, async () => {
+  const adminHeaders = authHeaders({ sub: "assessment-pagination-admin" });
+  const residentsResponse = await request("/residents?limit=1", adminHeaders);
+  assert.equal(residentsResponse.status, 200);
+  const [resident] = await residentsResponse.json();
+  const templatesResponse = await request("/assessment-templates", adminHeaders);
+  const templates = await templatesResponse.json();
+  const staffTemplate = templates.find((template) => template.audience !== "resident");
+  const residentTemplate = templates.find((template) => template.audience === "resident");
+  assert.ok(staffTemplate);
+  assert.ok(residentTemplate);
+
+  const marker = `assessment-page-${process.pid}-${Date.now()}`;
+  const client = new Client({ connectionString: process.env.DATABASE_URL });
+  await client.connect();
+  try {
+    await client.query(
+      `INSERT INTO assessment_submissions
+        (template_id, resident_id, status, answers, created_by, created_at, updated_at)
+       SELECT $1, $2, 'draft', '{}'::jsonb, $3, now() - interval '2 days' + value * interval '1 second', now()
+       FROM generate_series(1, 101) value`,
+      [staffTemplate.id, resident.id, marker],
+    );
+    const inserted = await client.query(
+      `INSERT INTO assessment_submissions
+        (template_id, resident_id, status, answers, created_by, created_at, updated_at)
+       VALUES ($1, $2, 'draft', '{}'::jsonb, $3, now() - interval '1 day', now())
+       RETURNING id`,
+      [residentTemplate.id, resident.id, marker],
+    );
+    const readableId = inserted.rows[0].id;
+    const residentHeaders = authHeaders({
+      sub: "assessment-pagination-resident",
+      role: "resident",
+      residentId: resident.id,
+      houseNames: [resident.home],
+    });
+    const page = await request(`/residents/${resident.id}/assessments?limit=100&offset=0`, residentHeaders);
+    assert.equal(page.status, 200);
+    const visible = await page.json();
+    assert.ok(visible.some((assessment) => assessment.id === readableId));
+    assert.equal(page.headers.get("x-has-more"), "false");
+    assert.ok(visible.every((assessment) => assessment.templateId !== staffTemplate.id));
+  } finally {
+    await client.query("DELETE FROM assessment_submissions WHERE created_by = $1", [marker]);
+    await client.end();
+  }
 });
 
 test("persists drafts, rejects incomplete submissions, and snapshots completion", { skip: !canRun }, async () => {

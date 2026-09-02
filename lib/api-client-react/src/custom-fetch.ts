@@ -1,6 +1,7 @@
 export type CustomFetchOptions = RequestInit & {
   responseType?: "json" | "text" | "blob" | "auto";
   timeoutMs?: number;
+  onResponse?: (response: Response) => void;
 };
 
 export type ErrorType<T = unknown> = ApiError<T>;
@@ -392,6 +393,7 @@ type PreparedRequest = {
   requestInfo: { method: string; url: string };
   responseType: "json" | "text" | "blob" | "auto";
   timeoutMs: number;
+  onResponse?: (response: Response) => void;
 };
 
 async function fetchWithTimeout(
@@ -435,6 +437,7 @@ async function prepareRequest(
   input = applyBaseUrl(input);
   const {
     responseType = "auto",
+    onResponse,
     timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
     headers: headersInit,
     ...init
@@ -489,6 +492,7 @@ async function prepareRequest(
     method,
     requestInfo,
     responseType,
+    onResponse,
     timeoutMs,
   };
 }
@@ -510,6 +514,7 @@ export async function authenticatedFetch(
   const prepared = await prepareRequest(input, options);
   const response = await fetchWithTimeout(prepared);
   await notifyUnauthorized(prepared.requestInfo, response);
+  prepared.onResponse?.(response);
   return response;
 }
 
@@ -520,6 +525,7 @@ export async function customFetch<T = unknown>(
   const prepared = await prepareRequest(input, options);
   const response = await fetchWithTimeout(prepared);
   await notifyUnauthorized(prepared.requestInfo, response);
+  prepared.onResponse?.(response);
 
   if (!response.ok) {
     const errorData = await parseErrorBody(response, prepared.method);

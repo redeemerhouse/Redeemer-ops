@@ -117,9 +117,18 @@ paths:
           schema:
             type: string
             enum: [all, active, pending, exited]
+        - $ref: "#/components/parameters/PageLimit"
+        - $ref: "#/components/parameters/PageOffset"
       responses:
         "200":
           description: Resident list
+          headers:
+            X-Page-Limit:
+              $ref: "#/components/headers/PageLimit"
+            X-Page-Offset:
+              $ref: "#/components/headers/PageOffset"
+            X-Has-More:
+              $ref: "#/components/headers/HasMore"
           content:
             application/json:
               schema:
@@ -291,9 +300,18 @@ paths:
         - BearerAuth: []
       parameters:
         - $ref: "#/components/parameters/Id"
+        - $ref: "#/components/parameters/PageLimit"
+        - $ref: "#/components/parameters/PageOffset"
       responses:
         "200":
           description: Resident assessment list
+          headers:
+            X-Page-Limit:
+              $ref: "#/components/headers/PageLimit"
+            X-Page-Offset:
+              $ref: "#/components/headers/PageOffset"
+            X-Has-More:
+              $ref: "#/components/headers/HasMore"
           content:
             application/json:
               schema:
@@ -500,9 +518,18 @@ paths:
           schema:
             type: string
             enum: [all, paid, due, overdue]
+        - $ref: "#/components/parameters/PageLimit"
+        - $ref: "#/components/parameters/PageOffset"
       responses:
         "200":
           description: Payment list
+          headers:
+            X-Page-Limit:
+              $ref: "#/components/headers/PageLimit"
+            X-Page-Offset:
+              $ref: "#/components/headers/PageOffset"
+            X-Has-More:
+              $ref: "#/components/headers/HasMore"
           content:
             application/json:
               schema:
@@ -740,6 +767,19 @@ paths:
         "403": { description: Staff report access required }
         "404": { description: No matching report data }
 components:
+  headers:
+    PageLimit:
+      description: Maximum records returned for this page.
+      schema:
+        type: integer
+    PageOffset:
+      description: Number of ordered records skipped for this page.
+      schema:
+        type: integer
+    HasMore:
+      description: Whether another page exists after this page.
+      schema:
+        type: boolean
   securitySchemes:
     BearerAuth:
       type: http
@@ -763,6 +803,26 @@ components:
       schema:
         type: string
         pattern: '^[0-9]{4}-(0[1-9]|1[0-2])$'
+    PageLimit:
+      name: limit
+      in: query
+      required: false
+      description: Maximum records to return. Defaults to 100 and cannot exceed 100.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 100
+    PageOffset:
+      name: offset
+      in: query
+      required: false
+      description: Number of stable, ordered records to skip before returning this page.
+      schema:
+        type: integer
+        minimum: 0
+        maximum: 10000
+        default: 0
   schemas:
     Session:
       type: object

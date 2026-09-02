@@ -38,6 +38,19 @@ import { parsePositiveIntegerParam } from "../lib/domain-validation";
 import { ensureRequestActive } from "../middlewares/security";
 
 const router: IRouter = Router();
+const DEFAULT_PAGE_LIMIT = 100;
+const MAX_PAGE_LIMIT = 100;
+const MAX_PAGE_OFFSET = 10_000;
+
+const collectionPage = (input: { limit?: unknown; offset?: unknown }) => {
+  const limit = input.limit === undefined ? DEFAULT_PAGE_LIMIT : Number(input.limit);
+  const offset = input.offset === undefined ? 0 : Number(input.offset);
+  if (
+    !Number.isInteger(limit) || limit < 1 || limit > MAX_PAGE_LIMIT ||
+    !Number.isInteger(offset) || offset < 0 || offset > MAX_PAGE_OFFSET
+  ) return null;
+  return { limit, offset };
+};
 
 const actor = (req: Request): string => {
   const value = req.res?.locals.actorId;
@@ -286,20 +299,33 @@ router.get("/residents/:id/assessments", async (req, res): Promise<void> => {
   if (parsePositiveIntegerParam(req.params.id) === null) { problem(req, res, 400); return; }
   const parsed = ListResidentAssessmentsParams.safeParse(req.params);
   if (!parsed.success) { problem(req, res, 400); return; }
+  const page = collectionPage(req.query);
+  if (!page) { res.status(400).json({ error: "Invalid assessment pagination." }); return; }
   const principal = getPrincipal(res);
   const resident = await getResident(parsed.data.id);
   if (!resident) { problem(req, res, 404); return; }
-  const templates = await db.select().from(assessmentTemplatesTable);
   if (!canAccessResident(principal, resident)) { problem(req, res, 403); return; }
-  const rows = await db.select().from(assessmentSubmissionsTable)
-    .where(eq(assessmentSubmissionsTable.residentId, resident.id))
-    .orderBy(asc(assessmentSubmissionsTable.createdAt));
-  const byId = new Map(templates.map((template) => [template.id, template]));
-  const visible = rows
-    .map((row) => ({ row, template: byId.get(row.templateId) }))
-    .filter((item): item is { row: typeof rows[number]; template: AssessmentTemplate } =>
-      Boolean(item.template && canRead(principal, resident, item.template)))
-    .map(({ row, template }) => asSummary(row, template));
+  const visibility = principal.role === "resident"
+    ? and(
+        eq(assessmentSubmissionsTable.residentId, resident.id),
+        eq(assessmentTemplatesTable.audience, "resident"),
+      )
+    : eq(assessmentSubmissionsTable.residentId, resident.id);
+  const rows = await db.select({
+    submission: assessmentSubmissionsTable,
+    template: assessmentTemplatesTable,
+  }).from(assessmentSubmissionsTable)
+    .innerJoin(assessmentTemplatesTable, eq(assessmentSubmissionsTable.templateId, assessmentTemplatesTable.id))
+    .where(visibility)
+    .orderBy(asc(assessmentSubmissionsTable.createdAt), asc(assessmentSubmissionsTable.id))
+    .limit(page.limit + 1)
+    .offset(page.offset);
+  const hasMore = rows.length > page.limit;
+  res.setHeader("X-Page-Limit", page.limit);
+  res.setHeader("X-Page-Offset", page.offset);
+  res.setHeader("X-Has-More", String(hasMore));
+  const visible = rows.slice(0, page.limit)
+    .map(({ submission, template }) => asSummary(submission, template));
   res.json(ListResidentAssessmentsResponse.parse(visible));
   await audit(req, "Resident assessments viewed", undefined, { residentId: resident.id, count: visible.length });
 });

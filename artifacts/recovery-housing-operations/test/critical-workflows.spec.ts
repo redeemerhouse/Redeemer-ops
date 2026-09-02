@@ -65,6 +65,7 @@ test("sign-in, resident create/load/edit, document API, payment, and assessment 
 
   await page.goto("/payments");
   await page.getByTestId("button-record-payment").click();
+  await page.getByTestId("input-payment-resident-search").fill(residentName);
   await page.getByTestId("select-payment-resident").selectOption(String(residentId));
   await page.getByTestId("input-payment-amount").fill("35.00");
   await page.getByTestId("input-payment-due-date").fill("2026-08-10");

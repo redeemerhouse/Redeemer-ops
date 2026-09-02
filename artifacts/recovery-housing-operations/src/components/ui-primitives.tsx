@@ -30,4 +30,9 @@ export function SubmitButton({ pending, children }: { pending: boolean; children
 
 export function EmptyState({ title, detail, action }: { title: string; detail: string; action?: React.ReactNode }) { return <div data-testid="empty-state" className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-[hsl(var(--border))] bg-[hsl(var(--card)/.55)] px-6 py-16 text-center"><div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-[hsl(var(--secondary))] text-[hsl(var(--primary))]"><Check size={20} /></div><h3 className="font-extrabold">{title}</h3><p className="mt-1 max-w-sm text-sm text-[hsl(var(--muted-foreground))]">{detail}</p>{action && <div className="mt-5">{action}</div>}</div>; }
 
+export function PageControls({ offset, pageSize, hasMore, onChange }: { offset: number; pageSize: number; hasMore: boolean; onChange: (offset: number) => void }) {
+  const page = Math.floor(offset / pageSize) + 1;
+  return <nav aria-label="Pagination" className="flex items-center justify-between border-t border-[hsl(var(--border))] px-5 py-4 text-xs"><span className="font-bold text-[hsl(var(--muted-foreground))]">Page {page}</span><div className="flex gap-2"><button type="button" disabled={offset === 0} onClick={() => onChange(Math.max(0, offset - pageSize))} className="rounded-lg border border-[hsl(var(--border))] px-3 py-2 font-extrabold disabled:opacity-40">Previous</button><button type="button" disabled={!hasMore} onClick={() => onChange(offset + pageSize)} className="rounded-lg border border-[hsl(var(--border))] px-3 py-2 font-extrabold disabled:opacity-40">Next</button></div></nav>;
+}
+
 export function useDisclosure(initial = false) { const [open, setOpen] = useState(initial); return { open, setOpen, close: () => setOpen(false), toggle: () => setOpen((value) => !value) }; }

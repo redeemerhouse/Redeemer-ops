@@ -1,6 +1,6 @@
 import 
 {
- Router, type IRouter, type Request 
+ Router, type IRouter, type Request, type Response
 }
  from "express"
 ;
@@ -174,6 +174,25 @@ const asResident = (r: typeof residentsTable.$inferSelect, principal?: Principal
 
 const AUDIT_RETENTION_YEARS = 7
 ;
+const DEFAULT_PAGE_LIMIT = 100;
+const MAX_PAGE_LIMIT = 100;
+const MAX_PAGE_OFFSET = 10_000;
+
+const collectionPage = (input: { limit?: unknown; offset?: unknown }) => {
+  const limit = input.limit === undefined ? DEFAULT_PAGE_LIMIT : Number(input.limit);
+  const offset = input.offset === undefined ? 0 : Number(input.offset);
+  if (
+    !Number.isInteger(limit) || limit < 1 || limit > MAX_PAGE_LIMIT ||
+    !Number.isInteger(offset) || offset < 0 || offset > MAX_PAGE_OFFSET
+  ) return null;
+  return { limit, offset };
+};
+
+const setPageHeaders = (res: Response, page: { limit: number; offset: number }, hasMore: boolean) => {
+  res.setHeader("X-Page-Limit", page.limit);
+  res.setHeader("X-Page-Offset", page.offset);
+  res.setHeader("X-Has-More", String(hasMore));
+};
 
 const safeActor = (req: Request): string => 
 {
@@ -609,6 +628,8 @@ router.get("/residents", async (req, res): Promise<void> => {
   if (!parsedQuery.success) { res.status(400).json({ error: "Invalid resident filters." }); return; }
   const search = parsedQuery.data.search ?? "";
   const status = parsedQuery.data.status ?? "all";
+  const page = collectionPage(parsedQuery.data);
+  if (!page) { res.status(400).json({ error: "Invalid resident pagination." }); return; }
   const filters = [];
   if (principal.role === "house_manager") filters.push(inArray(residentsTable.home, principal.houseNames));
   if (principal.role === "resident") filters.push(eq(residentsTable.id, principal.residentId!));
@@ -621,8 +642,14 @@ router.get("/residents", async (req, res): Promise<void> => {
       ilike(residentsTable.home, searchPattern),
     ));
   }
-  const rows = await db.select(getTableColumns(residentsTable)).from(residentsTable).where(filters.length ? and(...filters) : organizationScope).orderBy(asc(residentsTable.name));
-  res.json(rows.map((row) => asResident(row, principal)));
+  const rows = await db.select(getTableColumns(residentsTable)).from(residentsTable)
+    .where(filters.length ? and(...filters) : organizationScope)
+    .orderBy(asc(residentsTable.name), asc(residentsTable.id))
+    .limit(page.limit + 1)
+    .offset(page.offset);
+  const hasMore = rows.length > page.limit;
+  setPageHeaders(res, page, hasMore);
+  res.json(rows.slice(0, page.limit).map((row) => asResident(row, principal)));
   await audit(req, "Resident list viewed", "resident");
 });
 
@@ -691,6 +718,8 @@ router.get("/payments", async (req, res): Promise<void> => {
   }
   const residentId = parsedQuery.data.residentId;
   const status = parsedQuery.data.status ?? "all";
+  const page = collectionPage(parsedQuery.data);
+  if (!page) { res.status(400).json({ error: "Invalid payment pagination." }); return; }
   if (residentId !== undefined) {
     const [resident] = await db.select({ id: residentsTable.id, home: residentsTable.home }).from(residentsTable).where(eq(residentsTable.id, residentId));
     if (!resident || !authorize(principal, "payment:list", { houseName: resident.home, residentId: resident.id })) { problem(req, res, 404); return; }
@@ -700,8 +729,13 @@ router.get("/payments", async (req, res): Promise<void> => {
   if (principal.role === "house_manager") conditions.push(inArray(residentsTable.home, principal.houseNames));
   if (principal.role === "resident") conditions.push(eq(residentsTable.id, principal.residentId!));
   if (status !== "all") conditions.push(eq(paymentsTable.status, status));
-  const rows = await db.select({ payment: paymentsTable, residentName: residentsTable.name }).from(paymentsTable).innerJoin(residentsTable, eq(paymentsTable.residentId, residentsTable.id)).where(conditions.length ? and(...conditions) : undefined).orderBy(desc(paymentsTable.dueDate));
-  res.json(ListPaymentsResponse.parse(rows.map(({ payment, residentName }) => ({
+  const rows = await db.select({ payment: paymentsTable, residentName: residentsTable.name }).from(paymentsTable).innerJoin(residentsTable, eq(paymentsTable.residentId, residentsTable.id)).where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(desc(paymentsTable.dueDate), desc(paymentsTable.id))
+    .limit(page.limit + 1)
+    .offset(page.offset);
+  const hasMore = rows.length > page.limit;
+  setPageHeaders(res, page, hasMore);
+  res.json(ListPaymentsResponse.parse(rows.slice(0, page.limit).map(({ payment, residentName }) => ({
     id: payment.id,
     residentId: payment.residentId,
     residentName,

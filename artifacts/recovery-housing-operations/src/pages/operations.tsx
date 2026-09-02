@@ -16,11 +16,11 @@ export default function Operations() {
   const canImportResidents = isStaffRole(user?.role ?? 'resident');
   const client = useQueryClient();
   const [section, setSection] = useState<'applications' | 'houses' | 'daily' | 'documents' | 'reports' | 'import'>('applications');
-  const applications = useQuery({ queryKey: ['/applications'], queryFn: () => get('/applications') });
-  const houses = useQuery({ queryKey: ['/houses'], queryFn: () => get('/houses') });
-  const daily = useQuery({ queryKey: ['/operations'], queryFn: () => get('/operations') });
-  const reports = useQuery({ queryKey: ['/reports/summary'], queryFn: () => get('/reports/summary') });
-  const documents = useQuery({ queryKey: ['/documents'], queryFn: () => get('/documents?role=staff') });
+  const applications = useQuery({ queryKey: ['/applications'], queryFn: () => get('/applications'), enabled: section === 'applications' });
+  const houses = useQuery({ queryKey: ['/houses'], queryFn: () => get('/houses'), enabled: section === 'houses' || section === 'reports' });
+  const daily = useQuery({ queryKey: ['/operations'], queryFn: () => get('/operations'), enabled: section === 'daily' });
+  const reports = useQuery({ queryKey: ['/reports/summary'], queryFn: () => get('/reports/summary'), enabled: section === 'reports' && canViewReports });
+  const documents = useQuery({ queryKey: ['/documents'], queryFn: () => get('/documents?role=staff'), enabled: section === 'documents' });
   const active = section === 'applications' ? applications : section === 'houses' ? houses : section === 'daily' ? daily : section === 'documents' ? documents : section === 'reports' ? reports : undefined;
   const modal = useDisclosure();
   return <AppShell><div className="animate-enter">

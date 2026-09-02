@@ -18,7 +18,7 @@ import {
 } from '@workspace/api-client-react';
 import { useAuth, type SessionRole } from '@/lib/auth';
 import { AppShell } from '@/components/app-shell';
-import { Modal, EmptyState, QueryState, StatusBadge } from '@/components/ui-primitives';
+import { Modal, EmptyState, PageControls, QueryState, StatusBadge } from '@/components/ui-primitives';
 
 type Answers = Record<string, unknown>;
 type Row = Record<string, unknown>;
@@ -53,7 +53,9 @@ const activeTemplatesForRole = (templates: AssessmentTemplate[] | undefined, rol
 
 export function ResidentAssessments({ residentId }: { residentId: number }) {
   const { user } = useAuth();
-  const assessments = useListResidentAssessments(residentId);
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const assessments = useListResidentAssessments(residentId, { limit: 100, offset }, { request: { onResponse: (response) => setHasMore(response.headers.get('x-has-more') === 'true') } });
   const templates = useListAssessmentTemplates();
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
@@ -101,11 +103,13 @@ export function ResidentAssessments({ residentId }: { residentId: number }) {
         loading={assessments.isLoading}
         error={assessments.isError}
         errorDetail="Assessment records are private and could not be loaded right now."
-        retry={() => queryClient.invalidateQueries({ queryKey: getListResidentAssessmentsQueryKey(residentId) })}
+        retry={() => queryClient.invalidateQueries({ queryKey: getListResidentAssessmentsQueryKey(residentId, { limit: 100, offset }) })}
       >
-        {assessments.data?.length ? (
+        {assessments.data?.length || offset > 0 ? (
           <div className="divide-y divide-[hsl(var(--border))]">
-            {assessments.data.map((assessment) => <AssessmentSummaryRow key={assessment.id} assessment={assessment} />)}
+            {assessments.data?.map((assessment) => <AssessmentSummaryRow key={assessment.id} assessment={assessment} />)}
+            {!assessments.data?.length && <div className="px-5 py-10 text-center text-sm text-[hsl(var(--muted-foreground))]">No assessments on this page.</div>}
+            <PageControls offset={offset} pageSize={100} hasMore={hasMore} onChange={setOffset} />
           </div>
         ) : (
           <div className="px-5 py-5 sm:px-6">

@@ -6,8 +6,22 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ListResidentsStatus } from './listResidentsStatus';
+import type { PageLimitParameter } from './pageLimitParameter';
+import type { PageOffsetParameter } from './pageOffsetParameter';
 
 export type ListResidentsParams = {
 search?: string;
 status?: ListResidentsStatus;
+/**
+ * Maximum records to return. Defaults to 100 and cannot exceed 100.
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: PageLimitParameter;
+/**
+ * Number of stable, ordered records to skip before returning this page.
+ * @minimum 0
+ * @maximum 10000
+ */
+offset?: PageOffsetParameter;
 };

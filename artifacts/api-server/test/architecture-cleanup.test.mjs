@@ -48,6 +48,20 @@ test("application submission exposes a recoverable failure and always clears bus
   assert.doesNotMatch(applicationModal, /error\.message/);
 });
 
+test("pagination follows server continuation metadata and reports load required houses", async () => {
+  const ui = await source("artifacts/recovery-housing-operations/src/components/ui-primitives.tsx");
+  const residents = await source("artifacts/recovery-housing-operations/src/pages/residents.tsx");
+  const payments = await source("artifacts/recovery-housing-operations/src/pages/payments.tsx");
+  const operations = await source("artifacts/recovery-housing-operations/src/pages/operations.tsx");
+
+  assert.match(ui, /disabled=\{!hasMore\}/);
+  assert.match(residents, /response\.headers\.get\('x-has-more'\)/);
+  assert.match(residents, /query\.data\?\.length \|\| offset > 0/);
+  assert.match(payments, /search: residentSearch \|\| undefined/);
+  assert.match(payments, /name="payment-resident-search"/);
+  assert.match(operations, /section === 'houses' \|\| section === 'reports'/);
+});
+
 test("keeps one incident-response runbook section", async () => {
   const checklist = await source("docs/private-pilot-release-checklist.md");
 

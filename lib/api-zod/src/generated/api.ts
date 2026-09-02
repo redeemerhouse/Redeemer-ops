@@ -162,9 +162,20 @@ export const GetDashboardResponse = zod.object({
 /**
  * @summary List residents
  */
+export const listResidentsQueryLimitDefault = 100;
+export const listResidentsQueryLimitMax = 100;
+
+export const listResidentsQueryOffsetDefault = 0;
+export const listResidentsQueryOffsetMin = 0;
+export const listResidentsQueryOffsetMax = 10000;
+
+
+
 export const ListResidentsQueryParams = zod.object({
   "search": zod.coerce.string().optional(),
-  "status": zod.enum(['all', 'active', 'pending', 'exited']).optional()
+  "status": zod.enum(['all', 'active', 'pending', 'exited']).optional(),
+  "limit": zod.coerce.number().int().min(1).max(listResidentsQueryLimitMax).default(listResidentsQueryLimitDefault).describe('Maximum records to return. Defaults to 100 and cannot exceed 100.'),
+  "offset": zod.coerce.number().int().min(listResidentsQueryOffsetMin).max(listResidentsQueryOffsetMax).default(listResidentsQueryOffsetDefault).describe('Number of stable, ordered records to skip before returning this page.')
 })
 
 export const ListResidentsResponseItem = zod.object({
@@ -536,6 +547,20 @@ export const listResidentAssessmentsPathIdMultipleOf = 1;
 
 export const ListResidentAssessmentsParams = zod.object({
   "id": zod.coerce.number().min(1).max(listResidentAssessmentsPathIdMax).multipleOf(listResidentAssessmentsPathIdMultipleOf)
+})
+
+export const listResidentAssessmentsQueryLimitDefault = 100;
+export const listResidentAssessmentsQueryLimitMax = 100;
+
+export const listResidentAssessmentsQueryOffsetDefault = 0;
+export const listResidentAssessmentsQueryOffsetMin = 0;
+export const listResidentAssessmentsQueryOffsetMax = 10000;
+
+
+
+export const ListResidentAssessmentsQueryParams = zod.object({
+  "limit": zod.coerce.number().int().min(1).max(listResidentAssessmentsQueryLimitMax).default(listResidentAssessmentsQueryLimitDefault).describe('Maximum records to return. Defaults to 100 and cannot exceed 100.'),
+  "offset": zod.coerce.number().int().min(listResidentAssessmentsQueryOffsetMin).max(listResidentAssessmentsQueryOffsetMax).default(listResidentAssessmentsQueryOffsetDefault).describe('Number of stable, ordered records to skip before returning this page.')
 })
 
 export const listResidentAssessmentsResponseIdMultipleOf = 1;
@@ -933,11 +958,20 @@ export const ConfirmResidentImportResponse = zod.object({
 export const listPaymentsQueryResidentIdMax = 2147483647;
 export const listPaymentsQueryResidentIdMultipleOf = 1;
 
+export const listPaymentsQueryLimitDefault = 100;
+export const listPaymentsQueryLimitMax = 100;
+
+export const listPaymentsQueryOffsetDefault = 0;
+export const listPaymentsQueryOffsetMin = 0;
+export const listPaymentsQueryOffsetMax = 10000;
+
 
 
 export const ListPaymentsQueryParams = zod.object({
   "residentId": zod.coerce.number().min(1).max(listPaymentsQueryResidentIdMax).multipleOf(listPaymentsQueryResidentIdMultipleOf).optional(),
-  "status": zod.enum(['all', 'paid', 'due', 'overdue']).optional()
+  "status": zod.enum(['all', 'paid', 'due', 'overdue']).optional(),
+  "limit": zod.coerce.number().int().min(1).max(listPaymentsQueryLimitMax).default(listPaymentsQueryLimitDefault).describe('Maximum records to return. Defaults to 100 and cannot exceed 100.'),
+  "offset": zod.coerce.number().int().min(listPaymentsQueryOffsetMin).max(listPaymentsQueryOffsetMax).default(listPaymentsQueryOffsetDefault).describe('Number of stable, ordered records to skip before returning this page.')
 })
 
 export const listPaymentsResponseIdMax = 2147483647;

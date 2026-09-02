@@ -1,17 +1,9 @@
-import { type ReactNode, useEffect, useState } from 'react';
+import { lazy, Suspense, type ReactNode, useEffect, useState } from 'react';
 import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ApiError } from '@workspace/api-client-react';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import NotFound from '@/pages/not-found';
-import Dashboard from '@/pages/dashboard';
-import Residents from '@/pages/residents';
-import Payments from '@/pages/payments';
-import ResidentDetail from '@/pages/resident-detail';
-import Operations from '@/pages/operations';
-import Assessment from '@/pages/assessment';
-import AssessmentLibrary from '@/pages/assessment-library';
 import SignIn from '@/pages/sign-in';
 import {
   Route,
@@ -20,6 +12,15 @@ import {
   Router as WouterRouter,
 } from 'wouter';
 import { AuthLoading, AuthProvider, SessionError, useAuth } from '@/lib/auth';
+
+const Dashboard = lazy(() => import('@/pages/dashboard'));
+const Residents = lazy(() => import('@/pages/residents'));
+const Payments = lazy(() => import('@/pages/payments'));
+const ResidentDetail = lazy(() => import('@/pages/resident-detail'));
+const Operations = lazy(() => import('@/pages/operations'));
+const Assessment = lazy(() => import('@/pages/assessment'));
+const AssessmentLibrary = lazy(() => import('@/pages/assessment-library'));
+const NotFound = lazy(() => import('@/pages/not-found'));
 
 const RECOVERY_EVENT = 'redeemer-house:request-failed';
 const notifyRecoverableFailure = () => {
@@ -70,16 +71,18 @@ function Router() {
     // Keep a shared shell (sidebar, navbar) outside the boundary so it
     // survives a page crash.
     <RoutedErrorBoundary>
-      <Switch>
-        <Route path="/" component={Dashboard} />
-        <Route path="/residents" component={Residents} />
-        <Route path="/residents/:id" component={ResidentDetail} />
-         <Route path="/assessments/:id" component={Assessment} />
-        <Route path="/assessment-library" component={AssessmentLibrary} />
-        <Route path="/payments" component={Payments} />
-        <Route path="/operations" component={Operations} />
-        <Route component={NotFound} />
-      </Switch>
+      <Suspense fallback={<AuthLoading />}>
+        <Switch>
+          <Route path="/" component={Dashboard} />
+          <Route path="/residents" component={Residents} />
+          <Route path="/residents/:id" component={ResidentDetail} />
+          <Route path="/assessments/:id" component={Assessment} />
+          <Route path="/assessment-library" component={AssessmentLibrary} />
+          <Route path="/payments" component={Payments} />
+          <Route path="/operations" component={Operations} />
+          <Route component={NotFound} />
+        </Switch>
+      </Suspense>
     </RoutedErrorBoundary>
   );
 }
