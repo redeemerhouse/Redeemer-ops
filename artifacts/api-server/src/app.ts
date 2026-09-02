@@ -4,7 +4,7 @@ import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { corsOrigins, serverConfig } from "./lib/config";
-import { errorHandler, notFoundHandler } from "./middlewares/errors";
+import { errorHandler, normalizeErrorResponses, notFoundHandler } from "./middlewares/errors";
 import { requestId, requestParameterLimit, requestTimeout, responseSizeLimit, createRouteRateLimit, routeRateLimit, securityHeaders } from "./middlewares/security";
 import type { RateLimitStore } from "./lib/rateLimitStore";
 import { createHealthRouter, type ReadinessChecks } from "./routes/health";
@@ -21,6 +21,7 @@ export function createApp(options: AppOptions = {}): Express {
   app.disable("x-powered-by");
   app.set("trust proxy", process.env.TRUST_PROXY === "true" ? 1 : false);
   app.use(requestId);
+  app.use(normalizeErrorResponses);
   app.use(securityHeaders);
   app.use(requestTimeout);
   app.use(responseSizeLimit);

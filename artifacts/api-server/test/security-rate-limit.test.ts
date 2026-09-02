@@ -76,6 +76,7 @@ test("fails closed during a shared-store outage and recovers without restarting"
         database: "ok",
         rateLimitStore: "unavailable",
       },
+      correlationId: "readiness-outage-correlation",
     });
 
     const outageResponse = await fetch(`${baseUrl}/residents`, {

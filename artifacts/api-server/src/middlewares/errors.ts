@@ -1,4 +1,4 @@
-import type { ErrorRequestHandler, Request, Response } from "express";
+import type { ErrorRequestHandler, NextFunction, Request, Response } from "express";
 import { logger } from "../lib/logger";
 import { ServiceFailure } from "../lib/serviceFailures";
 
@@ -36,6 +36,31 @@ export function problem(
     error: safeMessages[safeStatus],
     correlationId,
   });
+}
+
+export function normalizeErrorResponses(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): void {
+  const originalJson = res.json.bind(res);
+  res.json = ((body: unknown) => {
+    if (res.statusCode >= 400) {
+      res.setHeader("Content-Type", "application/problem+json; charset=utf-8");
+      res.setHeader("Cache-Control", "no-store");
+      if (body && typeof body === "object" && !Array.isArray(body)) {
+        const value = body as Record<string, unknown>;
+        if (!value.correlationId) {
+          body = {
+            ...value,
+            correlationId: res.locals.correlationId ?? req.header("x-request-id") ?? "unknown",
+          };
+        }
+      }
+    }
+    return originalJson(body);
+  }) as typeof res.json;
+  next();
 }
 
 export const errorHandler: ErrorRequestHandler = (error, req, res, _next) => {

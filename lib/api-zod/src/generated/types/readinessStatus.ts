@@ -11,4 +11,10 @@ import type { ReadinessStatusStatus } from './readinessStatusStatus';
 export interface ReadinessStatus {
   status: ReadinessStatusStatus;
   dependencies: ReadinessStatusDependencies;
+  /**
+     * Present when readiness fails so operators can correlate the response with safe server logs.
+     * @minLength 1
+     * @maxLength 128
+     */
+  correlationId?: string;
 }

@@ -19,6 +19,7 @@ run_layer() {
 
 run_layer "TYPECHECK" pnpm run typecheck
 run_layer "UNIT" pnpm --filter @workspace/api-server run test:policy
+run_layer "API RELIABILITY" pnpm --filter @workspace/api-server run test:reliability
 run_layer "INTEGRATION + BROWSER E2E" pnpm --filter @workspace/api-server run test:critical-workflows
 
 if [[ $failed -eq 0 ]]; then

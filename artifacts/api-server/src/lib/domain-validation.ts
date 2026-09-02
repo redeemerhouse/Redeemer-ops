@@ -2,6 +2,12 @@ export function isInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value);
 }
 
+export function parsePositiveIntegerParam(value: unknown): number | null {
+  if (typeof value !== "string" || !/^[1-9]\d{0,9}$/.test(value)) return null;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed <= 2_147_483_647 ? parsed : null;
+}
+
 export function isCalendarDate(value: unknown): value is string {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const [year, month, day] = value.split("-").map(Number);

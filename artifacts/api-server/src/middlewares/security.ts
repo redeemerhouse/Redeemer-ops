@@ -10,6 +10,7 @@ import {
 } from "../lib/rateLimitStore";
 import { problem } from "./errors";
 import { classifyDependencyFailure } from "../lib/dependencyDiagnostics";
+import { unavailable } from "../lib/serviceFailures";
 
 const memoryStore = createMemoryRateLimitStore();
 let postgresStorePromise: Promise<RateLimitStore> | undefined;
@@ -83,17 +84,32 @@ export function requestId(req: Request, res: Response, next: NextFunction): void
 }
 
 export function requestTimeout(req: Request, res: Response, next: NextFunction): void {
+  const controller = new AbortController();
+  res.locals.requestAbortSignal = controller.signal;
+  res.locals.requestTimedOut = false;
+  const expire = (status: 408 | 503) => {
+    if (res.writableEnded || res.destroyed) return;
+    res.locals.requestTimedOut = true;
+    controller.abort(new Error("Request deadline exceeded."));
+    if (!res.headersSent) problem(req, res, status);
+    else res.destroy();
+  };
   req.setTimeout(serverConfig.requestTimeoutMs, () => {
-    if (!res.headersSent) {
-      problem(req, res, 408);
-    }
+    expire(408);
   });
   res.setTimeout(serverConfig.requestTimeoutMs, () => {
-    if (!res.headersSent) {
-      problem(req, res, 503);
-    }
+    expire(503);
   });
+  res.once("finish", () => controller.abort());
+  res.once("close", () => controller.abort());
   next();
+}
+
+export function ensureRequestActive(req: Request): void {
+  const res = req.res;
+  if (res?.locals.requestTimedOut || (res?.locals.requestAbortSignal as AbortSignal | undefined)?.aborted) {
+    throw unavailable("database", "The request expired before the operation could complete.");
+  }
 }
 
 export function responseSizeLimit(req: Request, res: Response, next: NextFunction): void {

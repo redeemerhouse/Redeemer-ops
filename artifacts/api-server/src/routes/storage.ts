@@ -4,6 +4,7 @@ import { db, documentsTable, residentsTable } from "@workspace/db";
 import { ObjectStorageService } from "../lib/objectStorage";
 import { authenticate, canAccessResident, getPrincipal, isAdministrator } from "../middlewares/auth";
 import { problem } from "../middlewares/errors";
+import { ensureRequestActive } from "../middlewares/security";
 const router = Router();
 const objects = new ObjectStorageService();
 router.use(authenticate);
@@ -12,6 +13,7 @@ router.post("/storage/uploads/request-url", async (req, res) => {
   if (!["owner_admin", "program_director", "house_manager"].includes(principal.role)) { problem(req, res, 403); return; }
   const { name, size, contentType } = req.body ?? {};
   if (typeof name !== "string" || !Number.isInteger(size) || size <= 0 || typeof contentType !== "string") { problem(req, res, 400); return; }
+  ensureRequestActive(req);
   try { res.json({ ...(await objects.uploadUrl()), metadata: { name, size, contentType } }); } catch (error) { req.log.error({ errorType: error instanceof Error ? error.name : typeof error, correlationId: res.locals.correlationId }, "Unable to create document upload URL"); throw error; }
 });
 router.get("/storage/objects/*path", async (req, res) => {

@@ -35,6 +35,8 @@ import {
 import { sendPasswordResetEmail, sendVerificationEmail } from "../lib/auth-email";
 import { getConfiguredRateLimitStore } from "../middlewares/security";
 import { unavailable } from "../lib/serviceFailures";
+import { parsePositiveIntegerParam } from "../lib/domain-validation";
+import { ensureRequestActive } from "../middlewares/security";
 
 const router = Router();
 const DUMMY_PASSWORD_HASH = "scrypt$cmVkZWVtZXItYXV0aC1kdW1teQ$B5ioDUzLuYirZubtantWbc7Dg7rYCv2kITy0zU6HesIk-yHNHjXaHGqxJVdNagllmobXJ68z_CaWisJbxg1v4A";
@@ -64,6 +66,7 @@ async function audit(
   actor = "anonymous",
   metadata?: Record<string, unknown>,
 ): Promise<void> {
+  ensureRequestActive(req);
   await db.insert(auditEventsTable).values({
     action,
     entityType: "auth_account",
@@ -93,7 +96,7 @@ async function auditBestEffort(
   }
 }
 
-async function issueActionToken(accountId: number, type: "email_verification" | "password_reset"): Promise<string> {
+async function issueActionToken(req: Request, accountId: number, type: "email_verification" | "password_reset"): Promise<string> {
   const token = newActionToken();
   const now = new Date();
   const expiresAt = new Date(now.getTime() + (type === "email_verification" ? 24 * 60 * 60 * 1000 : 60 * 60 * 1000));
@@ -105,6 +108,7 @@ async function issueActionToken(accountId: number, type: "email_verification" | 
         eq(authActionTokensTable.type, type),
         isNull(authActionTokensTable.usedAt),
       ));
+    ensureRequestActive(req);
     await tx.insert(authActionTokensTable).values({
       accountId,
       type,
@@ -203,6 +207,7 @@ router.post("/auth/bootstrap", async (req, res) => {
   const normalized = normalizeEmail(email);
   const passwordHash = await hashPassword(password);
   const now = new Date();
+  ensureRequestActive(req);
   const accountId = await db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(${BOOTSTRAP_LOCK_ID})`);
     const [existing] = await tx.select({ id: authAccountsTable.id }).from(authAccountsTable).limit(1);
@@ -214,6 +219,7 @@ router.post("/auth/bootstrap", async (req, res) => {
       emailVerifiedAt: now,
       approvedAt: now,
     }).returning({ id: authAccountsTable.id });
+    ensureRequestActive(req);
     return created.id;
   });
   if (!accountId) {
@@ -234,17 +240,20 @@ router.post("/auth/register", async (req, res) => {
   const passwordHash = await hashPassword(password);
   let delivery: { accountId: number; token: string } | null = null;
   try {
+    ensureRequestActive(req);
     delivery = await db.transaction(async (tx) => {
       const [account] = await tx.insert(authAccountsTable)
         .values({ email: normalized, passwordHash })
         .returning({ id: authAccountsTable.id });
       const token = newActionToken();
+      ensureRequestActive(req);
       await tx.insert(authActionTokensTable).values({
         accountId: account.id,
         type: "email_verification",
         tokenHash: hashActionToken(token),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       });
+      ensureRequestActive(req);
       await tx.insert(auditEventsTable).values({
         action: "auth.account_registered",
         entityType: "auth_account",
@@ -288,10 +297,12 @@ router.post("/auth/verification/request", async (req, res) => {
     : [];
   if (account && !account.emailVerifiedAt && !account.deactivatedAt) {
     try {
-      const token = await issueActionToken(account.id, "email_verification");
+      ensureRequestActive(req);
+      const token = await issueActionToken(req, account.id, "email_verification");
       await sendVerificationEmail(account.email, token);
       await audit(req, "auth.email_verification_requested", account.id, "success");
     } catch (error) {
+      ensureRequestActive(req);
       req.log.error({ accountId: account.id, err: error }, "Account verification delivery failed");
       await auditBestEffort(req, "auth.email_verification_requested", account.id, "failure");
     }
@@ -316,6 +327,7 @@ router.post("/auth/verify-email", async (req, res) => {
     res.status(400).json({ error: "The verification request is invalid or expired." });
     return;
   }
+  ensureRequestActive(req);
   const consumed = await db.transaction(async (tx) => {
     const [claimed] = await tx.update(authActionTokensTable).set({ usedAt: now }).where(and(
       eq(authActionTokensTable.id, record.id),
@@ -323,6 +335,7 @@ router.post("/auth/verify-email", async (req, res) => {
       gt(authActionTokensTable.expiresAt, now),
     )).returning({ id: authActionTokensTable.id });
     if (!claimed) return false;
+    ensureRequestActive(req);
     await tx.update(authAccountsTable).set({ emailVerifiedAt: now, updatedAt: now }).where(eq(authAccountsTable.id, record.accountId));
     return true;
   });
@@ -383,6 +396,7 @@ router.post("/auth/login", async (req, res) => {
     sessionId,
     ttlSeconds: 30 * 24 * 60 * 60,
   });
+  ensureRequestActive(req);
   await db.insert(authSessionsTable).values({
     accountId: account.id,
     tokenHash: hashSessionToken(token),
@@ -399,6 +413,7 @@ router.post("/auth/login", async (req, res) => {
 router.post("/auth/logout", async (req, res) => {
   const token = getSessionToken(req);
   if (token) {
+    ensureRequestActive(req);
     await db.update(authSessionsTable)
       .set({ revokedAt: new Date() })
       .where(and(eq(authSessionsTable.tokenHash, hashSessionToken(token)), isNull(authSessionsTable.revokedAt)));
@@ -415,11 +430,13 @@ router.post("/auth/password-reset/request", async (req, res) => {
     : [];
   if (account && !account.deactivatedAt) {
     try {
-      const token = await issueActionToken(account.id, "password_reset");
+      ensureRequestActive(req);
+      const token = await issueActionToken(req, account.id, "password_reset");
       await sendPasswordResetEmail(account.email, token);
       req.log.info({ accountId: account.id, actionTokenType: "password_reset" }, "Password reset delivered");
       await audit(req, "auth.password_reset_requested", account.id, "success");
     } catch (error) {
+      ensureRequestActive(req);
       req.log.error({ accountId: account.id, err: error }, "Password reset delivery failed");
       await auditBestEffort(req, "auth.password_reset_requested", account.id, "failure");
     }
@@ -445,6 +462,7 @@ router.post("/auth/password-reset/complete", async (req, res) => {
     return;
   }
   const passwordHash = await hashPassword(password);
+  ensureRequestActive(req);
   const consumed = await db.transaction(async (tx) => {
     const [claimed] = await tx.update(authActionTokensTable).set({ usedAt: now }).where(and(
       eq(authActionTokensTable.id, record.id),
@@ -452,7 +470,9 @@ router.post("/auth/password-reset/complete", async (req, res) => {
       gt(authActionTokensTable.expiresAt, now),
     )).returning({ id: authActionTokensTable.id });
     if (!claimed) return false;
+    ensureRequestActive(req);
     await tx.update(authAccountsTable).set({ passwordHash, updatedAt: now }).where(eq(authAccountsTable.id, record.accountId));
+    ensureRequestActive(req);
     await tx.update(authSessionsTable).set({ revokedAt: now }).where(and(
       eq(authSessionsTable.accountId, record.accountId),
       isNull(authSessionsTable.revokedAt),
@@ -491,9 +511,9 @@ router.get("/auth/admin/accounts", async (req, res) => {
 
 router.post("/auth/admin/accounts/:id/approve", async (req, res) => {
   if (!await requireAdmin(req, res)) return;
-  const accountId = Number(req.params.id);
+  const accountId = parsePositiveIntegerParam(req.params.id);
   const { role, houseIds, residentId } = safeBody(req);
-  if (!Number.isInteger(accountId) || !roles.includes(role as Role) || !Array.isArray(houseIds) || houseIds.some((id) => !Number.isInteger(id))) {
+  if (accountId === null || !roles.includes(role as Role) || !Array.isArray(houseIds) || houseIds.some((id) => !Number.isInteger(id) || Number(id) <= 0)) {
     res.status(400).json({ error: "Invalid account assignment." });
     return;
   }
@@ -526,6 +546,7 @@ router.post("/auth/admin/accounts/:id/approve", async (req, res) => {
     }
   }
   const now = new Date();
+  ensureRequestActive(req);
   await db.transaction(async (tx) => {
     await tx.update(authAccountsTable).set({
       role: role as Role,
@@ -534,10 +555,13 @@ router.post("/auth/admin/accounts/:id/approve", async (req, res) => {
       deactivatedAt: null,
       updatedAt: now,
     }).where(eq(authAccountsTable.id, accountId));
+    ensureRequestActive(req);
     await tx.delete(authAccountHousesTable).where(eq(authAccountHousesTable.accountId, accountId));
     if (uniqueHouseIds.length) {
+      ensureRequestActive(req);
       await tx.insert(authAccountHousesTable).values(uniqueHouseIds.map((houseId) => ({ accountId, houseId })));
     }
+    ensureRequestActive(req);
     await tx.update(authSessionsTable).set({ revokedAt: now }).where(and(
       eq(authSessionsTable.accountId, accountId),
       isNull(authSessionsTable.revokedAt),
@@ -554,15 +578,17 @@ router.post("/auth/admin/accounts/:id/approve", async (req, res) => {
 
 router.post("/auth/admin/accounts/:id/deactivate", async (req, res) => {
   if (!await requireAdmin(req, res)) return;
-  const accountId = Number(req.params.id);
-  if (!Number.isInteger(accountId)) {
+  const accountId = parsePositiveIntegerParam(req.params.id);
+  if (accountId === null) {
     res.status(400).json({ error: "Invalid account." });
     return;
   }
   if (!await canManageAccount(res, accountId)) return;
   const now = new Date();
+  ensureRequestActive(req);
   await db.transaction(async (tx) => {
     await tx.update(authAccountsTable).set({ deactivatedAt: now, updatedAt: now }).where(eq(authAccountsTable.id, accountId));
+    ensureRequestActive(req);
     await tx.update(authSessionsTable).set({ revokedAt: now }).where(and(
       eq(authSessionsTable.accountId, accountId),
       isNull(authSessionsTable.revokedAt),
@@ -574,12 +600,13 @@ router.post("/auth/admin/accounts/:id/deactivate", async (req, res) => {
 
 router.post("/auth/admin/accounts/:id/reactivate", async (req, res) => {
   if (!await requireAdmin(req, res)) return;
-  const accountId = Number(req.params.id);
-  if (!Number.isInteger(accountId)) {
+  const accountId = parsePositiveIntegerParam(req.params.id);
+  if (accountId === null) {
     res.status(400).json({ error: "Invalid account." });
     return;
   }
   if (!await canManageAccount(res, accountId)) return;
+  ensureRequestActive(req);
   await db.update(authAccountsTable).set({ deactivatedAt: null, updatedAt: new Date() }).where(eq(authAccountsTable.id, accountId));
   await audit(req, "auth.account_reactivated", accountId, "success", getPrincipal(res).sub);
   res.json({ success: true });
@@ -587,12 +614,13 @@ router.post("/auth/admin/accounts/:id/reactivate", async (req, res) => {
 
 router.post("/auth/admin/accounts/:id/sessions/revoke", async (req, res) => {
   if (!await requireAdmin(req, res)) return;
-  const accountId = Number(req.params.id);
-  if (!Number.isInteger(accountId)) {
+  const accountId = parsePositiveIntegerParam(req.params.id);
+  if (accountId === null) {
     res.status(400).json({ error: "Invalid account." });
     return;
   }
   if (!await canManageAccount(res, accountId)) return;
+  ensureRequestActive(req);
   await revokeAccountSessions(accountId);
   await audit(req, "auth.sessions_revoked", accountId, "success", getPrincipal(res).sub);
   res.json({ success: true });

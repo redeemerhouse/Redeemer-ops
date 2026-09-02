@@ -64,7 +64,8 @@ import
  from "../middlewares/errors"
 ;
 import { allowlistedObject } from "../lib/mutation-policy";
-import { hasCompleteFileMetadata, isCalendarDate, isInteger, isValidDocumentVisibility } from "../lib/domain-validation";
+import { hasCompleteFileMetadata, isCalendarDate, isInteger, isValidDocumentVisibility, parsePositiveIntegerParam } from "../lib/domain-validation";
+import { ensureRequestActive } from "../middlewares/security";
 
 
 const router: IRouter = Router()
@@ -190,6 +191,7 @@ const safeActor = (req: Request): string =>
 
 const audit = async (req: Request, action: string, entityType: string, entityId?: number, metadata?: Record<string, string | number | boolean | null>) => 
 {
+  ensureRequestActive(req);
   await db.insert(auditEventsTable).values(auditValues(req, action, entityType, entityId, metadata));
 }
 ;
@@ -629,6 +631,7 @@ router.post("/residents", async (req, res): Promise<void> => {
   const parsed = CreateResidentBody.strict().safeParse(req.body);
   if (!parsed.success) { problem(req, res, 400); return; }
   if (!authorize(principal, "resident:create", { targetHouseName: parsed.data.home })) { problem(req, res, 403); return; }
+  ensureRequestActive(req);
   const created = await db.transaction(async (tx) => {
     const identity = parsed.data.email.trim().toLocaleLowerCase();
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${identity}, 0))`);
@@ -639,6 +642,7 @@ router.post("/residents", async (req, res): Promise<void> => {
       throw conflict;
     }
     const [record] = await tx.insert(residentsTable).values({ ...parsed.data, nextPaymentDate: parsed.data.moveInDate }).returning();
+    ensureRequestActive(req);
     await tx.insert(auditEventsTable).values(auditValues(req, "Resident added", "resident", record.id));
     return record;
   });
@@ -646,6 +650,7 @@ router.post("/residents", async (req, res): Promise<void> => {
 });
 
 router.get("/residents/:id", async (req, res): Promise<void> => {
+  if (parsePositiveIntegerParam(req.params.id) === null) { problem(req, res, 400); return; }
   const parsedParams = GetResidentParams.safeParse(req.params);
   if (!parsedParams.success) { res.status(400).json({ error: "Invalid resident identifier." }); return; }
   const principal = getPrincipal(res);
@@ -658,6 +663,7 @@ router.get("/residents/:id", async (req, res): Promise<void> => {
 
 router.patch("/residents/:id", async (req, res): Promise<void> => {
   const principal = getPrincipal(res);
+  if (parsePositiveIntegerParam(req.params.id) === null) { problem(req, res, 400); return; }
   const parsedParams = GetResidentParams.safeParse(req.params);
   if (!parsedParams.success) { res.status(400).json({ error: "Invalid resident identifier." }); return; }
   const id = parsedParams.data.id;
@@ -669,6 +675,7 @@ router.patch("/residents/:id", async (req, res): Promise<void> => {
     problem(req, res, 403);
     return;
   }
+  ensureRequestActive(req);
   const [updated] = await db.update(residentsTable).set({ ...parsed.data, updatedAt: new Date() }).where(eq(residentsTable.id, id)).returning();
   if (!updated) { problem(req, res, 404); return; }
   await audit(req, "Resident updated", "resident", id);
@@ -726,6 +733,7 @@ router.post("/payments", async (req, res): Promise<void> => {
   }).from(residentsTable).where(eq(residentsTable.id, parsed.data.residentId));
   if (!resident || !authorize(principal, "payment:create", { houseName: resident.home, residentId: resident.id })) { problem(req, res, 404); return; }
   const status = parsed.data.paidDate ? "paid" : (new Date(parsed.data.dueDate).getTime() + 5 * 86400000 < Date.now() ? "overdue" : "due");
+  ensureRequestActive(req);
   const created = await db.transaction(async (tx) => {
     const [payment] = await tx.insert(paymentsTable).values({
       residentId: resident.id,
@@ -736,6 +744,7 @@ router.post("/payments", async (req, res): Promise<void> => {
       status,
     }).returning();
     if (status === "paid") {
+      ensureRequestActive(req);
       await tx.update(residentsTable)
         .set({
           balance: sql`GREATEST(${residentsTable.balance} - ${parsed.data.amount}, 0)`,
@@ -743,6 +752,7 @@ router.post("/payments", async (req, res): Promise<void> => {
         })
         .where(eq(residentsTable.id, resident.id));
     }
+    ensureRequestActive(req);
     await tx.insert(auditEventsTable).values(
       auditValues(req, "Payment recorded", "payment", payment.id, { method: parsed.data.method ?? null }),
     );
@@ -785,6 +795,7 @@ router.post("/expenses", async (req, res): Promise<void> => {
     const [house] = await db.select({ id: housesTable.id }).from(housesTable).where(eq(housesTable.id, parsed.data.houseId));
     if (!house) { problem(req, res, 404); return; }
   }
+  ensureRequestActive(req);
   const [created] = await db.insert(expensesTable).values({
     ...parsed.data,
     expenseDate: sqlDate(parsed.data.expenseDate),
@@ -819,6 +830,7 @@ router.post("/income", async (req, res): Promise<void> => {
     const [house] = await db.select({ id: housesTable.id }).from(housesTable).where(eq(housesTable.id, parsed.data.houseId));
     if (!house) { problem(req, res, 404); return; }
   }
+  ensureRequestActive(req);
   const [created] = await db.insert(incomeRecordsTable).values({
     ...parsed.data,
     receivedDate: sqlDate(parsed.data.receivedDate),
@@ -860,6 +872,7 @@ router.post("/meetings", async (req, res): Promise<void> => {
   if (parsed.data.houseId !== undefined && !house) { problem(req, res, 404); return; }
   if (principal.role === "house_manager" && !house) { problem(req, res, 403); return; }
   if (!authorize(principal, "meeting:create", { houseName: house?.name })) { problem(req, res, 403); return; }
+  ensureRequestActive(req);
   const [created] = await db.insert(meetingAttendanceTable).values({
     ...parsed.data,
     meetingDate: sqlDate(parsed.data.meetingDate),
@@ -903,6 +916,7 @@ router.post("/applications", async (req, res): Promise<void> => {
     const [house] = await db.select({ name: housesTable.name }).from(housesTable).where(eq(housesTable.id, Number(input.preferredHouseId)));
     if (!house || !hasHouseScope(principal, house.name)) { problem(req, res, 403); return; }
   }
+  ensureRequestActive(req);
   const [created] = await db.insert(applicationsTable).values(input as InsertApplication).returning();
   await audit(req, "Application submitted", "application", created.id);
   res.status(201).json(created);
@@ -910,10 +924,12 @@ router.post("/applications", async (req, res): Promise<void> => {
 router.patch("/applications/:id", async (req, res): Promise<void> => {
   const principal = getPrincipal(res);
   if (principal.role === "resident") { problem(req, res, 403); return; }
+  const id = parsePositiveIntegerParam(req.params.id);
+  if (id === null) { problem(req, res, 400); return; }
   const input = applicationBody(req.body, applicationUpdateKeys, false);
   if (!input) { problem(req, res, 400); return; }
   if (!isAdministrator(principal)) {
-    const [existing] = await db.select({ preferredHouseId: applicationsTable.preferredHouseId }).from(applicationsTable).where(eq(applicationsTable.id, Number(req.params.id)));
+    const [existing] = await db.select({ preferredHouseId: applicationsTable.preferredHouseId }).from(applicationsTable).where(eq(applicationsTable.id, id));
     const [currentHouse] = existing?.preferredHouseId
       ? await db.select({ name: housesTable.name }).from(housesTable).where(eq(housesTable.id, existing.preferredHouseId))
       : [];
@@ -925,7 +941,8 @@ router.patch("/applications/:id", async (req, res): Promise<void> => {
       if (!targetHouse || !hasHouseScope(principal, targetHouse.name)) { problem(req, res, 403); return; }
     }
   }
-  const [updated] = await db.update(applicationsTable).set({ ...input, updatedAt: new Date() }).where(eq(applicationsTable.id, Number(req.params.id))).returning();
+  ensureRequestActive(req);
+  const [updated] = await db.update(applicationsTable).set({ ...input, updatedAt: new Date() }).where(eq(applicationsTable.id, id)).returning();
   if (!updated) { problem(req, res, 404); return; }
   await audit(req, "Application updated", "application", updated.id);
   res.json(updated);
@@ -979,9 +996,12 @@ router.post("/documents", async (req, res): Promise<void> => {
     problem(req, res, 404);
     return;
   }
+  ensureRequestActive(req);
   const created = await db.transaction(async (tx) => {
     const [record] = await tx.insert(documentsTable).values(document).returning();
+    ensureRequestActive(req);
     await tx.insert(documentHistoryTable).values({ documentId: record.id, action: "uploaded", actor: safeActor(req), objectPath: record.objectPath });
+    ensureRequestActive(req);
     await tx.insert(auditEventsTable).values(auditValues(req, "Document uploaded", "document", record.id, { category: record.category }));
     return record;
   });
@@ -989,10 +1009,9 @@ router.post("/documents", async (req, res): Promise<void> => {
 });
 router.get("/documents/:id/history", async (req, res): Promise<void> => {
   const principal = getPrincipal(res);
-  const id = Number(req.params.id);
-  const [document] = Number.isInteger(id) && id > 0
-    ? await db.select(getTableColumns(documentsTable)).from(documentsTable).where(eq(documentsTable.id, id))
-    : [];
+  const id = parsePositiveIntegerParam(req.params.id);
+  if (id === null) { problem(req, res, 400); return; }
+  const [document] = await db.select(getTableColumns(documentsTable)).from(documentsTable).where(eq(documentsTable.id, id));
   if (!document || principal.role === "resident") { problem(req, res, 404); return; }
   const [resident] = document.residentId
     ? await db.select({ id: residentsTable.id, home: residentsTable.home }).from(residentsTable).where(eq(residentsTable.id, document.residentId))
@@ -1004,8 +1023,8 @@ router.get("/documents/:id/history", async (req, res): Promise<void> => {
 });
 router.patch("/documents/:id", async (req, res): Promise<void> => {
   const principal = getPrincipal(res);
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id) || id <= 0) { problem(req, res, 404); return; }
+  const id = parsePositiveIntegerParam(req.params.id);
+  if (id === null) { problem(req, res, 400); return; }
   if (principal.role === "resident") { problem(req, res, 404); return; }
 
   const immutableFields = ["status", "objectPath", "fileName", "contentType", "fileSize", "applicationId", "uploadedBy"] as const;
@@ -1028,6 +1047,7 @@ router.patch("/documents/:id", async (req, res): Promise<void> => {
     return;
   }
 
+  ensureRequestActive(req);
   const updated = await db.transaction(async (tx) => {
     const [current] = await tx.select(getTableColumns(documentsTable)).from(documentsTable).where(eq(documentsTable.id, id)).for("update");
     if (!current) {
@@ -1075,6 +1095,7 @@ router.patch("/documents/:id", async (req, res): Promise<void> => {
       notFound.status = 404;
       throw notFound;
     }
+    ensureRequestActive(req);
     await tx.insert(documentHistoryTable).values({
       documentId: id,
       action: accessChanged ? "access_changed" : "updated",
@@ -1083,6 +1104,7 @@ router.patch("/documents/:id", async (req, res): Promise<void> => {
       toVisibility: record.visibility,
       objectPath: record.objectPath,
     });
+    ensureRequestActive(req);
     await tx.insert(auditEventsTable).values(
       auditValues(req, accessChanged ? "Document access changed" : "Document updated", "document", id),
     );
@@ -1118,6 +1140,7 @@ router.post("/operations", async (req, res): Promise<void> => {
     ? await db.select({ id: residentsTable.id, home: residentsTable.home }).from(residentsTable).where(eq(residentsTable.id, Number(input.residentId)))
     : [];
   if (!resident || !canAccessResident(principal, resident, true)) { problem(req, res, 404); return; }
+  ensureRequestActive(req);
   const [created] = await db.insert(operationsTable).values(input as InsertOperation).returning();
   await audit(req, "Operation logged", "operation", created.id);
   res.status(201).json(created);

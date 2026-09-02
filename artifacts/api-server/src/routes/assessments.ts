@@ -34,6 +34,8 @@ import {
 import { canAccessResident, getPrincipal, isAdministrator, requirePermission, type Principal } from "../middlewares/auth";
 import { problem } from "../middlewares/errors";
 import { missingRequired, type AssessmentSchema } from "../lib/assessment-policy";
+import { parsePositiveIntegerParam } from "../lib/domain-validation";
+import { ensureRequestActive } from "../middlewares/security";
 
 const router: IRouter = Router();
 
@@ -47,6 +49,7 @@ const actor = (req: Request): string => {
 const audit = async (req: Request, action: string, entityId?: number, metadata?: Record<string, string | number | boolean | null>) => {
   const retentionUntil = new Date();
   retentionUntil.setUTCFullYear(retentionUntil.getUTCFullYear() + 7);
+  ensureRequestActive(req);
   await db.insert(auditEventsTable).values({
     action,
     entityType: "assessment",
@@ -161,6 +164,7 @@ router.get("/assessment-templates", async (req, res): Promise<void> => {
 });
 
 router.get("/assessment-templates/:id", async (req, res): Promise<void> => {
+  if (parsePositiveIntegerParam(req.params.id) === null) { problem(req, res, 400); return; }
   const parsed = GetAssessmentTemplateParams.safeParse(req.params);
   if (!parsed.success) { problem(req, res, 400); return; }
   const principal = getPrincipal(res);
@@ -174,6 +178,7 @@ router.get("/assessment-templates/:id", async (req, res): Promise<void> => {
 });
 
 router.post("/assessment-templates/:id/revisions", requirePermission("assessment:manage"), async (req, res): Promise<void> => {
+  if (parsePositiveIntegerParam(req.params.id) === null) { problem(req, res, 400); return; }
   const parsedParams = GetAssessmentTemplateParams.safeParse(req.params);
   const parsedBody = CreateAssessmentRevisionBody.strict().safeParse(req.body);
   if (!parsedParams.success || !parsedBody.success) { problem(req, res, 400); return; }
@@ -184,6 +189,7 @@ router.post("/assessment-templates/:id/revisions", requirePermission("assessment
     .from(assessmentTemplatesTable).where(eq(assessmentTemplatesTable.slug, source.slug));
   const version = Number(highestVersion ?? source.version) + 1;
   const now = new Date();
+  ensureRequestActive(req);
   const [created] = await db.insert(assessmentTemplatesTable).values({
     slug: source.slug,
     title: parsedBody.data.title,
@@ -208,6 +214,7 @@ router.post("/assessment-templates/:id/revisions", requirePermission("assessment
 });
 
 router.post("/assessment-templates/:id/publish", requirePermission("assessment:manage"), async (req, res): Promise<void> => {
+  if (parsePositiveIntegerParam(req.params.id) === null) { problem(req, res, 400); return; }
   const parsed = PublishAssessmentTemplateParams.safeParse(req.params);
   if (!parsed.success) { problem(req, res, 400); return; }
   const principal = getPrincipal(res);
@@ -221,9 +228,11 @@ router.post("/assessment-templates/:id/publish", requirePermission("assessment:m
   const activeVersions = await db.select({ id: assessmentTemplatesTable.id, version: assessmentTemplatesTable.version })
     .from(assessmentTemplatesTable)
     .where(and(eq(assessmentTemplatesTable.slug, template.slug), eq(assessmentTemplatesTable.status, "active")));
+  ensureRequestActive(req);
   const published = await db.transaction(async (tx) => {
     await tx.update(assessmentTemplatesTable).set({ status: "retired", updatedAt: now })
       .where(and(eq(assessmentTemplatesTable.slug, template.slug), eq(assessmentTemplatesTable.status, "active")));
+    ensureRequestActive(req);
     const [updated] = await tx.update(assessmentTemplatesTable)
       .set({ status: "active", updatedAt: now })
       .where(and(eq(assessmentTemplatesTable.id, template.id), eq(assessmentTemplatesTable.status, "draft")))
@@ -249,6 +258,7 @@ router.post("/assessment-templates/:id/publish", requirePermission("assessment:m
 });
 
 router.post("/assessment-templates/:id/retire", requirePermission("assessment:manage"), async (req, res): Promise<void> => {
+  if (parsePositiveIntegerParam(req.params.id) === null) { problem(req, res, 400); return; }
   const parsed = RetireAssessmentTemplateParams.safeParse(req.params);
   if (!parsed.success) { problem(req, res, 400); return; }
   const principal = getPrincipal(res);
@@ -258,6 +268,7 @@ router.post("/assessment-templates/:id/retire", requirePermission("assessment:ma
     res.status(400).json({ error: "This assessment revision is already retired." });
     return;
   }
+  ensureRequestActive(req);
   const [retired] = await db.update(assessmentTemplatesTable).set({ status: "retired", updatedAt: new Date() })
     .where(and(eq(assessmentTemplatesTable.id, template.id), eq(assessmentTemplatesTable.status, template.status)))
     .returning();
@@ -272,6 +283,7 @@ router.post("/assessment-templates/:id/retire", requirePermission("assessment:ma
 });
 
 router.get("/residents/:id/assessments", async (req, res): Promise<void> => {
+  if (parsePositiveIntegerParam(req.params.id) === null) { problem(req, res, 400); return; }
   const parsed = ListResidentAssessmentsParams.safeParse(req.params);
   if (!parsed.success) { problem(req, res, 400); return; }
   const principal = getPrincipal(res);
@@ -293,6 +305,7 @@ router.get("/residents/:id/assessments", async (req, res): Promise<void> => {
 });
 
 router.post("/residents/:id/assessments", async (req, res): Promise<void> => {
+  if (parsePositiveIntegerParam(req.params.id) === null) { problem(req, res, 400); return; }
   const parsedParams = GetAssessmentParams.safeParse(req.params);
   const parsedBody = CreateResidentAssessmentBody.strict().safeParse(req.body);
   if (!parsedParams.success || !parsedBody.success) { problem(req, res, 400); return; }
@@ -302,6 +315,7 @@ router.post("/residents/:id/assessments", async (req, res): Promise<void> => {
   if (!resident || !template || template.status !== "active") { problem(req, res, 404); return; }
   if (!canWrite(principal, resident, template)) { problem(req, res, 403); return; }
   const now = new Date();
+  ensureRequestActive(req);
   const [created] = await db.insert(assessmentSubmissionsTable).values({
     templateId: template.id,
     residentId: resident.id,
@@ -317,6 +331,7 @@ router.post("/residents/:id/assessments", async (req, res): Promise<void> => {
 });
 
 router.get("/assessments/:id", async (req, res): Promise<void> => {
+  if (parsePositiveIntegerParam(req.params.id) === null) { problem(req, res, 400); return; }
   const parsed = GetAssessmentParams.safeParse(req.params);
   if (!parsed.success) { problem(req, res, 400); return; }
   const principal = getPrincipal(res);
@@ -330,6 +345,7 @@ router.get("/assessments/:id", async (req, res): Promise<void> => {
 });
 
 const updateAnswers = async (req: Request, res: Response, submit: boolean): Promise<void> => {
+  if (parsePositiveIntegerParam(req.params.id) === null) { problem(req, res, 400); return; }
   const parsedParams = (submit ? SubmitAssessmentParams : UpdateAssessmentDraftParams).safeParse(req.params);
   const parsedBody = (submit ? SubmitAssessmentBody : UpdateAssessmentDraftBody).strict().safeParse(req.body);
   if (!parsedParams.success || !parsedBody.success) { problem(req, res, 400); return; }
@@ -348,6 +364,7 @@ const updateAnswers = async (req: Request, res: Response, submit: boolean): Prom
     }
   }
   const now = new Date();
+  ensureRequestActive(req);
   const [updated] = await db.update(assessmentSubmissionsTable).set({
     answers,
     status: submit ? "submitted" : "draft",

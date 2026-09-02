@@ -21,12 +21,17 @@ export const HealthCheckResponse = zod.object({
  * Reports whether PostgreSQL and shared request-protection infrastructure can serve application traffic.
  * @summary Readiness check
  */
+export const readinessCheckResponseCorrelationIdMax = 128;
+
+
+
 export const ReadinessCheckResponse = zod.object({
   "status": zod.enum(['ready', 'not_ready']),
   "dependencies": zod.object({
   "database": zod.enum(['ok', 'unavailable']),
   "rateLimitStore": zod.enum(['ok', 'unavailable'])
-})
+}),
+  "correlationId": zod.string().min(1).max(readinessCheckResponseCorrelationIdMax).optional().describe('Present when readiness fails so operators can correlate the response with safe server logs.')
 })
 
 
@@ -884,12 +889,13 @@ export const PreviewResidentImportResponse = zod.object({
 /**
  * @summary Explicitly confirm valid resident import rows
  */
+export const confirmResidentImportPathBatchIdMax = 2147483647;
 export const confirmResidentImportPathBatchIdMultipleOf = 1;
 
 
 
 export const ConfirmResidentImportParams = zod.object({
-  "batchId": zod.coerce.number().min(1).multipleOf(confirmResidentImportPathBatchIdMultipleOf)
+  "batchId": zod.coerce.number().min(1).max(confirmResidentImportPathBatchIdMax).multipleOf(confirmResidentImportPathBatchIdMultipleOf)
 })
 
 export const confirmResidentImportBodyApprovedRowNumbersItemMin = 2;

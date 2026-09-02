@@ -17,6 +17,12 @@ This suite is risk-based: confidentiality and authorization failures come first,
 
 - Missing prerequisites are failures, not skipped green tests. The command prints per-layer results and ends with exactly `DEPLOYMENT CHECK PASS` or `DEPLOYMENT CHECK FAIL`.
 
+## API reliability and contract layer
+
+`pnpm --filter @workspace/api-server run test:reliability` is the fast, non-skipping API-only gate. It starts only ephemeral localhost listeners and does not require or modify database data. It verifies the complete mounted route inventory against the API reliability report, verifies the generated-client subset against OpenAPI, and exercises malformed JSON, authentication, deliberate errors, missing routes, dependency failures, response-schema failures, strict identifiers, and timeout cancellation. Any inventory or expected-contract drift fails until the report and explicit allowlist are reviewed together.
+
+The disposable-PostgreSQL integration layer remains authoritative for successful persistence, transaction, duplicate/concurrent submission, and row-scope behavior. The browser layer remains authoritative for client journeys. The API-only gate complements those layers; it does not silently substitute mocks for persistence evidence.
+
 ## Risk inventory
 
 | Priority / risk | Implemented workflow | Layer | Status |

@@ -16,6 +16,8 @@ import {
   type Principal,
 } from "../middlewares/auth";
 import { problem } from "../middlewares/errors";
+import { parsePositiveIntegerParam } from "../lib/domain-validation";
+import { ensureRequestActive } from "../middlewares/security";
 
 const router: IRouter = Router();
 
@@ -235,9 +237,12 @@ router.post("/residents/import/preview", async (req, res): Promise<void> => {
   ]);
   const rows = validateRows(parsed.rows, houses, residents);
 
+  ensureRequestActive(req);
   const batch = await db.transaction(async (tx) => {
     const [created] = await tx.insert(residentImportBatchesTable).values({ sourceFilename: filename.slice(0, 255), actor: res.locals.actorId ?? principal.sub, totalRows: rows.length, validRows: rows.filter((row) => row.valid).length }).returning();
+    ensureRequestActive(req);
     await tx.insert(residentImportRowsTable).values(rows.map((row) => ({ batchId: created.id, rowNumber: row.rowNumber, sourceData: row.sourceData, normalizedData: row.normalizedData, outcome: row.valid ? "ready" : "failed", errors: row.errors })));
+    ensureRequestActive(req);
     await tx.insert(auditEventsTable).values({ action: "Resident import previewed", entityType: "resident_import", entityId: created.id, actor: res.locals.actorId ?? principal.sub, metadata: { sourceFilename: created.sourceFilename, totalRows: rows.length, validRows: rows.filter((row) => row.valid).length, failedRows: rows.filter((row) => !row.valid).length, identityRule } });
     return created;
   });
@@ -254,13 +259,14 @@ router.post("/residents/import/preview", async (req, res): Promise<void> => {
 router.post("/residents/import/:batchId/confirm", async (req, res): Promise<void> => {
   const principal = getPrincipal(res);
   if (!canUseImport(principal)) { problem(req, res, 403); return; }
-  const batchId = Number(req.params.batchId);
+  const batchId = parsePositiveIntegerParam(req.params.batchId);
 
   const requestedRowNumbers = Array.isArray(req.body?.approvedRowNumbers) ? req.body.approvedRowNumbers : [];
   const approvedRowNumbers = requestedRowNumbers.filter((value: unknown): value is number => Number.isInteger(value) && Number(value) > 0);
-  if (!Number.isInteger(batchId) || batchId <= 0 || !approvedRowNumbers.length || approvedRowNumbers.length !== requestedRowNumbers.length || new Set(approvedRowNumbers).size !== approvedRowNumbers.length) {
+  if (batchId === null || !approvedRowNumbers.length || approvedRowNumbers.length !== requestedRowNumbers.length || new Set(approvedRowNumbers).size !== approvedRowNumbers.length) {
     res.status(400).json({ error: "Explicitly approve distinct valid row numbers before importing.", correlationId: res.locals.correlationId }); return;
   }
+  ensureRequestActive(req);
   const result = await db.transaction(async (tx) => {
     const [batch] = await tx.select().from(residentImportBatchesTable).where(eq(residentImportBatchesTable.id, batchId)).for("update");
     if (!batch) {
@@ -292,6 +298,7 @@ router.post("/residents/import/:batchId/confirm", async (req, res): Promise<void
     const identities = [...new Set(rows.map((row) => normalized((row.normalizedData as NormalizedRow).email)))].sort();
     for (const identity of identities) {
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${identity}, 0))`);
+      ensureRequestActive(req);
     }
     const imported: number[] = [];
     for (const row of rows) {
@@ -302,20 +309,25 @@ router.post("/residents/import/:batchId/confirm", async (req, res): Promise<void
         .where(sql`lower(trim(${residentsTable.email})) = ${normalized(data.email)}`)
         .limit(1);
       if (existing) {
+        ensureRequestActive(req);
         await tx.update(residentImportRowsTable).set({ outcome: "skipped" }).where(eq(residentImportRowsTable.id, row.id));
         continue;
       }
       const [created] = await tx.insert(residentsTable).values({ ...data, balance: data.balance, nextPaymentDate: data.nextPaymentDate }).returning({ id: residentsTable.id });
+      ensureRequestActive(req);
       await tx.update(residentImportRowsTable).set({ outcome: "imported", residentId: created.id }).where(eq(residentImportRowsTable.id, row.id));
       imported.push(created.id);
     }
+    ensureRequestActive(req);
     await tx.update(residentImportRowsTable).set({ outcome: "skipped" }).where(and(eq(residentImportRowsTable.batchId, batchId), eq(residentImportRowsTable.outcome, "ready")));
+    ensureRequestActive(req);
     const [confirmed] = await tx.update(residentImportBatchesTable).set({ status: "confirmed", importedRows: imported.length, failedRows: batch.totalRows - imported.length, confirmedAt: new Date() }).where(and(eq(residentImportBatchesTable.id, batchId), eq(residentImportBatchesTable.status, "preview"))).returning();
     if (!confirmed) {
       const conflict = new Error("Resident import batch was confirmed concurrently.") as Error & { status: number };
       conflict.status = 409;
       throw conflict;
     }
+    ensureRequestActive(req);
     await tx.insert(auditEventsTable).values({ action: "Resident import confirmed", entityType: "resident_import", entityId: batchId, actor: res.locals.actorId ?? principal.sub, metadata: { importedRows: imported.length, skippedRows: batch.totalRows - imported.length } });
     return { imported, totalRows: batch.totalRows };
   });

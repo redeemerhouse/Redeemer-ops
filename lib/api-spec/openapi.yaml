@@ -455,6 +455,7 @@ paths:
             type: number
             multipleOf: 1
             minimum: 1
+            maximum: 2147483647
       requestBody:
         required: true
         content:
@@ -812,6 +813,11 @@ components:
             rateLimitStore:
               type: string
               enum: [ok, unavailable]
+        correlationId:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: Present when readiness fails so operators can correlate the response with safe server logs.
     Dashboard:
       type: object
       required: [activeResidents, bedsAvailable, paymentsDue, paymentsCollected, occupancyRate, period, week, capacity, income, expenses, meetings, weeklyAttendance, weeklyMeetings, dataQuality, progress]
