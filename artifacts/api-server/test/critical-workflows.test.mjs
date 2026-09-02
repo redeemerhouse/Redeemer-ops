@@ -25,6 +25,32 @@ async function body(response) {
   return value;
 }
 
+async function auditRows(headers = admin) {
+  const response = await request("/reports/audit", headers);
+  assert.equal(response.status, 200);
+  return (await body(response)).rows;
+}
+
+function auditEvent(rows, { action, actor, entityType, entityId }) {
+  const event = rows.find((entry) =>
+    entry.action === action &&
+    entry.actor === actor &&
+    entry.entityType === entityType &&
+    entry.entityId === entityId,
+  );
+  assert.ok(event, `Expected ${action} audit event for ${entityType} #${entityId}.`);
+  assert.match(event.timestamp, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/);
+  return event;
+}
+
+function assertNoAuditEvent(rows, { action, actor }) {
+  assert.equal(
+    rows.some((entry) => entry.action === action && entry.actor === actor),
+    false,
+    `Did not expect ${action} audit event for ${actor}.`,
+  );
+}
+
 async function fixtures() {
   const response = await request("/residents");
   assert.equal(response.status, 200);
@@ -137,6 +163,23 @@ test("document metadata, history, visibility, and cross-house confidentiality", 
   assert.equal(updatedResponse.status, 200);
   assert.equal((await body(updatedResponse)).visibility, "resident");
 
+  const southDocumentResponse = await request("/documents", admin, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      title: "Synthetic South Agreement",
+      category: "agreement",
+      residentId: south.id,
+      visibility: "staff",
+      objectPath: "/objects/critical-workflows/south-agreement",
+      fileName: "south-agreement.pdf",
+      contentType: "application/pdf",
+      fileSize: 2048,
+    }),
+  });
+  assert.equal(southDocumentResponse.status, 201);
+  const southDocument = await body(southDocumentResponse);
+
   const historyResponse = await request(`/documents/${created.id}/history`, northManager);
   assert.equal(historyResponse.status, 200);
   const history = await body(historyResponse);
@@ -169,6 +212,22 @@ test("document metadata, history, visibility, and cross-house confidentiality", 
   }));
   assert.equal(crossHouse.status, 200);
   assert.equal((await body(crossHouse)).some((document) => document.id === created.id), false);
+
+  const rows = await auditRows();
+  auditEvent(rows, {
+    action: "Document access changed",
+    actor: "critical-north-manager",
+    entityType: "document",
+    entityId: created.id,
+  });
+  const managerRows = await auditRows(northManager);
+  assert.ok(managerRows.some((entry) => entry.action === "Document access changed" && entry.entityId === created.id));
+  assert.equal(managerRows.some((entry) =>
+    entry.action === "Document uploaded" &&
+    entry.entityType === "document" &&
+    entry.entityId === southDocument.id
+  ), false);
+  assertNoAuditEvent(rows, { action: "Document updated", actor: "critical-north-manager" });
 });
 
 test("meeting records enforce scope and attendance constraints", async () => {
@@ -190,6 +249,7 @@ test("meeting records enforce scope and attendance constraints", async () => {
     }),
   });
   assert.equal(invalid.status, 400);
+  const beforeRejectedWrites = await auditRows();
 
   const forbidden = await request("/meetings", northManager, {
     method: "POST",
@@ -203,6 +263,10 @@ test("meeting records enforce scope and attendance constraints", async () => {
     }),
   });
   assert.equal(forbidden.status, 403);
+  assert.deepEqual(
+    (await auditRows()).filter((entry) => entry.actor === "critical-north-manager" && entry.action === "Meeting attendance recorded"),
+    beforeRejectedWrites.filter((entry) => entry.actor === "critical-north-manager" && entry.action === "Meeting attendance recorded"),
+  );
 
   const createdResponse = await request("/meetings", northManager, {
     method: "POST",
@@ -218,9 +282,38 @@ test("meeting records enforce scope and attendance constraints", async () => {
   });
   assert.equal(createdResponse.status, 201);
   const created = await body(createdResponse);
+  const southCreatedResponse = await request("/meetings", admin, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      meetingType: "house_meeting",
+      meetingDate: "2026-08-03",
+      houseId: southHouse.id,
+      womenAttended: 1,
+      womenEligible: 2,
+      notes: "Synthetic south attendance fixture",
+    }),
+  });
+  assert.equal(southCreatedResponse.status, 201);
+  const southCreated = await body(southCreatedResponse);
   const listResponse = await request("/meetings?month=2026-08", northManager);
   assert.equal(listResponse.status, 200);
   assert.ok((await body(listResponse)).some((meeting) => meeting.id === created.id));
+
+  const rows = await auditRows();
+  auditEvent(rows, {
+    action: "Meeting attendance recorded",
+    actor: "critical-north-manager",
+    entityType: "meeting_attendance",
+    entityId: created.id,
+  });
+  const managerRows = await auditRows(northManager);
+  assert.ok(managerRows.some((entry) => entry.action === "Meeting attendance recorded" && entry.entityId === created.id));
+  assert.equal(managerRows.some((entry) =>
+    entry.action === "Meeting attendance recorded" &&
+    entry.entityType === "meeting_attendance" &&
+    entry.entityId === southCreated.id
+  ), false);
 });
 
 test("payment recording changes balance atomically and rejects invalid or unauthorized writes", async () => {
@@ -233,6 +326,7 @@ test("payment recording changes balance atomically and rejects invalid or unauth
     body: JSON.stringify({ residentId: north.id, amount: "-1.00", dueDate: "2026-08-04" }),
   });
   assert.equal(invalid.status, 400);
+  const beforeRejectedWrites = await auditRows();
 
   const hidden = await request("/payments", northManager, {
     method: "POST",
@@ -240,6 +334,10 @@ test("payment recording changes balance atomically and rejects invalid or unauth
     body: JSON.stringify({ residentId: south.id, amount: "25.00", dueDate: "2026-08-04" }),
   });
   assert.equal(hidden.status, 404);
+  assert.deepEqual(
+    (await auditRows()).filter((entry) => entry.actor === "critical-north-manager" && entry.action === "Payment recorded"),
+    beforeRejectedWrites.filter((entry) => entry.actor === "critical-north-manager" && entry.action === "Payment recorded"),
+  );
 
   const createdResponse = await request("/payments", northManager, {
     method: "POST",
@@ -256,16 +354,45 @@ test("payment recording changes balance atomically and rejects invalid or unauth
   const payment = await body(createdResponse);
   assert.equal(payment.status, "paid");
 
+  const southPaymentResponse = await request("/payments", admin, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      residentId: south.id,
+      amount: "10.00",
+      dueDate: "2026-08-05",
+      paidDate: "2026-08-05",
+      method: "Synthetic test transfer",
+    }),
+  });
+  assert.equal(southPaymentResponse.status, 201);
+  const southPayment = await body(southPaymentResponse);
+
   const after = await body(await request(`/residents/${north.id}`));
   assert.equal(after.balance, Math.max(before.balance - 25.5, 0));
 
   const listed = await request(`/payments?residentId=${north.id}`, northManager);
   assert.equal(listed.status, 200);
   assert.ok((await body(listed)).some((entry) => entry.id === payment.id));
+
+  const rows = await auditRows();
+  auditEvent(rows, {
+    action: "Payment recorded",
+    actor: "critical-north-manager",
+    entityType: "payment",
+    entityId: payment.id,
+  });
+  const managerRows = await auditRows(northManager);
+  assert.ok(managerRows.some((entry) => entry.action === "Payment recorded" && entry.entityId === payment.id));
+  assert.equal(managerRows.some((entry) =>
+    entry.action === "Payment recorded" &&
+    entry.entityType === "payment" &&
+    entry.entityId === southPayment.id
+  ), false);
 });
 
 test("assessment draft, required answers, immutable submission snapshot, duplicates, and permissions", async () => {
-  const { north } = await fixtures();
+  const { north, south } = await fixtures();
   const templatesResponse = await request("/assessment-templates");
   assert.equal(templatesResponse.status, 200);
   const template = (await body(templatesResponse)).find((entry) => entry.slug === "critical-recovery-capital");
@@ -285,6 +412,7 @@ test("assessment draft, required answers, immutable submission snapshot, duplica
     body: JSON.stringify({ answers: { recoveryStrength: "Peer support" } }),
   });
   assert.equal(draftResponse.status, 200);
+  const beforeIncompleteSubmit = await auditRows();
 
   const incomplete = await request(`/assessments/${assessment.id}/submit`, northManager, {
     method: "POST",
@@ -293,6 +421,10 @@ test("assessment draft, required answers, immutable submission snapshot, duplica
   });
   assert.equal(incomplete.status, 400);
   assert.deepEqual((await body(incomplete)).missing, ["Recovery strength"]);
+  assert.deepEqual(
+    (await auditRows()).filter((entry) => entry.actor === "critical-north-manager" && entry.action === "Assessment submitted"),
+    beforeIncompleteSubmit.filter((entry) => entry.actor === "critical-north-manager" && entry.action === "Assessment submitted"),
+  );
 
   const submittedResponse = await request(`/assessments/${assessment.id}/submit`, northManager, {
     method: "POST",
@@ -303,6 +435,7 @@ test("assessment draft, required answers, immutable submission snapshot, duplica
   const submitted = await body(submittedResponse);
   assert.equal(submitted.status, "submitted");
   assert.equal(submitted.template.version, template.version);
+  const afterSuccessfulSubmit = await auditRows();
 
   const duplicate = await request(`/assessments/${assessment.id}/submit`, northManager, {
     method: "POST",
@@ -310,6 +443,10 @@ test("assessment draft, required answers, immutable submission snapshot, duplica
     body: JSON.stringify({ answers: { recoveryStrength: "Duplicate attempt" } }),
   });
   assert.equal(duplicate.status, 400);
+  assert.deepEqual(
+    (await auditRows()).filter((entry) => entry.actor === "critical-north-manager" && entry.action === "Assessment submitted"),
+    afterSuccessfulSubmit.filter((entry) => entry.actor === "critical-north-manager" && entry.action === "Assessment submitted"),
+  );
 
   const managerRevision = await request(`/assessment-templates/${template.id}/revisions`, northManager, {
     method: "POST",
@@ -317,6 +454,42 @@ test("assessment draft, required answers, immutable submission snapshot, duplica
     body: JSON.stringify({ title: template.title, description: template.description, schema: template.sections }),
   });
   assert.equal(managerRevision.status, 403);
+
+  const southAssessmentResponse = await request(`/residents/${south.id}/assessments`, admin, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ templateId: template.id }),
+  });
+  assert.equal(southAssessmentResponse.status, 201);
+  const southAssessment = await body(southAssessmentResponse);
+
+  const rows = await auditRows();
+  auditEvent(rows, {
+    action: "Assessment assigned",
+    actor: "critical-north-manager",
+    entityType: "assessment",
+    entityId: assessment.id,
+  });
+  auditEvent(rows, {
+    action: "Assessment draft saved",
+    actor: "critical-north-manager",
+    entityType: "assessment",
+    entityId: assessment.id,
+  });
+  auditEvent(rows, {
+    action: "Assessment submitted",
+    actor: "critical-north-manager",
+    entityType: "assessment",
+    entityId: assessment.id,
+  });
+  const managerRows = await auditRows(northManager);
+  assert.ok(managerRows.some((entry) => entry.action === "Assessment submitted" && entry.entityId === assessment.id));
+  assert.equal(managerRows.some((entry) =>
+    entry.action === "Assessment assigned" &&
+    entry.entityType === "assessment" &&
+    entry.entityId === southAssessment.id
+  ), false);
+  assertNoAuditEvent(rows, { action: "Assessment revision created", actor: "critical-north-manager" });
 });
 
 test("expired bearer credentials and unavailable API fail closed", async () => {

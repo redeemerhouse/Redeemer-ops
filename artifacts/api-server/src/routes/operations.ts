@@ -14,7 +14,7 @@ import
 
 import 
 {
-  db, residentsTable, paymentsTable, housesTable, applicationsTable, documentsTable, documentHistoryTable, operationsTable, auditEventsTable, insertDocumentSchema, expensesTable, incomeRecordsTable, meetingAttendanceTable
+  db, residentsTable, paymentsTable, housesTable, applicationsTable, documentsTable, documentHistoryTable, operationsTable, auditEventsTable, insertDocumentSchema, expensesTable, incomeRecordsTable, meetingAttendanceTable, assessmentSubmissionsTable
 }
  from "@workspace/db"
 ;
@@ -301,9 +301,10 @@ const toPdf = (title: string, rows: ReportRow[]) => {
   return Buffer.from(pdf, "binary");
 };
 const reportRows = async (type: ReportType, principal: Principal, filters: ReportFilters = {}): Promise<ReportRow[]> => {
-  const [residents, payments, houses, applications, documents, events] = await Promise.all([
+  const [residents, payments, houses, applications, documents, events, meetings, assessments] = await Promise.all([
     db.select(getTableColumns(residentsTable)).from(residentsTable).where(organizationScope), db.select(getTableColumns(paymentsTable)).from(paymentsTable).where(organizationScope), db.select(getTableColumns(housesTable)).from(housesTable).where(organizationScope),
     db.select(getTableColumns(applicationsTable)).from(applicationsTable).where(organizationScope), db.select(getTableColumns(documentsTable)).from(documentsTable).where(organizationScope), db.select(getTableColumns(auditEventsTable)).from(auditEventsTable).where(organizationScope),
+    db.select(getTableColumns(meetingAttendanceTable)).from(meetingAttendanceTable).where(organizationScope), db.select(getTableColumns(assessmentSubmissionsTable)).from(assessmentSubmissionsTable).where(organizationScope),
   ]);
   const allowedHouseNames = principal.role === "house_manager" ? new Set(principal.houseNames) : null;
   const houseName = filters.house?.trim();
@@ -329,10 +330,28 @@ const reportRows = async (type: ReportType, principal: Principal, filters: Repor
   const scopedDocuments = documents.filter((document) =>
     residentIds.has(document.residentId ?? -1) || (isAdministrator(principal) && document.residentId === null),
   );
+  const scopedDocumentIds = new Set(scopedDocuments.map((document) => document.id));
+  const scopedMeetingIds = new Set(meetings
+    .filter((meeting) => {
+      const house = houses.find((candidate) => candidate.id === meeting.houseId);
+      return (!allowedHouseNames || (house && allowedHouseNames.has(house.name))) &&
+        (!houseName || house?.name === houseName);
+    })
+    .map((meeting) => meeting.id));
+  const scopedAssessmentIds = new Set(assessments
+    .filter((assessment) => residentIds.has(assessment.residentId ?? -1))
+    .map((assessment) => assessment.id));
   const scopedEvents = events.filter((event) =>
-    isAdministrator(principal)
-      ? true
-      : event.entityType === "resident" && event.entityId !== null && residentIds.has(event.entityId),
+    isAdministrator(principal) ? true : (
+      (event.entityType === "resident" && event.entityId !== null && residentIds.has(event.entityId)) ||
+      (event.entityType === "payment" && event.entityId !== null && payments.some((payment) => payment.id === event.entityId && residentIds.has(payment.residentId))) ||
+      (event.entityType === "document" && event.entityId !== null && scopedDocumentIds.has(event.entityId)) ||
+      (event.entityType === "meeting_attendance" && event.entityId !== null && scopedMeetingIds.has(event.entityId)) ||
+      (event.entityType === "assessment" && event.entityId !== null && scopedAssessmentIds.has(event.entityId) &&
+        event.metadata !== null && typeof event.metadata === "object" && !Array.isArray(event.metadata) &&
+        typeof (event.metadata as { residentId?: unknown }).residentId === "number" &&
+        residentIds.has((event.metadata as { residentId: number }).residentId))
+    ),
   );
   if (type === "occupancy") {
     return houses.filter((house) => (!allowedHouseNames || allowedHouseNames.has(house.name)) && (!houseName || house.name === houseName)).map((house) => ({ house: house.name, address: house.address, occupied: residentRows.filter((r) => r.home === house.name && r.status === "active").length, capacity: house.familyCapacity, available: Math.max(house.familyCapacity - residentRows.filter((r) => r.home === house.name && r.status === "active").length, 0) }));
