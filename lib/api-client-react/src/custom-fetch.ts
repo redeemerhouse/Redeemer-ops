@@ -1,5 +1,6 @@
 export type CustomFetchOptions = RequestInit & {
   responseType?: "json" | "text" | "blob" | "auto";
+  timeoutMs?: number;
 };
 
 export type ErrorType<T = unknown> = ApiError<T>;
@@ -14,6 +15,7 @@ export type UnauthorizedHandler = (request: {
 
 const NO_BODY_STATUS = new Set([204, 205, 304]);
 const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 
 // ---------------------------------------------------------------------------
 // Module-level configuration
@@ -262,11 +264,38 @@ export class ResponseParseError extends Error {
   }
 }
 
+export class NetworkError extends Error {
+  readonly name = "NetworkError";
+  readonly method: string;
+  readonly url: string;
+
+  constructor(
+    message: string,
+    requestInfo: { method: string; url: string },
+  ) {
+    super(message);
+    Object.setPrototypeOf(this, new.target.prototype);
+    this.method = requestInfo.method;
+    this.url = safeUrl(requestInfo.url);
+  }
+}
+
+async function readResponseText(
+  response: Response,
+  requestInfo: { method: string; url: string },
+): Promise<string> {
+  try {
+    return await response.text();
+  } catch {
+    throw new ResponseParseError(response, requestInfo);
+  }
+}
+
 async function parseJsonBody(
   response: Response,
   requestInfo: { method: string; url: string },
 ): Promise<unknown> {
-  const raw = await response.text();
+  const raw = await readResponseText(response, requestInfo);
   const normalized = stripBom(raw);
 
   if (normalized.trim() === "") {
@@ -292,7 +321,12 @@ async function parseErrorBody(response: Response, method: string): Promise<unkno
     return null;
   }
 
-  const raw = await response.text();
+  let raw: string;
+  try {
+    raw = await response.text();
+  } catch {
+    return null;
+  }
   const normalized = stripBom(raw);
   const trimmed = normalized.trim();
 
@@ -336,7 +370,7 @@ async function parseSuccessBody(
       return parseJsonBody(response, requestInfo);
 
     case "text": {
-      const text = await response.text();
+      const text = await readResponseText(response, requestInfo);
       return text === "" ? null : text;
     }
 
@@ -357,14 +391,57 @@ type PreparedRequest = {
   method: string;
   requestInfo: { method: string; url: string };
   responseType: "json" | "text" | "blob" | "auto";
+  timeoutMs: number;
 };
+
+async function fetchWithTimeout(
+  prepared: PreparedRequest,
+): Promise<Response> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let removeAbortListener: (() => void) | undefined;
+  const callerSignal = prepared.init.signal;
+
+  if (callerSignal) {
+    if (callerSignal.aborted) {
+      throw new NetworkError("The request was cancelled.", prepared.requestInfo);
+    }
+    const abort = () => controller.abort();
+    callerSignal.addEventListener("abort", abort, { once: true });
+    removeAbortListener = () => callerSignal.removeEventListener("abort", abort);
+  }
+
+  timer = setTimeout(() => controller.abort(), prepared.timeoutMs);
+  try {
+    return await fetch(prepared.input, { ...prepared.init, signal: controller.signal });
+  } catch (error) {
+    if (callerSignal?.aborted) {
+      throw new NetworkError("The request was cancelled.", prepared.requestInfo);
+    }
+    if (error && typeof error === "object" && "name" in error && error.name === "AbortError") {
+      throw new NetworkError("The request timed out.", prepared.requestInfo);
+    }
+    throw new NetworkError("The service could not be reached.", prepared.requestInfo);
+  } finally {
+    if (timer) clearTimeout(timer);
+    removeAbortListener?.();
+  }
+}
 
 async function prepareRequest(
   input: RequestInfo | URL,
   options: CustomFetchOptions = {},
 ): Promise<PreparedRequest> {
   input = applyBaseUrl(input);
-  const { responseType = "auto", headers: headersInit, ...init } = options;
+  const {
+    responseType = "auto",
+    timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
+    headers: headersInit,
+    ...init
+  } = options;
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    throw new TypeError("customFetch: timeoutMs must be a positive number.");
+  }
 
   const method = resolveMethod(input, init.method);
 
@@ -412,6 +489,7 @@ async function prepareRequest(
     method,
     requestInfo,
     responseType,
+    timeoutMs,
   };
 }
 
@@ -430,7 +508,7 @@ export async function authenticatedFetch(
   options: CustomFetchOptions = {},
 ): Promise<Response> {
   const prepared = await prepareRequest(input, options);
-  const response = await fetch(prepared.input, prepared.init);
+  const response = await fetchWithTimeout(prepared);
   await notifyUnauthorized(prepared.requestInfo, response);
   return response;
 }
@@ -440,7 +518,7 @@ export async function customFetch<T = unknown>(
   options: CustomFetchOptions = {},
 ): Promise<T> {
   const prepared = await prepareRequest(input, options);
-  const response = await fetch(prepared.input, prepared.init);
+  const response = await fetchWithTimeout(prepared);
   await notifyUnauthorized(prepared.requestInfo, response);
 
   if (!response.ok) {

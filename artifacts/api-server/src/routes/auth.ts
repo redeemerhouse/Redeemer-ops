@@ -34,6 +34,7 @@ import {
 } from "../lib/account-security";
 import { sendPasswordResetEmail, sendVerificationEmail } from "../lib/auth-email";
 import { getConfiguredRateLimitStore } from "../middlewares/security";
+import { unavailable } from "../lib/serviceFailures";
 
 const router = Router();
 const DUMMY_PASSWORD_HASH = "scrypt$cmVkZWVtZXItYXV0aC1kdW1teQ$B5ioDUzLuYirZubtantWbc7Dg7rYCv2kITy0zU6HesIk-yHNHjXaHGqxJVdNagllmobXJ68z_CaWisJbxg1v4A";
@@ -72,6 +73,24 @@ async function audit(
     outcome,
     metadata,
   });
+}
+
+async function auditBestEffort(
+  req: Request,
+  action: string,
+  accountId: number | null,
+  outcome: "success" | "failure",
+  actor = "anonymous",
+): Promise<void> {
+  try {
+    await audit(req, action, accountId, outcome, actor);
+  } catch (error) {
+    req.log.error({
+      action,
+      errorType: error instanceof Error ? error.name : typeof error,
+      correlationId: req.res?.locals.correlationId,
+    }, "Optional notification audit could not be recorded");
+  }
 }
 
 async function issueActionToken(accountId: number, type: "email_verification" | "password_reset"): Promise<string> {
@@ -213,18 +232,48 @@ router.post("/auth/register", async (req, res) => {
   }
   const normalized = normalizeEmail(email);
   const passwordHash = await hashPassword(password);
-  let accountId: number | null = null;
+  let delivery: { accountId: number; token: string } | null = null;
   try {
-    const [account] = await db.insert(authAccountsTable)
-      .values({ email: normalized, passwordHash })
-      .returning({ id: authAccountsTable.id });
-    accountId = account.id;
-    const token = await issueActionToken(account.id, "email_verification");
-    await sendVerificationEmail(normalized, token);
-    req.log.info({ accountId: account.id, actionTokenType: "email_verification" }, "Account verification delivered");
-    await audit(req, "auth.account_registered", account.id, "success");
-  } catch {
-    await audit(req, "auth.account_registered", null, "failure");
+    delivery = await db.transaction(async (tx) => {
+      const [account] = await tx.insert(authAccountsTable)
+        .values({ email: normalized, passwordHash })
+        .returning({ id: authAccountsTable.id });
+      const token = newActionToken();
+      await tx.insert(authActionTokensTable).values({
+        accountId: account.id,
+        type: "email_verification",
+        tokenHash: hashActionToken(token),
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      });
+      await tx.insert(auditEventsTable).values({
+        action: "auth.account_registered",
+        entityType: "auth_account",
+        entityId: account.id,
+        actor: "anonymous",
+        correlationId: res.locals.correlationId,
+        outcome: "success",
+      });
+      return { accountId: account.id, token };
+    });
+  } catch (error) {
+    const code = error && typeof error === "object" && "code" in error
+      ? String(error.code)
+      : "";
+    if (code !== "23505") throw unavailable("database", "Account registration is temporarily unavailable.");
+    await auditBestEffort(req, "auth.account_registered", null, "failure");
+  }
+  if (delivery) {
+    try {
+      await sendVerificationEmail(normalized, delivery.token);
+      req.log.info({ accountId: delivery.accountId, actionTokenType: "email_verification" }, "Account verification delivered");
+    } catch (error) {
+      req.log.error({
+        accountId: delivery.accountId,
+        errorType: error instanceof Error ? error.name : typeof error,
+        correlationId: res.locals.correlationId,
+      }, "Account verification delivery failed; verification can be requested again");
+      await auditBestEffort(req, "auth.email_verification_requested", delivery.accountId, "failure");
+    }
   }
   res.status(202).json({
     message: "If the account can be created, verification and approval instructions will be sent.",
@@ -244,7 +293,7 @@ router.post("/auth/verification/request", async (req, res) => {
       await audit(req, "auth.email_verification_requested", account.id, "success");
     } catch (error) {
       req.log.error({ accountId: account.id, err: error }, "Account verification delivery failed");
-      await audit(req, "auth.email_verification_requested", account.id, "failure");
+      await auditBestEffort(req, "auth.email_verification_requested", account.id, "failure");
     }
   }
   res.status(202).json({ message: "If an eligible account exists, verification instructions will be sent." });
@@ -372,7 +421,7 @@ router.post("/auth/password-reset/request", async (req, res) => {
       await audit(req, "auth.password_reset_requested", account.id, "success");
     } catch (error) {
       req.log.error({ accountId: account.id, err: error }, "Password reset delivery failed");
-      await audit(req, "auth.password_reset_requested", account.id, "failure");
+      await auditBestEffort(req, "auth.password_reset_requested", account.id, "failure");
     }
   }
   res.status(202).json({ message: "If an eligible account exists, password reset instructions will be sent." });

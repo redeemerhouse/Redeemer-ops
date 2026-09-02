@@ -19,6 +19,7 @@
     "test:assessments": "node --test test/assessments.test.mjs",
     "test:architecture": "node --test test/architecture-cleanup.test.mjs",
     "test:policy": "node --experimental-strip-types --test test/policy.test.ts",
+    "test:resilience": "sh -c 'mkdir -p .tmp; pnpm exec esbuild test/error-resilience.test.ts --bundle --platform=node --format=esm --packages=external --outfile=.tmp/error-resilience.test.mjs && node --test .tmp/error-resilience.test.mjs; status=$?; rm -f .tmp/error-resilience.test.mjs; exit $status'",
     "test:critical-workflows": "bash test/run-critical-workflows.sh",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

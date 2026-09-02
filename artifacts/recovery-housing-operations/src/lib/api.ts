@@ -1,4 +1,4 @@
-import { authenticatedFetch, customFetch } from '@workspace/api-client-react';
+import { ApiError, NetworkError, ResponseParseError, authenticatedFetch, customFetch } from '@workspace/api-client-react';
 
 export type ReportType = 'occupancy' | 'roster' | 'payments' | 'revenue' | 'compliance' | 'referral' | 'audit';
 export type ReportFormat = 'csv' | 'pdf';
@@ -16,6 +16,16 @@ export const reportTypes: { value: ReportType; label: string }[] = [
 export const get = async <T = any>(path: string): Promise<T> => {
   return customFetch<T>(`/api${path}`, { responseType: 'json' });
 };
+
+export function safeClientError(
+  error: unknown,
+  fallback = 'This action could not be completed. Try again.',
+): string {
+  if (error instanceof ApiError || error instanceof NetworkError || error instanceof ResponseParseError) {
+    return error.message;
+  }
+  return fallback;
+}
 
 export async function exportReport(reportType: ReportType, format: ReportFormat, filters: { house?: string; from?: string; to?: string } = {}): Promise<Response> {
   const query = new URLSearchParams({ format, ...Object.fromEntries(Object.entries(filters).filter(([, value]) => value)) });

@@ -221,9 +221,3 @@ For unauthorized access, cross-house disclosure, payment tampering, malware bypa
 leakage, or unsafe notifications: contain access, preserve correlation IDs and audit evidence,
 notify the owner administrator, and stop the release. Do not include sensitive payloads in
 incident chat or routine logs.
-## 7. Incident response
-
-For unauthorized access, cross-house disclosure, payment tampering, malware bypass, export
-leakage, or unsafe notifications: contain access, preserve correlation IDs and audit evidence,
-notify the owner administrator, and stop the release. Do not include sensitive payloads in
-incident chat or routine logs.

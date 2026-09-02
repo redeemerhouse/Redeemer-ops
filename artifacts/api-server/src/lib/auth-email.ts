@@ -1,16 +1,39 @@
 import { ReplitConnectors } from "@replit/connectors-sdk";
+import { unavailable } from "./serviceFailures";
 
 const connectors = new ReplitConnectors();
 const from = process.env.AUTH_EMAIL_FROM ?? "Redeemer House <onboarding@resend.dev>";
+const EMAIL_TIMEOUT_MS = 10_000;
+
+async function withEmailTimeout<T>(operation: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(unavailable("email", "Transactional email is temporarily unavailable.")), EMAIL_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 async function sendAccountEmail(to: string, subject: string, text: string): Promise<void> {
-  const response = await connectors.proxy("resend", "/emails", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ from, to: [to], subject, text }),
-  });
-  if (!response.ok) {
-    throw new Error(`Transactional email delivery failed with status ${response.status}.`);
+  try {
+    const response = await withEmailTimeout(
+      connectors.proxy("resend", "/emails", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ from, to: [to], subject, text }),
+      }),
+    );
+    if (!response.ok) {
+      throw unavailable("email", "Transactional email is temporarily unavailable.");
+    }
+  } catch (error) {
+    if (error instanceof Error && error.name === "ServiceFailure") throw error;
+    throw unavailable("email", "Transactional email is temporarily unavailable.");
   }
 }
 

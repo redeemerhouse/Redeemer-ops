@@ -839,6 +839,7 @@ router.post("/meetings", async (req, res): Promise<void> => {
     ? []
     : await db.select({ id: housesTable.id, name: housesTable.name }).from(housesTable).where(eq(housesTable.id, parsed.data.houseId));
   if (parsed.data.houseId !== undefined && !house) { problem(req, res, 404); return; }
+  if (principal.role === "house_manager" && !house) { problem(req, res, 403); return; }
   if (!authorize(principal, "meeting:create", { houseName: house?.name })) { problem(req, res, 403); return; }
   const [created] = await db.insert(meetingAttendanceTable).values({
     ...parsed.data,

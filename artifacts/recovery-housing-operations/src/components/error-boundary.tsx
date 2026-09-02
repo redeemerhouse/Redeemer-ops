@@ -29,6 +29,7 @@ function toError(value: unknown): Error {
 }
 
 function DefaultFallback({ error, resetError }: ErrorFallbackProps) {
+  void error;
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-gray-50 p-6">
       <div className="max-w-lg w-full text-center">
@@ -39,12 +40,6 @@ function DefaultFallback({ error, resetError }: ErrorFallbackProps) {
           This part of the app hit an error. The rest of the app is still
           running.
         </p>
-        {/* Dev only: messages can carry API responses and other internals. */}
-        {import.meta.env.DEV ? (
-          <pre className="mt-4 overflow-x-auto rounded bg-gray-100 p-3 text-left text-xs text-gray-800">
-            {error.message || String(error)}
-          </pre>
-        ) : null}
         <button
           type="button"
           onClick={resetError}

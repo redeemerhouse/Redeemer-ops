@@ -7,4 +7,4 @@ Node's `--experimental-strip-types` test runner does not support constructor par
 
 **Why:** Focused TypeScript tests can fail before executing when they import workspace packages or use unsupported syntax, even though the project TypeScript compiler and bundler succeed.
 
-**How to apply:** Keep directly tested policy modules runtime-independent where possible, use explicit `.ts` imports in tests, and avoid parameter properties in code exercised by Node's built-in test runner.
+**How to apply:** Keep directly tested policy modules runtime-independent where possible, use explicit `.ts` imports in tests, and avoid parameter properties. For integrated source graphs with extensionless imports, bundle the test with the workspace's existing build tool before running `node --test`.

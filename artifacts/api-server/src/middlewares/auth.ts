@@ -20,6 +20,8 @@ import {
   type Permission,
   type Role,
 } from "../lib/access-policy";
+import { unavailable } from "../lib/serviceFailures";
+import { problem } from "./errors";
 
 export {
   authorize,
@@ -235,10 +237,10 @@ export function getPrincipal(res: Response): Principal {
   return principal;
 }
 
-function authenticationFailure(res: Response): void {
+function authenticationFailure(req: Request, res: Response): void {
   res.setHeader("Cache-Control", "no-store, private");
   res.setHeader("WWW-Authenticate", "Bearer");
-  res.status(401).json({ error: "Authentication required." });
+  problem(req, res, 401);
 }
 
 export const authenticate: RequestHandler = async (req, res, next) => {
@@ -250,8 +252,10 @@ export const authenticate: RequestHandler = async (req, res, next) => {
     if (bearerPrincipal?.sessionId) {
       try {
         principal = await principalFromSession(match[1]);
-      } catch {
-        principal = null;
+      } catch (error) {
+        req.log.error({ errorType: error instanceof Error ? error.name : typeof error, correlationId: res.locals.correlationId }, "Session lookup failed");
+        next(unavailable("session", "Session verification is temporarily unavailable."));
+        return;
       }
     } else if (!serverConfig.isProduction) {
       // Signed bearer principals remain available for local integration tests.
@@ -265,14 +269,16 @@ export const authenticate: RequestHandler = async (req, res, next) => {
     if (cookiePrincipal?.sessionId) {
       try {
         principal = await principalFromSession(cookieToken);
-      } catch {
-        principal = null;
+      } catch (error) {
+        req.log.error({ errorType: error instanceof Error ? error.name : typeof error, correlationId: res.locals.correlationId }, "Session lookup failed");
+        next(unavailable("session", "Session verification is temporarily unavailable."));
+        return;
       }
     }
   }
   if (!principal) {
     if (cookieToken) clearSessionCookie(res);
-    authenticationFailure(res);
+    authenticationFailure(req, res);
     return;
   }
   res.locals.principal = principal;
@@ -287,7 +293,7 @@ export const csrfProtection: RequestHandler = (req, res, next) => {
   }
   const origin = req.header("origin");
   if (sessionCookie(req) && !origin) {
-    res.status(403).json({ error: "Request origin is required." });
+    problem(req, res, 403);
     return;
   }
   if (!origin) {
@@ -298,7 +304,7 @@ export const csrfProtection: RequestHandler = (req, res, next) => {
   const allowed = corsOrigins.includes(origin)
     || (!serverConfig.isProduction && origin === expected);
   if (!allowed) {
-    res.status(403).json({ error: "Request origin is not allowed." });
+    problem(req, res, 403);
     return;
   }
   next();
@@ -308,7 +314,7 @@ export function requirePermission(permission: Permission, context: (req: Request
   return (req, res, next) => {
     const principal = getPrincipal(res);
     if (!authorize(principal, permission, context(req, res))) {
-      res.status(403).json({ error: "You do not have permission to perform this action." });
+      problem(req, res, 403);
       return;
     }
     next();
