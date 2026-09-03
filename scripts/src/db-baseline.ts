@@ -13,15 +13,14 @@ const { Pool } = pg;
 
 const root = resolve(import.meta.dirname, "../..");
 const migrationDirectory = resolve(root, "lib/db/drizzle");
-const initialMigrationPath = resolve(
-  migrationDirectory,
-  "0000_initial_schema.sql",
-);
 const journalPath = resolve(migrationDirectory, "meta/_journal.json");
-const initialSnapshotPath = resolve(
-  migrationDirectory,
-  "meta/0000_snapshot.json",
-);
+const defaultBaselineTag = "0000_initial_schema";
+
+type MigrationEntry = {
+  idx?: number;
+  tag?: string;
+  when?: number;
+};
 
 const EXPECTED_TABLES = {
   residents: {
@@ -344,6 +343,12 @@ type CatalogObjectRow = {
   object_kind: string;
   object_name: string;
 };
+type LedgerColumnRow = {
+  column_name: string;
+  data_type: string;
+  is_nullable: string;
+  column_default: string | null;
+};
 
 const fail = (message: string): never => {
   throw new Error(`Database baseline refused: ${message}`);
@@ -351,15 +356,17 @@ const fail = (message: string): never => {
 
 const usage = () => {
   console.log(`Usage:
-  pnpm run db:baseline -- --target <host:port/database> --backup-confirmed --recovery-confirmed
+  pnpm run db:baseline -- --target <host:port/database> --through <migration-tag> --backup-confirmed --recovery-confirmed
 
-This one-time command records migration 0000 for an existing database only.
+This one-time command records an exact checked-in migration prefix for an existing database only.
+If --through is omitted, it defaults to ${defaultBaselineTag}.
 It never creates or changes application tables or data.`);
 };
 
 const parseArguments = () => {
   const args = process.argv.slice(2);
   let target: string | undefined;
+  let through = defaultBaselineTag;
   let backupConfirmed = false;
   let recoveryConfirmed = false;
 
@@ -374,6 +381,11 @@ const parseArguments = () => {
     }
     if (argument === "--target") {
       target = args[index + 1];
+      index += 1;
+      continue;
+    }
+    if (argument === "--through") {
+      through = args[index + 1] ?? "";
       index += 1;
       continue;
     }
@@ -396,6 +408,11 @@ const parseArguments = () => {
       "an explicit credential-free host:port/database identity is required with --target",
     );
   }
+  if (!/^\d{4}_[a-z0-9_]+$/.test(through)) {
+    fail(
+      "an explicit checked-in migration tag is required with --through",
+    );
+  }
   if (!backupConfirmed) {
     fail(
       "a restorable backup must be confirmed with --backup-confirmed before connecting",
@@ -410,7 +427,7 @@ const parseArguments = () => {
     fail("DATABASE_URL is required; it is never accepted as a command-line argument");
   }
 
-  return { target, backupConfirmed, recoveryConfirmed };
+  return { target, through, backupConfirmed, recoveryConfirmed };
 };
 
 const connectionIdentity = (databaseUrl: string) => {
@@ -441,6 +458,512 @@ const normalizeLiteralDefault = (value: string) =>
   normalizeDefault(value)
     .replace(/::(?:text|numeric|boolean)$/, "")
     .replace(/^'(.*)'$/, "$1");
+
+const verifyBaselinePrivilegeState = async (client: pg.PoolClient) => {
+  const result = await client.query<{
+    database_owner_matches: boolean;
+    public_schema_owner: string;
+    public_acl_entry_count: string;
+    unexpected_public_acl_entries: string;
+    current_role_default_acl_rows: string;
+  }>(`
+    SELECT
+      database_owner.rolname = current_user AS database_owner_matches,
+      schema_owner.rolname AS public_schema_owner,
+      (
+        SELECT count(*)::text
+        FROM aclexplode(
+          COALESCE(
+            public_namespace.nspacl,
+            acldefault('n', public_namespace.nspowner)
+          )
+        )
+      ) AS public_acl_entry_count,
+      (
+        SELECT count(*)::text
+        FROM aclexplode(
+          COALESCE(
+            public_namespace.nspacl,
+            acldefault('n', public_namespace.nspowner)
+          )
+        ) acl_entry
+        WHERE NOT (
+          (
+            acl_entry.grantee = 0
+            AND acl_entry.privilege_type = 'USAGE'
+            AND NOT acl_entry.is_grantable
+          )
+          OR (
+            acl_entry.grantee = public_namespace.nspowner
+            AND acl_entry.privilege_type IN ('CREATE', 'USAGE')
+            AND NOT acl_entry.is_grantable
+          )
+        )
+      ) AS unexpected_public_acl_entries,
+      (
+        SELECT count(*)::text
+        FROM pg_default_acl default_acl
+        WHERE default_acl.defaclrole = (
+          SELECT role.oid FROM pg_roles role WHERE role.rolname = current_user
+        )
+      ) AS current_role_default_acl_rows
+    FROM pg_database database_row
+    JOIN pg_roles database_owner ON database_owner.oid = database_row.datdba
+    JOIN pg_namespace public_namespace ON public_namespace.nspname = 'public'
+    JOIN pg_roles schema_owner ON schema_owner.oid = public_namespace.nspowner
+    WHERE database_row.datname = current_database()
+  `);
+  const state = result.rows[0];
+  if (
+    !state ||
+    !state.database_owner_matches ||
+    state.public_schema_owner !== "pg_database_owner" ||
+    Number(state.public_acl_entry_count) !== 3 ||
+    Number(state.unexpected_public_acl_entries) !== 0 ||
+    Number(state.current_role_default_acl_rows) !== 0
+  ) {
+    fail(
+      "database ownership, public schema access, or migration-role default privileges are not canonical",
+    );
+  }
+};
+
+const verifyEmptyLedgerStructure = async (client: pg.PoolClient) => {
+  const columns = await client.query<LedgerColumnRow>(`
+    SELECT column_name, data_type, is_nullable, column_default
+    FROM information_schema.columns
+    WHERE table_schema = 'drizzle'
+      AND table_name = '__drizzle_migrations'
+    ORDER BY ordinal_position
+  `);
+  const expectedColumns = [
+    ["id", "integer", "NO"],
+    ["hash", "text", "NO"],
+    ["created_at", "bigint", "YES"],
+  ];
+  const columnsMatch =
+    columns.rows.length === expectedColumns.length &&
+    columns.rows.every(
+      (column, index) =>
+        column.column_name === expectedColumns[index]?.[0] &&
+        column.data_type === expectedColumns[index]?.[1] &&
+        column.is_nullable === expectedColumns[index]?.[2] &&
+        (column.column_name === "id"
+          ? normalizeDefault(column.column_default ?? "").startsWith("nextval(")
+          : column.column_default === null),
+    );
+
+  const shape = await client.query<{
+    owner_matches: boolean;
+    schema_owner_matches: boolean;
+    rls_enabled: boolean;
+    has_acl: boolean;
+    schema_has_acl: boolean;
+    constraint_count: string;
+    primary_key_count: string;
+    index_count: string;
+    trigger_count: string;
+    policy_count: string;
+    unexpected_object_count: string;
+    function_count: string;
+    standalone_type_count: string;
+    sequence_name: string | null;
+    sequence_owner_matches: boolean;
+    sequence_has_acl: boolean;
+    sequence_ownership_count: string;
+    index_owner_matches: boolean;
+    index_has_acl: boolean;
+    sequence_start: string | null;
+    sequence_increment: string | null;
+    sequence_min: string | null;
+    sequence_max: string | null;
+    sequence_cache: string | null;
+    sequence_cycle: boolean | null;
+  }>(`
+    SELECT
+      owner.rolname = current_user AS owner_matches,
+      schema_owner.rolname = current_user AS schema_owner_matches,
+      ledger.relrowsecurity AS rls_enabled,
+      ledger.relacl IS NOT NULL AS has_acl,
+      ledger_namespace.nspacl IS NOT NULL AS schema_has_acl,
+      (
+        SELECT count(*)::text
+        FROM pg_constraint constraint_row
+        WHERE constraint_row.conrelid = ledger.oid
+      ) AS constraint_count,
+      (
+        SELECT count(*)::text
+        FROM pg_constraint constraint_row
+        WHERE constraint_row.conrelid = ledger.oid
+          AND constraint_row.contype = 'p'
+          AND pg_get_constraintdef(constraint_row.oid) = 'PRIMARY KEY (id)'
+      ) AS primary_key_count,
+      (
+        SELECT count(*)::text
+        FROM pg_index index_row
+        WHERE index_row.indrelid = ledger.oid
+      ) AS index_count,
+      (
+        SELECT count(*)::text
+        FROM pg_trigger trigger_row
+        WHERE trigger_row.tgrelid = ledger.oid
+          AND NOT trigger_row.tgisinternal
+      ) AS trigger_count,
+      (
+        SELECT count(*)::text
+        FROM pg_policy policy_row
+        WHERE policy_row.polrelid = ledger.oid
+      ) AS policy_count,
+      (
+        SELECT count(*)::text
+        FROM pg_class schema_object
+        WHERE schema_object.relnamespace = ledger_namespace.oid
+          AND NOT (
+            (schema_object.relkind = 'r' AND schema_object.relname = '__drizzle_migrations')
+            OR (schema_object.relkind = 'i' AND schema_object.relname = '__drizzle_migrations_pkey')
+            OR (schema_object.relkind = 'S' AND schema_object.relname = '__drizzle_migrations_id_seq')
+          )
+      ) AS unexpected_object_count,
+      (
+        SELECT count(*)::text
+        FROM pg_proc procedure
+        WHERE procedure.pronamespace = ledger_namespace.oid
+      ) AS function_count,
+      (
+        SELECT count(*)::text
+        FROM pg_type type
+        WHERE type.typnamespace = ledger_namespace.oid
+          AND type.typrelid = 0
+          AND type.typelem = 0
+          AND type.typtype IN ('c', 'd', 'e', 'm', 'r')
+      ) AS standalone_type_count,
+      pg_get_serial_sequence(
+        'drizzle.__drizzle_migrations',
+        'id'
+      ) AS sequence_name,
+      sequence_owner.rolname = current_user AS sequence_owner_matches,
+      sequence_object.relacl IS NOT NULL AS sequence_has_acl,
+      (
+        SELECT count(*)::text
+        FROM pg_depend sequence_dependency
+        WHERE sequence_dependency.classid = 'pg_class'::regclass
+          AND sequence_dependency.objid = sequence_object.oid
+          AND sequence_dependency.refclassid = 'pg_class'::regclass
+          AND sequence_dependency.refobjid = ledger.oid
+          AND sequence_dependency.refobjsubid = id_column.attnum
+          AND sequence_dependency.deptype = 'a'
+      ) AS sequence_ownership_count,
+      index_owner.rolname = current_user AS index_owner_matches,
+      index_object.relacl IS NOT NULL AS index_has_acl,
+      sequence_parameters.seqstart::text AS sequence_start,
+      sequence_parameters.seqincrement::text AS sequence_increment,
+      sequence_parameters.seqmin::text AS sequence_min,
+      sequence_parameters.seqmax::text AS sequence_max,
+      sequence_parameters.seqcache::text AS sequence_cache,
+      sequence_parameters.seqcycle AS sequence_cycle
+    FROM pg_class ledger
+    JOIN pg_roles owner ON owner.oid = ledger.relowner
+    JOIN pg_namespace ledger_namespace ON ledger_namespace.oid = ledger.relnamespace
+    JOIN pg_roles schema_owner ON schema_owner.oid = ledger_namespace.nspowner
+    JOIN pg_attribute id_column
+      ON id_column.attrelid = ledger.oid
+      AND id_column.attname = 'id'
+      AND NOT id_column.attisdropped
+    LEFT JOIN pg_class sequence_object
+      ON sequence_object.oid = to_regclass('drizzle.__drizzle_migrations_id_seq')
+    LEFT JOIN pg_roles sequence_owner
+      ON sequence_owner.oid = sequence_object.relowner
+    LEFT JOIN pg_sequence sequence_parameters
+      ON sequence_parameters.seqrelid = sequence_object.oid
+    LEFT JOIN pg_class index_object
+      ON index_object.oid = to_regclass('drizzle.__drizzle_migrations_pkey')
+      AND index_object.relkind = 'i'
+    LEFT JOIN pg_roles index_owner
+      ON index_owner.oid = index_object.relowner
+    WHERE ledger.oid = 'drizzle.__drizzle_migrations'::regclass
+      AND ledger.relkind = 'r'
+  `);
+  const actual = shape.rows[0];
+  if (
+    !columnsMatch ||
+    !actual ||
+    !actual.owner_matches ||
+    !actual.schema_owner_matches ||
+    actual.rls_enabled ||
+    actual.has_acl ||
+    actual.schema_has_acl ||
+    Number(actual.constraint_count) !== 1 ||
+    Number(actual.primary_key_count) !== 1 ||
+    Number(actual.index_count) !== 1 ||
+    Number(actual.trigger_count) !== 0 ||
+    Number(actual.policy_count) !== 0 ||
+    Number(actual.unexpected_object_count) !== 0 ||
+    Number(actual.function_count) !== 0 ||
+    Number(actual.standalone_type_count) !== 0 ||
+    actual.sequence_name?.replaceAll('"', "") !==
+      "drizzle.__drizzle_migrations_id_seq" ||
+    !actual.sequence_owner_matches ||
+    actual.sequence_has_acl ||
+    Number(actual.sequence_ownership_count) !== 1 ||
+    !actual.index_owner_matches ||
+    actual.index_has_acl ||
+    actual.sequence_start !== "1" ||
+    actual.sequence_increment !== "1" ||
+    actual.sequence_min !== "1" ||
+    actual.sequence_max !== "2147483647" ||
+    actual.sequence_cache !== "1" ||
+    actual.sequence_cycle !== false
+  ) {
+    fail(
+      "the existing empty drizzle.__drizzle_migrations table is not the canonical Drizzle ledger",
+    );
+  }
+};
+
+const verifySnapshotCatalogBoundaries = async (
+  client: pg.PoolClient,
+  snapshot: DrizzleSnapshot,
+  through: string,
+) => {
+  const publicTables = Object.values(snapshot.tables).filter(
+    (table) => (table.schema || "public") === "public",
+  );
+  const expectedTableNames = publicTables.map((table) => table.name);
+  const expectedSerialColumns = publicTables.flatMap((table) =>
+    Object.values(table.columns)
+      .filter((column) => column.type === "serial")
+      .map((column) => ({
+        tableName: table.name,
+        columnName: column.name,
+        sequenceName: `${table.name}_${column.name}_seq`,
+      })),
+  );
+  const expectedSequenceNames = expectedSerialColumns.map(
+    (column) => column.sequenceName,
+  );
+  const expectedIndexNames = publicTables.flatMap((table) => [
+    ...Object.keys(table.indexes ?? {}),
+    ...(Object.values(table.columns).some((column) => column.primaryKey)
+      ? [`${table.name}_pkey`]
+      : []),
+    ...Object.keys(table.compositePrimaryKeys ?? {}),
+    ...Object.keys(table.uniqueConstraints ?? {}),
+  ]);
+
+  const catalogObjects = await client.query<CatalogObjectRow>(`
+    WITH user_namespaces AS (
+      SELECT oid, nspname
+      FROM pg_namespace
+      WHERE nspname NOT IN ('pg_catalog', 'information_schema', 'drizzle')
+        AND nspname NOT LIKE 'pg_%'
+    )
+    SELECT 'schema' AS object_kind, namespace.nspname AS object_name
+    FROM user_namespaces namespace
+    WHERE namespace.nspname <> 'public'
+    UNION ALL
+    SELECT
+      CASE object.relkind
+        WHEN 'r' THEN 'table'
+        WHEN 'p' THEN 'partitioned table'
+        WHEN 'S' THEN 'sequence'
+        WHEN 'i' THEN 'index'
+        WHEN 'I' THEN 'partitioned index'
+        WHEN 'v' THEN 'view'
+        WHEN 'm' THEN 'materialized view'
+        WHEN 'f' THEN 'foreign table'
+        ELSE 'relation'
+      END,
+      namespace.nspname || '.' || object.relname
+    FROM pg_class object
+    JOIN user_namespaces namespace ON namespace.oid = object.relnamespace
+    WHERE NOT (
+      namespace.nspname = 'public'
+      AND (
+        (object.relkind = 'r' AND object.relname = ANY($1::text[]))
+        OR (object.relkind = 'S' AND object.relname = ANY($2::text[]))
+        OR (object.relkind = 'i' AND object.relname = ANY($3::text[]))
+      )
+    )
+    UNION ALL
+    SELECT 'function', namespace.nspname || '.' || procedure.proname
+    FROM pg_proc procedure
+    JOIN user_namespaces namespace ON namespace.oid = procedure.pronamespace
+    UNION ALL
+    SELECT 'standalone type', namespace.nspname || '.' || type.typname
+    FROM pg_type type
+    JOIN user_namespaces namespace ON namespace.oid = type.typnamespace
+    WHERE type.typrelid = 0
+      AND type.typelem = 0
+      AND type.typtype IN ('c', 'd', 'e', 'm', 'r')
+    UNION ALL
+    SELECT 'trigger', namespace.nspname || '.' || table_object.relname || '.' || trigger.tgname
+    FROM pg_trigger trigger
+    JOIN pg_class table_object ON table_object.oid = trigger.tgrelid
+    JOIN user_namespaces namespace ON namespace.oid = table_object.relnamespace
+    WHERE NOT trigger.tgisinternal
+    UNION ALL
+    SELECT 'rule', namespace.nspname || '.' || table_object.relname || '.' || rule.rulename
+    FROM pg_rewrite rule
+    JOIN pg_class table_object ON table_object.oid = rule.ev_class
+    JOIN user_namespaces namespace ON namespace.oid = table_object.relnamespace
+    WHERE rule.rulename <> '_RETURN'
+    UNION ALL
+    SELECT 'explicit object grant', namespace.nspname || '.' || object.relname
+    FROM pg_class object
+    JOIN user_namespaces namespace ON namespace.oid = object.relnamespace
+    WHERE object.relacl IS NOT NULL
+    UNION ALL
+    SELECT 'explicit column grant', namespace.nspname || '.' || table_object.relname || '.' || attribute.attname
+    FROM pg_attribute attribute
+    JOIN pg_class table_object ON table_object.oid = attribute.attrelid
+    JOIN user_namespaces namespace ON namespace.oid = table_object.relnamespace
+    WHERE attribute.attacl IS NOT NULL
+    UNION ALL
+    SELECT 'explicit function grant', namespace.nspname || '.' || procedure.proname
+    FROM pg_proc procedure
+    JOIN user_namespaces namespace ON namespace.oid = procedure.pronamespace
+    WHERE procedure.proacl IS NOT NULL
+    ORDER BY object_kind, object_name
+  `, [expectedTableNames, expectedSequenceNames, expectedIndexNames]);
+  if (catalogObjects.rows.length > 0) {
+    fail(
+      `catalog contains objects or grants outside ${through}: ${catalogObjects.rows
+        .slice(0, 20)
+        .map((object) => `${object.object_kind} ${object.object_name}`)
+        .join(", ")}`,
+    );
+  }
+
+  const ownership = await client.query<{ object_name: string }>(`
+    SELECT namespace.nspname || '.' || object.relname AS object_name
+    FROM pg_class object
+    JOIN pg_namespace namespace ON namespace.oid = object.relnamespace
+    JOIN pg_roles owner ON owner.oid = object.relowner
+    WHERE namespace.nspname = 'public'
+      AND object.relname = ANY($1::text[])
+      AND owner.rolname <> current_user
+  `, [[...expectedTableNames, ...expectedSequenceNames, ...expectedIndexNames]]);
+  if (ownership.rows.length > 0) {
+    fail(
+      `migration objects are not owned by the connected migration role: ${ownership.rows
+        .map((row) => row.object_name)
+        .join(", ")}`,
+    );
+  }
+
+  const noncanonicalConstraints = await client.query<{
+    table_name: string;
+    constraint_name: string;
+  }>(`
+    SELECT
+      table_object.relname AS table_name,
+      constraint_row.conname AS constraint_name
+    FROM pg_constraint constraint_row
+    JOIN pg_class table_object ON table_object.oid = constraint_row.conrelid
+    JOIN pg_namespace namespace ON namespace.oid = table_object.relnamespace
+    WHERE namespace.nspname = 'public'
+      AND table_object.relname = ANY($1::text[])
+      AND (
+        (
+          constraint_row.contype IN ('p', 'u', 'f')
+          AND (
+            NOT constraint_row.convalidated
+            OR constraint_row.condeferrable
+            OR constraint_row.condeferred
+          )
+        )
+        OR (
+          constraint_row.contype = 'c'
+          AND (
+            NOT constraint_row.convalidated
+            OR constraint_row.connoinherit
+          )
+        )
+        OR constraint_row.contype = 'x'
+      )
+    ORDER BY table_object.relname, constraint_row.conname
+  `, [expectedTableNames]);
+  if (noncanonicalConstraints.rows.length > 0) {
+    fail(
+      `constraint validation or deferrability does not match ${through}: ${noncanonicalConstraints.rows
+        .map((constraint) => `${constraint.table_name}.${constraint.constraint_name}`)
+        .join(", ")}`,
+    );
+  }
+
+  const serials = await client.query<SerialRow & { column_name: string }>(`
+    SELECT
+      table_object.relname AS table_name,
+      column_object.attname AS column_name,
+      pg_get_serial_sequence(
+        format('%I.%I', namespace.nspname, table_object.relname),
+        column_object.attname
+      ) AS owned_sequence_name,
+      sequence_namespace.nspname || '.' || sequence_object.relname
+        AS default_sequence_name,
+      pg_get_expr(default_row.adbin, default_row.adrelid) AS default_expression,
+      sequence_parameters.seqstart::text AS sequence_start,
+      sequence_parameters.seqincrement::text AS sequence_increment,
+      sequence_parameters.seqmin::text AS sequence_min,
+      sequence_parameters.seqmax::text AS sequence_max,
+      sequence_parameters.seqcache::text AS sequence_cache,
+      sequence_parameters.seqcycle AS sequence_cycle
+    FROM pg_class table_object
+    JOIN pg_namespace namespace ON namespace.oid = table_object.relnamespace
+    JOIN pg_attribute column_object
+      ON column_object.attrelid = table_object.oid
+      AND NOT column_object.attisdropped
+    LEFT JOIN pg_attrdef default_row
+      ON default_row.adrelid = table_object.oid
+      AND default_row.adnum = column_object.attnum
+    LEFT JOIN pg_class sequence_object
+      ON sequence_object.oid = to_regclass(
+        pg_get_serial_sequence(
+          format('%I.%I', namespace.nspname, table_object.relname),
+          column_object.attname
+        )
+      )
+      AND sequence_object.relkind = 'S'
+    LEFT JOIN pg_namespace sequence_namespace
+      ON sequence_namespace.oid = sequence_object.relnamespace
+    LEFT JOIN pg_sequence sequence_parameters
+      ON sequence_parameters.seqrelid = sequence_object.oid
+    WHERE namespace.nspname = 'public'
+      AND table_object.relname = ANY($1::text[])
+  `, [expectedTableNames]);
+  const serialByColumn = new Map(
+    serials.rows.map((serial) => [
+      `${serial.table_name}.${serial.column_name}`,
+      serial,
+    ]),
+  );
+  for (const expected of expectedSerialColumns) {
+    const serial = serialByColumn.get(
+      `${expected.tableName}.${expected.columnName}`,
+    );
+    const expectedQualifiedName = `public.${expected.sequenceName}`;
+    const defaultExpression = normalizeDefault(
+      serial?.default_expression?.replaceAll('"', "") ?? "",
+    );
+    if (
+      serial?.owned_sequence_name?.replaceAll('"', "") !==
+        expectedQualifiedName ||
+      serial.default_sequence_name?.replaceAll('"', "") !==
+        expectedQualifiedName ||
+      !defaultExpression.includes(expected.sequenceName) ||
+      serial.sequence_start !== "1" ||
+      serial.sequence_increment !== "1" ||
+      serial.sequence_min !== "1" ||
+      serial.sequence_max !== "2147483647" ||
+      serial.sequence_cache !== "1" ||
+      serial.sequence_cycle !== false
+    ) {
+      fail(
+        `public.${expected.tableName}.${expected.columnName} does not have the exact ${through} serial sequence semantics`,
+      );
+    }
+  }
+};
 
 const verifyColumn = (
   tableName: TableName,
@@ -499,21 +1022,54 @@ const verifyColumn = (
   }
 };
 
-const verifyLegacySchema = async (client: pg.PoolClient) => {
-  const ledgerResult = await client.query<{ ledger: string | null }>(`
-    SELECT COALESCE(
-      to_regclass('drizzle.__drizzle_migrations')::text,
-      to_regclass('public.__drizzle_migrations')::text
-    ) AS ledger
+const verifyLegacySchema = async (
+  client: pg.PoolClient,
+  snapshotPath: string,
+  snapshotDisplayPath: string,
+  through: string,
+) => {
+  await verifyBaselinePrivilegeState(client);
+  const ledgerResult = await client.query<{
+    configured_ledger: string | null;
+    public_ledger: string | null;
+    drizzle_schema: string | null;
+  }>(`
+    SELECT
+      to_regclass('drizzle.__drizzle_migrations')::text AS configured_ledger,
+      to_regclass('public.__drizzle_migrations')::text AS public_ledger,
+      to_regnamespace('drizzle')::text AS drizzle_schema
   `);
-  if (ledgerResult.rows[0]?.ledger) {
+  const ledgerState = ledgerResult.rows[0];
+  if (ledgerState?.public_ledger) {
     fail(
-      `${ledgerResult.rows[0].ledger} already exists; use the normal migration command instead of baselining`,
+      `${ledgerState.public_ledger} exists in public; review it before baselining`,
     );
   }
+  if (ledgerState?.drizzle_schema && !ledgerState.configured_ledger) {
+    fail(
+      "the drizzle schema already exists without a canonical migration ledger",
+    );
+  }
+  const ledgerRows = ledgerState?.configured_ledger
+    ? Number(
+        (
+          await client.query<{ count: string }>(
+            "SELECT count(*)::text AS count FROM drizzle.__drizzle_migrations",
+          )
+        ).rows[0]?.count ?? 0,
+      )
+    : 0;
+  if (ledgerRows > 0) {
+    fail(
+      `${ledgerState?.configured_ledger} already contains migration history; use the normal migration command instead of baselining`,
+    );
+  }
+  if (ledgerState?.configured_ledger) {
+    await verifyEmptyLedgerStructure(client);
+  }
 
-  const initialSnapshot = JSON.parse(
-    await readFile(initialSnapshotPath, "utf8"),
+  const selectedSnapshot = JSON.parse(
+    await readFile(snapshotPath, "utf8"),
   ) as DrizzleSnapshot;
   let catalogQuery = Promise.resolve();
   const serializedCatalogClient = {
@@ -530,9 +1086,14 @@ const verifyLegacySchema = async (client: pg.PoolClient) => {
     },
   };
   const liveSchema = await inspectDatabaseSchema(serializedCatalogClient);
-  const schemaDrift = findSchemaDrift(initialSnapshot, liveSchema);
+  const schemaDrift = findSchemaDrift(selectedSnapshot, liveSchema);
   if (schemaDrift.length > 0) {
-    fail(formatSchemaDrift(schemaDrift, "lib/db/drizzle/meta/0000_snapshot.json"));
+    fail(formatSchemaDrift(schemaDrift, snapshotDisplayPath));
+  }
+  await verifySnapshotCatalogBoundaries(client, selectedSnapshot, through);
+
+  if (through !== defaultBaselineTag) {
+    return;
   }
 
   const columnsResult = await client.query<ColumnRow>(`
@@ -857,26 +1418,56 @@ const verifyLegacySchema = async (client: pg.PoolClient) => {
 };
 
 const main = async () => {
-  const { target } = parseArguments();
+  const { target, through } = parseArguments();
   const targetFromUrl = connectionIdentity(process.env.DATABASE_URL!);
   if (target !== targetFromUrl.display) {
     fail(
       `--target must exactly match the connected database identity "${targetFromUrl.display}"`,
     );
   }
-  const initialSql = await readFile(initialMigrationPath, "utf8");
   const journal = JSON.parse(await readFile(journalPath, "utf8")) as {
-    entries?: Array<{ tag?: string; when?: number }>;
+    entries?: MigrationEntry[];
   };
-  const initialEntry = journal.entries?.[0];
-  const initialMigrationTimestamp = initialEntry?.when;
-  if (
-    initialEntry?.tag !== "0000_initial_schema" ||
-    typeof initialMigrationTimestamp !== "number"
-  ) {
+  const entries = journal.entries ?? [];
+  if (entries[0]?.tag !== defaultBaselineTag) {
     fail("the checked-in migration journal does not start with 0000_initial_schema");
   }
-  const initialHash = createHash("sha256").update(initialSql).digest("hex");
+  const selectedIndex = entries.findIndex((entry) => entry.tag === through);
+  if (selectedIndex < 0) {
+    fail(`--through must name a checked-in migration; "${through}" was not found`);
+  }
+  const selectedEntry = entries[selectedIndex]!;
+  if (selectedEntry.idx !== selectedIndex) {
+    fail(`migration ${through} has an invalid journal index`);
+  }
+  const selectedSnapshotPath = resolve(
+    migrationDirectory,
+    "meta",
+    `${String(selectedEntry.idx).padStart(4, "0")}_snapshot.json`,
+  );
+  const selectedSnapshotDisplayPath = `lib/db/drizzle/meta/${String(
+    selectedEntry.idx,
+  ).padStart(4, "0")}_snapshot.json`;
+  const baselineEntries = await Promise.all(
+    entries.slice(0, selectedIndex + 1).map(async (entry, index) => {
+      if (
+        entry.idx !== index ||
+        !entry.tag ||
+        typeof entry.when !== "number"
+      ) {
+        fail(`migration journal entry ${index} is malformed`);
+      }
+      const sql = await readFile(
+        resolve(migrationDirectory, `${entry.tag}.sql`),
+        "utf8",
+      );
+      return {
+        tag: entry.tag,
+        hash: createHash("sha256").update(sql).digest("hex"),
+        createdAt: entry.when,
+      };
+    }),
+  );
   const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     max: 1,
@@ -889,7 +1480,9 @@ const main = async () => {
   const client = await pool.connect();
 
   try {
-    console.log(`Verifying legacy schema for explicitly selected target "${target}"...`);
+    console.log(
+      `Verifying legacy schema for explicitly selected target "${target}" through ${through}...`,
+    );
     const databaseIdentity = await client.query<{ database_name: string }>(
       "SELECT current_database() AS database_name",
     );
@@ -900,7 +1493,12 @@ const main = async () => {
     await client.query(
       "SELECT pg_advisory_xact_lock(hashtext('recovery-housing-db-baseline'))",
     );
-    await verifyLegacySchema(client);
+    await verifyLegacySchema(
+      client,
+      selectedSnapshotPath,
+      selectedSnapshotDisplayPath,
+      through,
+    );
     await client.query('CREATE SCHEMA IF NOT EXISTS "drizzle"');
     await client.query(`
       CREATE TABLE IF NOT EXISTS "drizzle"."__drizzle_migrations" (
@@ -909,6 +1507,7 @@ const main = async () => {
         created_at bigint
       )
     `);
+    await verifyEmptyLedgerStructure(client);
     const ledgerCheck = await client.query(
       'SELECT id FROM "drizzle"."__drizzle_migrations" LIMIT 1',
     );
@@ -917,13 +1516,15 @@ const main = async () => {
         "a migration ledger appeared while the baseline lock was held; no row was changed",
       );
     }
-    await client.query(
-      'INSERT INTO "drizzle"."__drizzle_migrations" ("hash", "created_at") VALUES ($1, $2)',
-      [initialHash, initialMigrationTimestamp],
-    );
+    for (const entry of baselineEntries) {
+      await client.query(
+        'INSERT INTO "drizzle"."__drizzle_migrations" ("hash", "created_at") VALUES ($1, $2)',
+        [entry.hash, entry.createdAt],
+      );
+    }
     await client.query("COMMIT");
     console.log(
-      `Baseline recorded for "${target}": 0000_initial_schema (${initialHash.slice(0, 12)}…).`,
+      `Baseline recorded for "${target}": ${baselineEntries.length} migration(s) through ${through}.`,
     );
     console.log(
       "Run the normal checked-in migration command next to apply any later migrations.",

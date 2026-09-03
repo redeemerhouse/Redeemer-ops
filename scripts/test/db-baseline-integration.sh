@@ -32,6 +32,15 @@ create_legacy_database() {
     -f "$ROOT/lib/db/drizzle/0000_initial_schema.sql" >/dev/null
 }
 
+checked_in_migration_count="$(
+  node -e 'console.log(require(process.argv[1]).entries.length)' \
+    "$ROOT/lib/db/drizzle/meta/_journal.json"
+)"
+mapfile -t migration_tags < <(
+  node -e 'for (const entry of require(process.argv[1]).entries) console.log(entry.tag)' \
+    "$ROOT/lib/db/drizzle/meta/_journal.json"
+)
+
 assert_baseline_refused() {
   local database="$1"
   local sql="$2"
@@ -77,12 +86,279 @@ create_legacy_database valid_legacy
     --target "$TARGET/valid_legacy" \
     --backup-confirmed \
     --recovery-confirmed
-  DATABASE_URL="$BASE_URL/valid_legacy" pnpm run db:release-check
+  DATABASE_URL="$BASE_URL/valid_legacy" DB_WRITES_FROZEN=true \
+    pnpm run db:release-check
 ) >"$TMP_ROOT/valid-legacy.log"
 test "$("$PG_BIN/psql" "$BASE_URL/valid_legacy" -Atc \
   "SELECT count(*) FROM residents")" = "1"
 test "$("$PG_BIN/psql" "$BASE_URL/valid_legacy" -Atc \
-  "SELECT count(*) FROM drizzle.__drizzle_migrations")" = "5"
+  "SELECT count(*) FROM drizzle.__drizzle_migrations")" = "$checked_in_migration_count"
+
+through_index=8
+through_tag="${migration_tags[$through_index]}"
+"$PG_BIN/createdb" -h 127.0.0.1 -p "$PORT" -U postgres adopted_prefix
+for ((index = 0; index <= through_index; index += 1)); do
+  "$PG_BIN/psql" \
+    "$BASE_URL/adopted_prefix" \
+    -v ON_ERROR_STOP=1 \
+    -f "$ROOT/lib/db/drizzle/${migration_tags[$index]}.sql" >/dev/null
+done
+"$PG_BIN/psql" "$BASE_URL/adopted_prefix" -v ON_ERROR_STOP=1 -c '
+  CREATE SCHEMA drizzle;
+  CREATE TABLE drizzle.__drizzle_migrations (
+    id SERIAL PRIMARY KEY,
+    hash text NOT NULL,
+    created_at bigint
+  )
+' >/dev/null
+(
+  cd "$ROOT"
+  DATABASE_URL="$BASE_URL/adopted_prefix" pnpm run db:baseline -- \
+    --target "$TARGET/adopted_prefix" \
+    --through "$through_tag" \
+    --backup-confirmed \
+    --recovery-confirmed
+  DATABASE_URL="$BASE_URL/adopted_prefix" DB_WRITES_FROZEN=true \
+    pnpm run db:release-check
+) >"$TMP_ROOT/adopted-prefix.log"
+test "$("$PG_BIN/psql" "$BASE_URL/adopted_prefix" -Atc \
+  "SELECT count(*) FROM drizzle.__drizzle_migrations")" = "$checked_in_migration_count"
+
+for database in \
+  later_extra_trigger \
+  malformed_empty_ledger \
+  ledger_sequence_grant \
+  ledger_sequence_owner
+do
+  "$PG_BIN/createdb" -h 127.0.0.1 -p "$PORT" -U postgres "$database"
+  for ((index = 0; index <= through_index; index += 1)); do
+    "$PG_BIN/psql" \
+      "$BASE_URL/$database" \
+      -v ON_ERROR_STOP=1 \
+      -f "$ROOT/lib/db/drizzle/${migration_tags[$index]}.sql" >/dev/null
+  done
+done
+"$PG_BIN/psql" "$BASE_URL/later_extra_trigger" -v ON_ERROR_STOP=1 -c '
+  CREATE SCHEMA drizzle;
+  CREATE TABLE drizzle.__drizzle_migrations (
+    id SERIAL PRIMARY KEY,
+    hash text NOT NULL,
+    created_at bigint
+  );
+  CREATE FUNCTION reject_later_write() RETURNS trigger
+  LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$;
+  CREATE TRIGGER residents_later_extra_trigger
+  BEFORE INSERT ON residents
+  FOR EACH ROW EXECUTE FUNCTION reject_later_write()
+' >/dev/null
+"$PG_BIN/psql" "$BASE_URL/malformed_empty_ledger" -v ON_ERROR_STOP=1 -c '
+  CREATE SCHEMA drizzle;
+  CREATE TABLE drizzle.__drizzle_migrations (
+    id integer,
+    hash text NOT NULL,
+    created_at bigint,
+    unexpected text
+  )
+' >/dev/null
+for database in ledger_sequence_grant ledger_sequence_owner; do
+  "$PG_BIN/psql" "$BASE_URL/$database" -v ON_ERROR_STOP=1 -c '
+    CREATE SCHEMA drizzle;
+    CREATE TABLE drizzle.__drizzle_migrations (
+      id SERIAL PRIMARY KEY,
+      hash text NOT NULL,
+      created_at bigint
+    )
+  ' >/dev/null
+done
+"$PG_BIN/psql" "$BASE_URL/ledger_sequence_grant" -v ON_ERROR_STOP=1 -c '
+  GRANT USAGE ON SEQUENCE drizzle.__drizzle_migrations_id_seq TO PUBLIC
+' >/dev/null
+"$PG_BIN/psql" "$BASE_URL/ledger_sequence_owner" -v ON_ERROR_STOP=1 -c '
+  CREATE ROLE baseline_ledger_sequence_owner;
+  ALTER SEQUENCE drizzle.__drizzle_migrations_id_seq OWNED BY NONE;
+  ALTER SEQUENCE drizzle.__drizzle_migrations_id_seq
+    OWNER TO baseline_ledger_sequence_owner
+' >/dev/null
+for database in \
+  later_extra_trigger \
+  malformed_empty_ledger \
+  ledger_sequence_grant \
+  ledger_sequence_owner
+do
+  set +e
+  (
+    cd "$ROOT"
+    DATABASE_URL="$BASE_URL/$database" pnpm run db:baseline -- \
+      --target "$TARGET/$database" \
+      --through "$through_tag" \
+      --backup-confirmed \
+      --recovery-confirmed
+  ) >"$TMP_ROOT/$database.log" 2>&1
+  status=$?
+  set -e
+  if [[ "$status" -eq 0 ]]; then
+    echo "Expected later-snapshot baseline refusal for $database" >&2
+    cat "$TMP_ROOT/$database.log" >&2
+    exit 1
+  fi
+  test "$("$PG_BIN/psql" "$BASE_URL/$database" -Atc \
+    "SELECT count(*) FROM drizzle.__drizzle_migrations")" = "0"
+done
+
+"$PG_BIN/createdb" -h 127.0.0.1 -p "$PORT" -U postgres hostile_drizzle_schema
+for ((index = 0; index <= through_index; index += 1)); do
+  "$PG_BIN/psql" \
+    "$BASE_URL/hostile_drizzle_schema" \
+    -v ON_ERROR_STOP=1 \
+    -f "$ROOT/lib/db/drizzle/${migration_tags[$index]}.sql" >/dev/null
+done
+"$PG_BIN/psql" "$BASE_URL/hostile_drizzle_schema" -v ON_ERROR_STOP=1 -c '
+  CREATE SCHEMA drizzle;
+  CREATE FUNCTION drizzle.unexpected_function() RETURNS integer
+  LANGUAGE sql AS $$ SELECT 1 $$
+' >/dev/null
+set +e
+(
+  cd "$ROOT"
+  DATABASE_URL="$BASE_URL/hostile_drizzle_schema" pnpm run db:baseline -- \
+    --target "$TARGET/hostile_drizzle_schema" \
+    --through "$through_tag" \
+    --backup-confirmed \
+    --recovery-confirmed
+) >"$TMP_ROOT/hostile_drizzle_schema.log" 2>&1
+status=$?
+set -e
+if [[ "$status" -eq 0 ]]; then
+  echo "Expected refusal for a pre-existing noncanonical drizzle schema" >&2
+  cat "$TMP_ROOT/hostile_drizzle_schema.log" >&2
+  exit 1
+fi
+test "$("$PG_BIN/psql" "$BASE_URL/hostile_drizzle_schema" -Atc \
+  "SELECT to_regclass('drizzle.__drizzle_migrations') IS NULL")" = "t"
+
+for database in later_not_valid_fk later_deferrable_fk; do
+  "$PG_BIN/createdb" -h 127.0.0.1 -p "$PORT" -U postgres "$database"
+  for ((index = 0; index <= through_index; index += 1)); do
+    "$PG_BIN/psql" \
+      "$BASE_URL/$database" \
+      -v ON_ERROR_STOP=1 \
+      -f "$ROOT/lib/db/drizzle/${migration_tags[$index]}.sql" >/dev/null
+  done
+done
+"$PG_BIN/psql" "$BASE_URL/later_not_valid_fk" -v ON_ERROR_STOP=1 -c '
+  ALTER TABLE payments
+    DROP CONSTRAINT payments_resident_id_residents_id_fk;
+  ALTER TABLE payments
+    ADD CONSTRAINT payments_resident_id_residents_id_fk
+    FOREIGN KEY (resident_id) REFERENCES residents(id) NOT VALID
+' >/dev/null
+"$PG_BIN/psql" "$BASE_URL/later_deferrable_fk" -v ON_ERROR_STOP=1 -c '
+  ALTER TABLE payments
+    DROP CONSTRAINT payments_resident_id_residents_id_fk;
+  ALTER TABLE payments
+    ADD CONSTRAINT payments_resident_id_residents_id_fk
+    FOREIGN KEY (resident_id) REFERENCES residents(id)
+    DEFERRABLE INITIALLY DEFERRED
+' >/dev/null
+for database in later_not_valid_fk later_deferrable_fk; do
+  set +e
+  (
+    cd "$ROOT"
+    DATABASE_URL="$BASE_URL/$database" pnpm run db:baseline -- \
+      --target "$TARGET/$database" \
+      --through "$through_tag" \
+      --backup-confirmed \
+      --recovery-confirmed
+  ) >"$TMP_ROOT/$database.log" 2>&1
+  status=$?
+  set -e
+  if [[ "$status" -eq 0 ]]; then
+    echo "Expected refusal for divergent foreign-key state in $database" >&2
+    cat "$TMP_ROOT/$database.log" >&2
+    exit 1
+  fi
+  test "$("$PG_BIN/psql" "$BASE_URL/$database" -Atc \
+    "SELECT to_regclass('drizzle.__drizzle_migrations') IS NULL")" = "t"
+done
+
+for database in later_not_valid_check later_deferrable_primary_key; do
+  "$PG_BIN/createdb" -h 127.0.0.1 -p "$PORT" -U postgres "$database"
+  for ((index = 0; index <= through_index; index += 1)); do
+    "$PG_BIN/psql" \
+      "$BASE_URL/$database" \
+      -v ON_ERROR_STOP=1 \
+      -f "$ROOT/lib/db/drizzle/${migration_tags[$index]}.sql" >/dev/null
+  done
+done
+"$PG_BIN/psql" "$BASE_URL/later_not_valid_check" -v ON_ERROR_STOP=1 -c "
+  ALTER TABLE residents DROP CONSTRAINT residents_status_allowed;
+  ALTER TABLE residents
+    ADD CONSTRAINT residents_status_allowed
+    CHECK (status IN ('active', 'pending', 'exited')) NOT VALID
+" >/dev/null
+"$PG_BIN/psql" "$BASE_URL/later_deferrable_primary_key" -v ON_ERROR_STOP=1 -c '
+  ALTER TABLE api_rate_limit_buckets
+    DROP CONSTRAINT api_rate_limit_buckets_pkey;
+  ALTER TABLE api_rate_limit_buckets
+    ADD CONSTRAINT api_rate_limit_buckets_pkey
+    PRIMARY KEY (key) DEFERRABLE INITIALLY DEFERRED
+' >/dev/null
+for database in later_not_valid_check later_deferrable_primary_key; do
+  set +e
+  (
+    cd "$ROOT"
+    DATABASE_URL="$BASE_URL/$database" pnpm run db:baseline -- \
+      --target "$TARGET/$database" \
+      --through "$through_tag" \
+      --backup-confirmed \
+      --recovery-confirmed
+  ) >"$TMP_ROOT/$database.log" 2>&1
+  status=$?
+  set -e
+  if [[ "$status" -eq 0 ]]; then
+    echo "Expected refusal for noncanonical constraint state in $database" >&2
+    cat "$TMP_ROOT/$database.log" >&2
+    exit 1
+  fi
+  test "$("$PG_BIN/psql" "$BASE_URL/$database" -Atc \
+    "SELECT to_regclass('drizzle.__drizzle_migrations') IS NULL")" = "t"
+done
+
+for database in public_schema_grant default_table_privileges; do
+  "$PG_BIN/createdb" -h 127.0.0.1 -p "$PORT" -U postgres "$database"
+  for ((index = 0; index <= through_index; index += 1)); do
+    "$PG_BIN/psql" \
+      "$BASE_URL/$database" \
+      -v ON_ERROR_STOP=1 \
+      -f "$ROOT/lib/db/drizzle/${migration_tags[$index]}.sql" >/dev/null
+  done
+done
+"$PG_BIN/psql" "$BASE_URL/public_schema_grant" -v ON_ERROR_STOP=1 -c '
+  GRANT CREATE ON SCHEMA public TO PUBLIC
+' >/dev/null
+"$PG_BIN/psql" "$BASE_URL/default_table_privileges" -v ON_ERROR_STOP=1 -c '
+  ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO PUBLIC
+' >/dev/null
+for database in public_schema_grant default_table_privileges; do
+  set +e
+  (
+    cd "$ROOT"
+    DATABASE_URL="$BASE_URL/$database" pnpm run db:baseline -- \
+      --target "$TARGET/$database" \
+      --through "$through_tag" \
+      --backup-confirmed \
+      --recovery-confirmed
+  ) >"$TMP_ROOT/$database.log" 2>&1
+  status=$?
+  set -e
+  if [[ "$status" -eq 0 ]]; then
+    echo "Expected refusal for noncanonical database privileges in $database" >&2
+    cat "$TMP_ROOT/$database.log" >&2
+    exit 1
+  fi
+  test "$("$PG_BIN/psql" "$BASE_URL/$database" -Atc \
+    "SELECT to_regclass('drizzle.__drizzle_migrations') IS NULL")" = "t"
+done
 
 assert_baseline_refused extra_index \
   "CREATE UNIQUE INDEX residents_email_extra_unique ON residents(email)"
@@ -118,6 +394,6 @@ assert_baseline_refused extra_schema \
   DATABASE_URL="$BASE_URL/fresh" pnpm run db:release-check
 ) >"$TMP_ROOT/fresh.log"
 test "$("$PG_BIN/psql" "$BASE_URL/fresh" -Atc \
-  "SELECT count(*) FROM drizzle.__drizzle_migrations")" = "5"
+  "SELECT count(*) FROM drizzle.__drizzle_migrations")" = "$checked_in_migration_count"
 
 echo "Database baseline PostgreSQL integration tests passed."

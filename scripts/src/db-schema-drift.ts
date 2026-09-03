@@ -90,6 +90,9 @@ type LiveForeignKey = {
   tableTo: string;
   onDelete: string;
   onUpdate: string;
+  validated: boolean;
+  deferrable: boolean;
+  initiallyDeferred: boolean;
 };
 
 type LiveTable = {
@@ -160,6 +163,9 @@ type ForeignKeyRow = {
   referenced_table: string;
   on_delete: string;
   on_update: string;
+  validated: boolean;
+  deferrable: boolean;
+  initially_deferred: boolean;
 };
 
 type UniqueConstraintRow = {
@@ -428,7 +434,10 @@ export const inspectDatabaseSchema = async (
           WHEN 'c' THEN 'cascade'
           WHEN 'n' THEN 'set null'
           WHEN 'd' THEN 'set default'
-        END AS on_update
+        END AS on_update,
+        constraint_row.convalidated AS validated,
+        constraint_row.condeferrable AS deferrable,
+        constraint_row.condeferred AS initially_deferred
       FROM pg_catalog.pg_constraint constraint_row
       JOIN pg_catalog.pg_class source ON source.oid = constraint_row.conrelid
       JOIN pg_catalog.pg_class target ON target.oid = constraint_row.confrelid
@@ -568,6 +577,9 @@ export const inspectDatabaseSchema = async (
       tableTo: tableKey(row.referenced_schema, row.referenced_table),
       onDelete: row.on_delete,
       onUpdate: row.on_update,
+      validated: row.validated,
+      deferrable: row.deferrable,
+      initiallyDeferred: row.initially_deferred,
     };
   }
   for (const row of uniqueConstraintResult.rows) {
@@ -780,6 +792,9 @@ export const findSchemaDrift = (
         columnsTo: expectedKey.columnsTo,
         onDelete: expectedKey.onDelete,
         onUpdate: expectedKey.onUpdate,
+        validated: true,
+        deferrable: false,
+        initiallyDeferred: false,
       };
       const actualShape = {
         tableTo: actualKey.tableTo,
@@ -787,6 +802,9 @@ export const findSchemaDrift = (
         columnsTo: actualKey.columnsTo,
         onDelete: actualKey.onDelete,
         onUpdate: actualKey.onUpdate,
+        validated: actualKey.validated,
+        deferrable: actualKey.deferrable,
+        initiallyDeferred: actualKey.initiallyDeferred,
       };
       if (JSON.stringify(expectedShape) !== JSON.stringify(actualShape)) {
         drift.push({
