@@ -7,8 +7,7 @@
  */
 import type { SessionUser } from './sessionUser';
 
-export interface Session {
-  authenticated: true;
+export interface SessionLogin {
   user: SessionUser;
   expiresAt: Date;
 }

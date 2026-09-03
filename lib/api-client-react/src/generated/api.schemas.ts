@@ -5,23 +5,88 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-export type SessionUserRole = typeof SessionUserRole[keyof typeof SessionUserRole];
+export type AccountRole = typeof AccountRole[keyof typeof AccountRole];
 
 
-export const SessionUserRole = {
+export const AccountRole = {
   owner_admin: 'owner_admin',
   program_director: 'program_director',
   house_manager: 'house_manager',
   resident: 'resident',
 } as const;
 
-export type SessionUser = {
+export type AccountStatus = typeof AccountStatus[keyof typeof AccountStatus];
+
+
+export const AccountStatus = {
+  pending: 'pending',
+  active: 'active',
+  suspended: 'suspended',
+  disabled: 'disabled',
+} as const;
+
+export interface AuthMessage {
+  /**
+     * @minLength 1
+     * @maxLength 500
+     */
+  message: string;
+}
+
+export const AuthSuccessValue = {
+  success: true,
+} as const;
+export type AuthSuccess = typeof AuthSuccessValue;
+
+export interface RegistrationInput {
+  /**
+     * @minLength 1
+     * @maxLength 100
+     */
+  firstName: string;
+  /**
+     * @minLength 1
+     * @maxLength 100
+     */
+  lastName: string;
+  /** @maxLength 254 */
+  email: string;
+  /**
+     * @minLength 12
+     * @maxLength 200
+     */
+  password: string;
+  /**
+     * @minLength 12
+     * @maxLength 200
+     */
+  passwordConfirmation: string;
+}
+
+export interface LoginInput {
+  /** @maxLength 254 */
+  email: string;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  password: string;
+}
+
+export interface SessionUser {
   /**
      * @minLength 1
      * @maxLength 256
      */
   id: string;
-  role: SessionUserRole;
+  /** @maxLength 254 */
+  email?: string;
+  /** @maxLength 100 */
+  firstName?: string;
+  /** @maxLength 100 */
+  lastName?: string;
+  role: AccountRole | null;
+  accountStatus: AccountStatus;
   /**
      * @minLength 1
      * @maxLength 256
@@ -31,7 +96,81 @@ export type SessionUser = {
   houseNames: string[];
   /** @minimum 1 */
   residentId?: number;
-};
+}
+
+export interface SessionLogin {
+  user: SessionUser;
+  expiresAt: string;
+}
+
+export interface HouseOption {
+  /** @minimum 1 */
+  id: number;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  name: string;
+}
+
+export interface AdminAccount {
+  /** @minimum 1 */
+  id: number;
+  /** @maxLength 100 */
+  firstName: string;
+  /** @maxLength 100 */
+  lastName: string;
+  /** @maxLength 254 */
+  email: string;
+  role: AccountRole | null;
+  status: AccountStatus;
+  /**
+     * @minimum 1
+     * @nullable
+     */
+  residentId?: number | null;
+  emailVerified: boolean;
+  createdAt: string;
+  /** @nullable */
+  lastLoginAt?: string | null;
+  houses: HouseOption[];
+}
+
+export interface ResidentOption {
+  /** @minimum 1 */
+  id: number;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  name: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  home: string;
+}
+
+export interface AccountAdministration {
+  accounts: AdminAccount[];
+  houses: HouseOption[];
+  residents: ResidentOption[];
+}
+
+export interface AccountAccessUpdate {
+  role?: AccountRole | null;
+  status?: AccountStatus;
+  /**
+     * @maxItems 100
+     * @items.minimum 1
+     */
+  houseIds?: number[];
+  /**
+     * @minimum 1
+     * @nullable
+     */
+  residentId?: number | null;
+}
 
 export interface Session {
   authenticated: true;
@@ -818,6 +957,10 @@ export type PageLimitParameter = number;
  * Number of stable, ordered records to skip before returning this page.
  */
 export type PageOffsetParameter = number;
+
+export type UpdateAdminAccount200 = {
+  account: SessionUser;
+};
 
 export type GetDashboardParams = {
 /**

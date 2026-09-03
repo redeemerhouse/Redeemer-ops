@@ -10,7 +10,7 @@ const objects = new ObjectStorageService();
 router.use(authenticate);
 router.post("/storage/uploads/request-url", async (req, res) => {
   const principal = getPrincipal(res);
-  if (!["owner_admin", "program_director", "house_manager"].includes(principal.role)) { problem(req, res, 403); return; }
+  if (!principal.role || !["owner_admin", "program_director", "house_manager"].includes(principal.role)) { problem(req, res, 403); return; }
   const { name, size, contentType } = req.body ?? {};
   if (typeof name !== "string" || !Number.isInteger(size) || size <= 0 || typeof contentType !== "string") { problem(req, res, 400); return; }
   ensureRequestActive(req);
@@ -18,7 +18,7 @@ router.post("/storage/uploads/request-url", async (req, res) => {
 });
 router.get("/storage/objects/*path", async (req, res) => {
   const principal = getPrincipal(res);
-  if (!["owner_admin", "program_director", "house_manager", "resident"].includes(principal.role)) { problem(req, res, 403); return; }
+  if (!principal.role || !["owner_admin", "program_director", "house_manager", "resident"].includes(principal.role)) { problem(req, res, 403); return; }
   res.setHeader("Cache-Control", "no-store, private");
   try {
     const raw = req.params.path;

@@ -1,4 +1,4 @@
-import { Bell, CreditCard, LayoutDashboard, LogOut, Menu, UsersRound, X, ClipboardList, GitBranch } from 'lucide-react';
+import { Bell, CreditCard, LayoutDashboard, LogOut, Menu, UsersRound, X, ClipboardList, GitBranch, ShieldCheck } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { Link, useLocation } from 'wouter';
 import { isAdministratorRole, useAuth } from '@/lib/auth';
@@ -16,11 +16,15 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const navItems = isAdministratorRole(user?.role ?? 'resident')
-    ? [...baseNavItems, { href: '/assessment-library', label: 'Assessment library', icon: GitBranch }]
+    ? [
+        ...baseNavItems,
+        { href: '/assessment-library', label: 'Assessment library', icon: GitBranch },
+        { href: '/account-management', label: 'Account management', icon: ShieldCheck }
+      ]
     : baseNavItems;
-  const displayName = user?.email || String(user?.id || 'Verified user');
+  const displayName = [user?.firstName, user?.lastName].filter(Boolean).join(' ') || user?.email || String(user?.id || 'Verified user');
   const initials = displayName.slice(0, 2).toUpperCase();
-  const roleLabel = user?.role.replaceAll('_', ' ') || 'verified account';
+  const roleLabel = user?.role?.replaceAll('_', ' ') || 'verified account';
   return (
     <div className="app-shell flex min-h-[100dvh]">
       <aside className={`sidebar fixed inset-y-0 left-0 z-40 flex w-[250px] flex-col border-r border-sidebar-border px-4 py-5 transition-transform duration-300 lg:static lg:translate-x-0 ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}`}>

@@ -12,6 +12,8 @@ security:
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Public account lifecycle and administrator-managed access
   - name: dashboard
     description: Housing operations overview
   - name: residents
@@ -65,6 +67,59 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ReadinessStatus"
+  /auth/register:
+    post:
+      operationId: registerAccount
+      tags: [auth]
+      summary: Create a pending account
+      description: Public registration creates an email-verification-required pending account. Role, status, organization, resident, and house scope are server-controlled.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegistrationInput"
+      responses:
+        "202":
+          description: Pending account created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthMessage"
+        "400": { description: Registration fields are invalid }
+        "409": { description: Email is already registered }
+        "429": { description: Registration rate limit exceeded }
+  /auth/login:
+    post:
+      operationId: loginAccount
+      tags: [auth]
+      summary: Establish a revocable browser session
+      description: Verified pending accounts receive only minimal pending-session state. Suspended and disabled accounts are denied.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginInput"
+      responses:
+        "200":
+          description: Browser session established
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionLogin"
+        "401": { description: Credentials or verification state are invalid }
+        "403": { description: Account is suspended or disabled }
+        "429": { description: Login rate limit exceeded }
+  /auth/logout:
+    post:
+      operationId: logoutAccount
+      tags: [auth]
+      summary: Revoke the current browser session
+      responses:
+        "204": { description: Session revoked }
   /auth/session:
     get:
       operationId: getSession
@@ -82,6 +137,64 @@ paths:
                 $ref: "#/components/schemas/Session"
         "401":
           description: Session is missing, expired, or revoked
+  /auth/admin/accounts:
+    get:
+      operationId: listAdminAccounts
+      tags: [auth]
+      summary: List accounts and assignment options
+      description: Owner administrators and program directors can review account identity and access state.
+      responses:
+        "200":
+          description: Account administration workspace data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountAdministration"
+        "403": { description: Administrator access required }
+  /auth/admin/accounts/{id}:
+    patch:
+      operationId: updateAdminAccount
+      tags: [auth]
+      summary: Change account role, status, and scope
+      description: Validates server-managed access, revokes stale sessions, and writes before/after audit evidence.
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccountAccessUpdate"
+      responses:
+        "200":
+          description: Account access updated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [account]
+                properties:
+                  account:
+                    $ref: "#/components/schemas/SessionUser"
+        "400": { description: Invalid or incomplete access assignment }
+        "403": { description: Administrator access required or ownership safeguard }
+        "404": { description: Account not found }
+  /auth/admin/accounts/{id}/sessions/revoke:
+    post:
+      operationId: revokeAdminAccountSessions
+      tags: [auth]
+      summary: Revoke every active session for an account
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Sessions revoked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSuccess"
+        "403": { description: Administrator access required or ownership safeguard }
+        "404": { description: Account not found }
   /dashboard:
     get:
       operationId: getDashboard
@@ -824,31 +937,159 @@ components:
         maximum: 10000
         default: 0
   schemas:
+    AccountRole:
+      type: string
+      enum: [owner_admin, program_director, house_manager, resident]
+    AccountStatus:
+      type: string
+      enum: [pending, active, suspended, disabled]
+    AuthMessage:
+      type: object
+      additionalProperties: false
+      required: [message]
+      properties:
+        message: { type: string, minLength: 1, maxLength: 500 }
+    AuthSuccess:
+      type: object
+      additionalProperties: false
+      required: [success]
+      properties:
+        success: { type: boolean, const: true }
+    RegistrationInput:
+      type: object
+      additionalProperties: false
+      required: [firstName, lastName, email, password, passwordConfirmation]
+      properties:
+        firstName: { type: string, minLength: 1, maxLength: 100 }
+        lastName: { type: string, minLength: 1, maxLength: 100 }
+        email: { type: string, format: email, maxLength: 254 }
+        password: { type: string, minLength: 12, maxLength: 200 }
+        passwordConfirmation: { type: string, minLength: 12, maxLength: 200 }
+    LoginInput:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email: { type: string, format: email, maxLength: 254 }
+        password: { type: string, minLength: 1, maxLength: 200 }
+    SessionUser:
+      type: object
+      additionalProperties: false
+      required: [id, role, accountStatus, organizationId, houseNames]
+      properties:
+        id: { type: string, minLength: 1, maxLength: 256 }
+        email: { type: string, format: email, maxLength: 254 }
+        firstName: { type: string, maxLength: 100 }
+        lastName: { type: string, maxLength: 100 }
+        role:
+          anyOf:
+            - $ref: "#/components/schemas/AccountRole"
+            - type: "null"
+        accountStatus:
+          $ref: "#/components/schemas/AccountStatus"
+        organizationId: { type: string, minLength: 1, maxLength: 256 }
+        houseNames:
+          type: array
+          items: { type: string, maxLength: 256 }
+        residentId:
+          type: number
+          multipleOf: 1
+          minimum: 1
+    SessionLogin:
+      type: object
+      additionalProperties: false
+      required: [user, expiresAt]
+      properties:
+        user:
+          $ref: "#/components/schemas/SessionUser"
+        expiresAt:
+          type: string
+          format: date-time
+    AdminAccount:
+      type: object
+      additionalProperties: false
+      required: [id, firstName, lastName, email, role, status, emailVerified, createdAt, houses]
+      properties:
+        id: { type: integer, minimum: 1 }
+        firstName: { type: string, maxLength: 100 }
+        lastName: { type: string, maxLength: 100 }
+        email: { type: string, format: email, maxLength: 254 }
+        role:
+          anyOf:
+            - $ref: "#/components/schemas/AccountRole"
+            - type: "null"
+        status:
+          $ref: "#/components/schemas/AccountStatus"
+        residentId: { type: [integer, "null"], minimum: 1 }
+        emailVerified: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        lastLoginAt: { type: [string, "null"], format: date-time }
+        houses:
+          type: array
+          items:
+            $ref: "#/components/schemas/HouseOption"
+    HouseOption:
+      type: object
+      additionalProperties: false
+      required: [id, name]
+      properties:
+        id: { type: integer, minimum: 1 }
+        name: { type: string, minLength: 1, maxLength: 256 }
+    ResidentOption:
+      type: object
+      additionalProperties: false
+      required: [id, name, home]
+      properties:
+        id: { type: integer, minimum: 1 }
+        name: { type: string, minLength: 1, maxLength: 256 }
+        home: { type: string, minLength: 1, maxLength: 256 }
+    AccountAdministration:
+      type: object
+      additionalProperties: false
+      required: [accounts, houses, residents]
+      properties:
+        accounts:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminAccount"
+        houses:
+          type: array
+          items:
+            $ref: "#/components/schemas/HouseOption"
+        residents:
+          type: array
+          items:
+            $ref: "#/components/schemas/ResidentOption"
+    AccountAccessUpdate:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        role:
+          anyOf:
+            - $ref: "#/components/schemas/AccountRole"
+            - type: "null"
+        status:
+          $ref: "#/components/schemas/AccountStatus"
+        houseIds:
+          type: array
+          uniqueItems: true
+          maxItems: 100
+          items: { type: integer, minimum: 1 }
+        residentId: { type: [integer, "null"], minimum: 1 }
     Session:
       type: object
+      additionalProperties: false
       required: [authenticated, user, expiresAt]
       properties:
         authenticated:
           type: boolean
           const: true
         user:
-          type: object
-          required: [id, role, organizationId, houseNames]
-          properties:
-            id: { type: string, minLength: 1, maxLength: 256 }
-            role:
-              type: string
-              enum: [owner_admin, program_director, house_manager, resident]
-            organizationId: { type: string, minLength: 1, maxLength: 256 }
-            houseNames:
-              type: array
-              items: { type: string, maxLength: 256 }
-            residentId:
-              type: number
-              multipleOf: 1
-              minimum: 1
+          $ref: "#/components/schemas/SessionUser"
         expiresAt:
           type: string
+          format: date-time
     HealthStatus:
       type: object
       properties:

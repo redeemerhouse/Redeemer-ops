@@ -1,9 +1,16 @@
 import { useQueryClient } from '@tanstack/react-query';
 import {
   ApiError,
-  customFetch,
+  getSession,
+  loginAccount,
+  logoutAccount,
+  registerAccount,
   setAuthTokenGetter,
   setUnauthorizedHandler,
+  type AccountRole,
+  type RegistrationInput,
+  type Session,
+  type SessionUser,
 } from '@workspace/api-client-react';
 import {
   createContext,
@@ -16,22 +23,8 @@ import {
   type ReactNode,
 } from 'react';
 
-export type SessionRole = 'owner_admin' | 'program_director' | 'house_manager' | 'resident';
-
-export type SessionUser = {
-  id: string;
-  email?: string;
-  role: SessionRole;
-  organizationId: string;
-  houseNames: string[];
-  residentId?: number;
-};
-
-type SessionResponse = {
-  authenticated: true;
-  user: SessionUser;
-  expiresAt: string;
-};
+export type SessionRole = AccountRole;
+export type { SessionUser };
 
 type AuthState = {
   status: 'checking' | 'authenticated' | 'unauthenticated' | 'error';
@@ -42,7 +35,7 @@ type AuthState = {
 type AuthContextValue = AuthState & {
   login: (email: string, password: string) => Promise<string>;
   logout: () => Promise<void>;
-  register: (email: string, password: string) => Promise<string>;
+  register: (input: RegistrationInput) => Promise<string>;
   requestPasswordReset: (email: string) => Promise<string>;
   verifyEmail: (token: string) => Promise<string>;
   resetPassword: (token: string, password: string) => Promise<string>;
@@ -69,7 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [queryClient]);
   const verifySessionRef = useRef<(signal?: AbortSignal) => Promise<void>>(async () => undefined);
 
-  const applySession = useCallback((session: SessionResponse) => {
+  const applySession = useCallback((session: Session) => {
     const expiresInMs = Date.parse(session.expiresAt) - Date.now();
     if (!Number.isFinite(expiresInMs) || expiresInMs <= 0) {
       clearSession();
@@ -87,9 +80,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const verifySession = useCallback(async (signal?: AbortSignal) => {
     try {
-      const session = await customFetch<SessionResponse>('/api/auth/session', {
-        credentials: 'include',
-        responseType: 'json',
+      const session = await getSession({
         signal,
       });
       if (!signal?.aborted) applySession(session);
@@ -137,21 +128,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
-    const { response, data } = await authRequest('/login', { email, password });
-    if (!response.ok || !data.user || !data.expiresAt) throw new Error('Unable to sign in with those credentials.');
-    queryClient.clear();
-    applySession({ authenticated: true, user: data.user, expiresAt: data.expiresAt });
-    return 'Your secure workspace is ready.';
-  }, [applySession, authRequest, queryClient]);
+    try {
+      const session = await loginAccount({ email, password });
+      queryClient.clear();
+      applySession({ authenticated: true, ...session });
+      return session.user.accountStatus === 'pending'
+        ? 'Your email is verified. Your account is awaiting administrator access.'
+        : 'Your secure workspace is ready.';
+    } catch (error) {
+      throw new Error(error instanceof ApiError ? error.message : 'Unable to sign in with those credentials.');
+    }
+  }, [applySession, queryClient]);
   const logout = useCallback(async () => {
-    await authRequest('/logout', {});
+    await logoutAccount();
     clearSession();
-  }, [authRequest, clearSession]);
-  const register = useCallback(async (email: string, password: string) => {
-    const { response, data } = await authRequest('/register', { email, password });
-    if (!response.ok) throw new Error(data.error || 'The account request could not be submitted.');
-    return data.message || 'If the account can be created, verification and approval instructions will be sent.';
-  }, [authRequest]);
+  }, [clearSession]);
+  const register = useCallback(async (input: RegistrationInput) => {
+    try {
+      const data = await registerAccount(input);
+      return data.message;
+    } catch (error) {
+      throw new Error(error instanceof ApiError ? error.message : 'The account could not be created.');
+    }
+  }, []);
   const requestPasswordReset = useCallback(async (email: string) => {
     const { response, data } = await authRequest('/password-reset/request', { email });
     if (!response.ok) throw new Error('The recovery request could not be submitted.');
@@ -235,6 +234,28 @@ export function SessionError({ onRetry }: { onRetry: () => void }) {
         <h1 className="display-serif mt-2 text-3xl">We couldn’t verify access</h1>
         <p className="mt-3 text-sm leading-relaxed text-[hsl(var(--muted-foreground))]">No operational records were loaded. Try again, or return to secure sign-in.</p>
         <button onClick={onRetry} data-testid="button-retry-session" className="mt-6 rounded-xl bg-[hsl(var(--primary))] px-5 py-3 text-xs font-extrabold text-[hsl(var(--primary-foreground))]">Try again</button>
+      </div>
+    </main>
+  );
+}
+
+export function PendingSessionScreen({ user, logout }: { user: SessionUser; logout: () => Promise<void> }) {
+  return (
+    <main className="flex min-h-[100dvh] items-center justify-center bg-[hsl(var(--background))] p-6">
+      <div className="paper-card w-full max-w-md p-8 text-center">
+        <img src="/redeemer-house-logo.jpeg" alt="Redeemer House" className="mx-auto h-16 w-16 rounded-2xl bg-white object-contain p-1" />
+        <div className="section-kicker mt-6">Redeemer House</div>
+        <h1 className="display-serif mt-2 text-4xl">Awaiting Approval</h1>
+        <p className="mt-4 text-sm leading-relaxed text-[hsl(var(--muted-foreground))]">
+          Your email <strong>{user.email}</strong> is verified. An administrator must approve your account and assign your role before you can access the workspace.
+        </p>
+        <button
+          onClick={() => void logout()}
+          data-testid="button-logout-pending"
+          className="mt-7 inline-flex items-center justify-center rounded-xl bg-[hsl(var(--primary))] px-5 py-3 text-xs font-extrabold text-[hsl(var(--primary-foreground))]"
+        >
+          Sign out
+        </button>
       </div>
     </main>
   );

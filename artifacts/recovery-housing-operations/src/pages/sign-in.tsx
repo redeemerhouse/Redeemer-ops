@@ -21,7 +21,7 @@ type ViewState = 'signin' | 'register' | 'forgot' | 'verify' | 'reset';
 
 export interface SignInProps {
   login: (email: string, password: string) => Promise<string>;
-  register: (email: string, password: string) => Promise<string>;
+  register: (input: z.infer<typeof registerSchema>) => Promise<string>;
   requestPasswordReset: (email: string) => Promise<string>;
   verifyEmail: (token: string) => Promise<string>;
   resetPassword: (token: string, password: string) => Promise<string>;
@@ -32,9 +32,17 @@ const signinSchema = z.object({
   password: z.string().min(1, 'Password is required'),
 });
 
+const passwordSchema = z.string().min(12, 'Password must be at least 12 characters').regex(/[a-z]/, 'Add a lowercase letter').regex(/[A-Z]/, 'Add an uppercase letter').regex(/\d/, 'Add a number');
+
 const registerSchema = z.object({
+  firstName: z.string().trim().min(1, 'First name is required').max(100),
+  lastName: z.string().trim().min(1, 'Last name is required').max(100),
   email: z.string().email('Please enter a valid email address'),
-  password: z.string().min(12, 'Password must be at least 12 characters').regex(/[a-z]/, 'Add a lowercase letter').regex(/[A-Z]/, 'Add an uppercase letter').regex(/\d/, 'Add a number'),
+  password: passwordSchema,
+  passwordConfirmation: z.string().min(1, 'Confirm your password'),
+}).refine((values) => values.password === values.passwordConfirmation, {
+  path: ['passwordConfirmation'],
+  message: 'Passwords must match',
 });
 
 const forgotSchema = z.object({
@@ -46,7 +54,7 @@ const codeSchema = z.object({
 });
 
 const resetSchema = codeSchema.extend({
-  password: registerSchema.shape.password,
+  password: passwordSchema,
 });
 
 export default function SignIn({
@@ -67,7 +75,7 @@ export default function SignIn({
 
   const registerForm = useForm<z.infer<typeof registerSchema>>({
     resolver: zodResolver(registerSchema),
-    defaultValues: { email: '', password: '' },
+    defaultValues: { firstName: '', lastName: '', email: '', password: '', passwordConfirmation: '' },
   });
 
   const forgotForm = useForm<z.infer<typeof forgotSchema>>({
@@ -96,13 +104,13 @@ export default function SignIn({
   const onRegister = async (values: z.infer<typeof registerSchema>) => {
     setIsSubmitting(true);
     try {
-      const msg = await register(values.email, values.password);
-      toast({ title: 'Account Request Submitted', description: msg });
+      const msg = await register(values);
+      toast({ title: 'Account created', description: msg });
       setView('verify');
       registerForm.reset();
     } catch (err: any) {
       toast({
-        title: 'Request failed',
+        title: 'Account creation failed',
         description: err.message || 'An error occurred.',
         variant: 'destructive',
       });
@@ -303,7 +311,7 @@ export default function SignIn({
                         className="font-medium text-primary hover:underline inline-flex items-center gap-1"
                         data-testid="link-register"
                       >
-                        <UserPlus className="w-3 h-3" /> Request an account
+                        <UserPlus className="w-3 h-3" /> Create Account
                       </button>
                     </p>
                     <button type="button" onClick={() => setView('verify')} className="mt-3 text-xs font-medium text-muted-foreground hover:text-primary" data-testid="link-enter-verification-code">Already have a verification code?</button>
@@ -321,20 +329,44 @@ export default function SignIn({
                   data-testid="view-register"
                 >
                   <div className="mb-6">
-                    <h2 className="text-2xl font-semibold text-foreground display-serif">Request account</h2>
+                    <h2 className="text-2xl font-semibold text-foreground display-serif">Create Account</h2>
                     <p className="text-sm text-muted-foreground mt-1">
-                      Submit a request for staff or operations access.
+                      Create your secure account. An administrator will assign access after email verification.
                     </p>
                   </div>
 
                   <Form {...registerForm}>
                     <form onSubmit={registerForm.handleSubmit(onRegister)} className="space-y-4">
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <FormField
+                          control={registerForm.control}
+                          name="firstName"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>First name</FormLabel>
+                              <FormControl><Input autoComplete="given-name" data-testid="input-register-first-name" {...field} /></FormControl>
+                              <FormMessage data-testid="error-register-first-name" />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={registerForm.control}
+                          name="lastName"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Last name</FormLabel>
+                              <FormControl><Input autoComplete="family-name" data-testid="input-register-last-name" {...field} /></FormControl>
+                              <FormMessage data-testid="error-register-last-name" />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
                       <FormField
                         control={registerForm.control}
                         name="email"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Work Email</FormLabel>
+                            <FormLabel>Email</FormLabel>
                             <FormControl>
                               <Input 
                                 placeholder="name@redeemerhouse.org" 
@@ -367,6 +399,24 @@ export default function SignIn({
                           </FormItem>
                         )}
                       />
+                      <FormField
+                        control={registerForm.control}
+                        name="passwordConfirmation"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Confirm Password</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="password"
+                                autoComplete="new-password"
+                                data-testid="input-register-password-confirmation"
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage data-testid="error-register-password-confirmation" />
+                          </FormItem>
+                        )}
+                      />
                       <Button 
                         type="submit" 
                         className="w-full mt-2 h-11 text-base font-medium" 
@@ -374,9 +424,9 @@ export default function SignIn({
                         data-testid="button-submit-register"
                       >
                         {isSubmitting ? (
-                          <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Submitting Request...</>
+                          <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Creating account...</>
                         ) : (
-                          'Submit Request'
+                          'Create Account'
                         )}
                       </Button>
                     </form>

@@ -19,6 +19,7 @@ import {
   type AuthorizationContext,
   type Permission,
   type Role,
+  type AccountStatus,
 } from "../lib/access-policy";
 import { unavailable } from "../lib/serviceFailures";
 import { problem } from "./errors";
@@ -32,12 +33,17 @@ export {
   type AuthorizationContext,
   type Permission,
   type Role,
+  type AccountStatus,
 } from "../lib/access-policy";
 
 export const SESSION_COOKIE_NAME = "__Host-recovery-session";
 export type Principal = {
   sub: string;
-  role: Role;
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+  role: Role | null;
+  accountStatus: AccountStatus;
   organizationId: string;
   houseNames: string[];
   active: true;
@@ -75,13 +81,16 @@ function validPrincipal(payload: unknown, now = Math.floor(Date.now() / 1000)): 
   if (!isRecord(payload)) return false;
   if (payload.iss !== TOKEN_ISSUER) return false;
   if (typeof payload.sub !== "string" || payload.sub.length < 1 || payload.sub.length > 256) return false;
-  if (!roles.includes(payload.role as Role)) return false;
+  if (payload.role !== null && !roles.includes(payload.role as Role)) return false;
+  if (!["pending", "active", "suspended", "disabled"].includes(payload.accountStatus as string)) return false;
   if (payload.organizationId !== ORGANIZATION_ID) return false;
   if (payload.active !== true) return false;
   if (!Array.isArray(payload.houseNames) || payload.houseNames.some((name) => typeof name !== "string" || name.length > 256)) return false;
   if (!Number.isInteger(payload.iat) || !Number.isInteger(payload.exp)) return false;
   if ((payload.exp as number) <= now || (payload.iat as number) > now + 60) return false;
   if ((payload.exp as number) - (payload.iat as number) > 30 * 24 * 60 * 60) return false;
+  if (payload.accountStatus === "pending" && (payload.role !== null || payload.houseNames.length > 0 || payload.residentId !== undefined)) return false;
+  if (payload.accountStatus === "active" && payload.role === null) return false;
   if (payload.role === "house_manager" && payload.houseNames.length === 0) return false;
   if (payload.role === "resident" && (!Number.isInteger(payload.residentId) || (payload.residentId as number) <= 0)) return false;
   if (payload.sid !== undefined && (typeof payload.sid !== "string" || !/^[a-f0-9-]{20,80}$/.test(payload.sid))) return false;
@@ -95,7 +104,8 @@ function validPrincipal(payload: unknown, now = Math.floor(Date.now() / 1000)): 
  */
 export function createAccessToken(input: {
   sub: string;
-  role: Role;
+  role: Role | null;
+  accountStatus?: AccountStatus;
   organizationId?: string;
   houseNames?: string[];
   residentId?: number;
@@ -109,6 +119,7 @@ export function createAccessToken(input: {
     iss: TOKEN_ISSUER,
     sub: input.sub,
     role: input.role,
+    accountStatus: input.accountStatus ?? "active",
     organizationId: input.organizationId ?? ORGANIZATION_ID,
     houseNames: input.houseNames ?? [],
     active: true,
@@ -197,7 +208,7 @@ async function principalFromSession(token: string): Promise<Principal | null> {
       gt(authSessionsTable.absoluteExpiresAt, now),
     ))
     .limit(1);
-  if (!row || row.account.deactivatedAt || !row.account.approvedAt || !row.account.emailVerifiedAt) return null;
+  if (!row || row.account.deactivatedAt || !row.account.emailVerifiedAt) return null;
 
   const assignments = await db
     .select({ houseName: housesTable.name })
@@ -205,10 +216,20 @@ async function principalFromSession(token: string): Promise<Principal | null> {
     .innerJoin(housesTable, eq(authAccountHousesTable.houseId, housesTable.id))
     .where(eq(authAccountHousesTable.accountId, row.account.id));
   const houseNames = assignments.map(({ houseName }) => houseName);
-  const role = row.account.role as Role;
-  if (!roles.includes(role) || row.account.organizationId !== ORGANIZATION_ID) return null;
-  if (role === "house_manager" && houseNames.length === 0) return null;
-  if (role === "resident" && (!row.account.residentId || houseNames.length === 0)) return null;
+  const role = row.account.role as Role | null;
+  const accountStatus = row.account.accountStatus as AccountStatus;
+  if (role !== null && !roles.includes(role) || row.account.organizationId !== ORGANIZATION_ID) return null;
+  if (!["pending", "active", "suspended", "disabled"].includes(accountStatus)) return null;
+  if (accountStatus !== "pending" && !row.account.approvedAt) return null;
+  if (accountStatus === "pending") {
+    if (role !== null || row.account.residentId !== null || houseNames.length > 0) return null;
+  } else if (accountStatus !== "active") {
+    return null;
+  } else {
+    if (role === null) return null;
+    if (role === "house_manager" && houseNames.length === 0) return null;
+    if (role === "resident" && (!row.account.residentId || houseNames.length === 0)) return null;
+  }
 
   const idleExpiry = new Date(Math.min(
     Date.now() + 12 * 60 * 60 * 1000,
@@ -219,7 +240,11 @@ async function principalFromSession(token: string): Promise<Principal | null> {
     .where(eq(authSessionsTable.id, row.session.id));
   return {
     sub: String(row.account.id),
+    email: row.account.email,
+    firstName: row.account.firstName,
+    lastName: row.account.lastName,
     role,
+    accountStatus,
     organizationId: row.account.organizationId,
     houseNames,
     active: true,
@@ -284,6 +309,19 @@ export const authenticate: RequestHandler = async (req, res, next) => {
   res.locals.principal = principal;
   res.locals.actorId = principal.sub;
   next();
+};
+
+/** Authentication for the minimal pending session is intentionally separate
+ * from authorization to operational data. */
+export const requireActiveAccount: RequestHandler = (req, res, next) => {
+  authenticate(req, res, () => {
+    const principal = getPrincipal(res);
+    if (principal.accountStatus !== "active" || principal.role === null) {
+      problem(req, res, 403);
+      return;
+    }
+    next();
+  });
 };
 
 export const csrfProtection: RequestHandler = (req, res, next) => {

@@ -94,6 +94,19 @@ status="$(
 )"
 [[ "$status" == "201" ]] || fail "Synthetic browser administrator bootstrap failed."
 
+for suffix in desktop-chromium mobile-chromium; do
+  pending_email="browser-pending-${suffix}@redeemer.invalid"
+  status="$(
+    curl -sS -o "$TEMP_DIR/register-${suffix}.json" -w '%{http_code}' \
+      -H 'content-type: application/json' \
+      -d "{\"firstName\":\"Browser\",\"lastName\":\"Pending\",\"email\":\"${pending_email}\",\"password\":\"CriticalPassword123\",\"passwordConfirmation\":\"CriticalPassword123\"}" \
+      "$API_BASE_URL/auth/register"
+  )"
+  [[ "$status" == "202" ]] || fail "Synthetic pending browser account registration failed."
+  psql "$TEST_DATABASE_URL" -qAtc \
+    "update auth_accounts set email_verified_at=now() where email='${pending_email}' and account_status='pending';" >/dev/null
+done
+
 SESSION_SECRET="critical-workflow-test-secret-0000000000000000" \
   CRITICAL_API_BASE_URL="$API_BASE_URL" \
   node --test "$ROOT_DIR/artifacts/api-server/test/critical-workflows.test.mjs"
@@ -109,6 +122,7 @@ curl -fsS "$WEB_BASE_URL/" >/dev/null || fail "Web app did not become ready."
 
 E2E_BASE_URL="$WEB_BASE_URL" \
   pnpm --filter @workspace/recovery-housing-operations exec playwright test \
-    --config test/playwright.config.ts
+    --config test/playwright.config.ts \
+    ${CRITICAL_PLAYWRIGHT_GREP:+--grep "$CRITICAL_PLAYWRIGHT_GREP"}
 
 echo "CRITICAL WORKFLOW HARNESS PASS"

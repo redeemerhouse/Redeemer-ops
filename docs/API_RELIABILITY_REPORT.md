@@ -32,17 +32,21 @@ Legend: **P** public, **A** authenticated, **Admin** administrator only, **HM** 
 | GET `/readyz` | P | Generated response | 200 or 503 JSON; no-store/retry hint | Coalesced cached DB/rate-store probes; no write | reliability + resilience |
 | GET `/auth/session` | A | Generated response | 401 Problem; 200 no-store/private | Session lookup/touch; only one effective declaration | reliability + authorization |
 | POST `/auth/bootstrap` | P + bootstrap secret | Hand validation; bounded message | 403/409 Problem, 201 | Advisory lock prevents duplicate owner bootstrap | reliability + auth lifecycle |
-| POST `/auth/register` | P | Hand validation; bounded message | 400 Problem, 202 anti-enumeration | Transactional account/token/audit; normalized-email conflict concealed; retry may repeat 202 | reliability + auth lifecycle |
+| POST `/auth/register` | P | Generated shape + password/name rules; bounded message | 400/409 Problem, 202 | Transactional pending account/token/audit; duplicate email is explicit; retry may conflict | reliability + auth lifecycle |
 | POST `/auth/verification/request` | P | Safe body; bounded message | Always 202 anti-enumeration | Token replacement/email/audit; delivery failure concealed | reliability + auth lifecycle |
 | POST `/auth/verify-email` | P | Token bounds; bounded message | 400 Problem, 200 | Conditional one-time token claim; duplicate is 400 | reliability + auth lifecycle |
 | POST `/auth/login` | P | Credential checks; bounded principal | 401/429 Problem, 200 | Rate limited; session insert; DB/rate-store failures fail closed | reliability + auth lifecycle |
 | POST `/auth/logout` | P, current token optional | No body/output | 204 | Session revocation is repeat-safe; DB failure is 503 | reliability + auth lifecycle |
 | POST `/auth/password-reset/request` | P | Safe body; bounded message | Always 202 anti-enumeration | Token/email/audit; delivery failure concealed | reliability + auth lifecycle |
 | POST `/auth/password-reset/complete` | P | Token/password bounds | 400 Problem, 200 | Conditional claim + password/session transaction; duplicate is 400 | reliability + auth lifecycle |
-| GET `/auth/admin/accounts` | A + Admin | Ad hoc safe projection | 401/403 Problem, 200 | Read only | reliability + authorization |
+| GET `/auth/admin/accounts` | A + Admin | Generated response projection | 401/403 Problem, 200 | Read only | reliability + authorization |
+| PATCH `/auth/admin/accounts/:id` | A + Admin/owner rules | Generated body + role/scope invariants + strict positive ID | 400/403/404 Problem, 200 | Transactional access update, audit evidence, and session revocation | reliability + auth lifecycle |
 | POST `/auth/admin/accounts/:id/approve` | A + Admin/owner rules | Hand body + strict positive ID | 400/403/404 Problem, 200 | Transactional assignment/session revocation; repeat updates current state | reliability + authorization |
 | POST `/auth/admin/accounts/:id/deactivate` | A + Admin/owner rules | Strict positive ID | 400/403/404 Problem, 200 | Transactional deactivate/session revoke; repeat-safe | reliability + authorization |
 | POST `/auth/admin/accounts/:id/reactivate` | A + Admin/owner rules | Strict positive ID | 400/403/404 Problem, 200 | Reactivate; repeat-safe | reliability + authorization |
+| POST `/auth/admin/accounts/:id/suspend` | A + Admin/owner rules | Strict positive ID | 400/403/404 Problem, 200 | Suspend and revoke sessions; repeat-safe | reliability + auth lifecycle |
+| POST `/auth/admin/accounts/:id/disable` | A + Admin/owner rules | Strict positive ID | 400/403/404 Problem, 200 | Disable and revoke sessions; repeat-safe | reliability + auth lifecycle |
+| POST `/auth/admin/accounts/:id/restore` | A + Admin/owner rules | Strict positive ID | 400/403/404 Problem, 200 | Restore prior role/scope and revoke stale sessions | reliability + auth lifecycle |
 | POST `/auth/admin/accounts/:id/sessions/revoke` | A + Admin/owner rules | Strict positive ID | 400/403/404 Problem, 200 | Bulk revoke; repeat-safe | reliability + authorization |
 | GET `/dashboard` | A + dashboard read scope | Strict generated query/response | 400 Problem, 200 | Multi-query read + audit | reliability + overview |
 | GET `/activity` | A + activity scope | Generated response | 403 Problem, 200 | Scoped read + audit | reliability + authorization |

@@ -5,15 +5,23 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-import type { SessionUserRole } from './sessionUserRole';
+import type { AccountRole } from './accountRole';
+import type { AccountStatus } from './accountStatus';
 
-export type SessionUser = {
+export interface SessionUser {
   /**
      * @minLength 1
      * @maxLength 256
      */
   id: string;
-  role: SessionUserRole;
+  /** @maxLength 254 */
+  email?: string;
+  /** @maxLength 100 */
+  firstName?: string;
+  /** @maxLength 100 */
+  lastName?: string;
+  role: AccountRole | null;
+  accountStatus: AccountStatus;
   /**
      * @minLength 1
      * @maxLength 256
@@ -23,4 +31,4 @@ export type SessionUser = {
   houseNames: string[];
   /** @minimum 1 */
   residentId?: number;
-};
+}

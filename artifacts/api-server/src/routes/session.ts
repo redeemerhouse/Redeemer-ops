@@ -15,7 +15,11 @@ router.get("/auth/session", authenticate, (_req, res) => {
     authenticated: true,
     user: {
       id: principal.sub,
+      email: principal.email,
+      firstName: principal.firstName,
+      lastName: principal.lastName,
       role: principal.role,
+      accountStatus: principal.accountStatus,
       organizationId: principal.organizationId,
       houseNames: principal.houseNames,
       residentId: principal.residentId,

@@ -6,10 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type SessionUserRole = typeof SessionUserRole[keyof typeof SessionUserRole];
+export type AccountRole = typeof AccountRole[keyof typeof AccountRole];
 
 
-export const SessionUserRole = {
+export const AccountRole = {
   owner_admin: 'owner_admin',
   program_director: 'program_director',
   house_manager: 'house_manager',

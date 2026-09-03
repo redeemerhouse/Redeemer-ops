@@ -11,7 +11,7 @@ import {
   useLocation,
   Router as WouterRouter,
 } from 'wouter';
-import { AuthLoading, AuthProvider, SessionError, useAuth } from '@/lib/auth';
+import { AuthLoading, AuthProvider, SessionError, useAuth, PendingSessionScreen } from '@/lib/auth';
 
 const Dashboard = lazy(() => import('@/pages/dashboard'));
 const Residents = lazy(() => import('@/pages/residents'));
@@ -20,6 +20,7 @@ const ResidentDetail = lazy(() => import('@/pages/resident-detail'));
 const Operations = lazy(() => import('@/pages/operations'));
 const Assessment = lazy(() => import('@/pages/assessment'));
 const AssessmentLibrary = lazy(() => import('@/pages/assessment-library'));
+const AccountManagement = lazy(() => import('@/pages/account-management'));
 const NotFound = lazy(() => import('@/pages/not-found'));
 
 const RECOVERY_EVENT = 'redeemer-house:request-failed';
@@ -80,6 +81,7 @@ function Router() {
           <Route path="/assessment-library" component={AssessmentLibrary} />
           <Route path="/payments" component={Payments} />
           <Route path="/operations" component={Operations} />
+          <Route path="/account-management" component={AccountManagement} />
           <Route component={NotFound} />
         </Switch>
       </Suspense>
@@ -103,11 +105,15 @@ function App() {
 }
 
 function AuthenticatedApp() {
-  const { status, login, register, requestPasswordReset, verifyEmail, resetPassword } = useAuth();
+  const { status, login, register, requestPasswordReset, verifyEmail, resetPassword, user, logout } = useAuth();
 
   if (status === 'checking') return <AuthLoading />;
   if (status === 'unauthenticated') return <TooltipProvider><SignIn login={login} register={register} requestPasswordReset={requestPasswordReset} verifyEmail={verifyEmail} resetPassword={resetPassword} /><Toaster /></TooltipProvider>;
   if (status === 'error') return <SessionError onRetry={() => window.location.reload()} />;
+
+  if (user?.accountStatus === 'pending') {
+    return <PendingSessionScreen user={user} logout={logout} />;
+  }
 
   return (
     <TooltipProvider>

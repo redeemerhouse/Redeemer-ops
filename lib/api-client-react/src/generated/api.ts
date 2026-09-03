@@ -20,6 +20,8 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AccountAccessUpdate,
+  AccountAdministration,
   Activity,
   AssessmentAnswersInput,
   AssessmentDetail,
@@ -27,6 +29,8 @@ import type {
   AssessmentStartInput,
   AssessmentSummary,
   AssessmentTemplate,
+  AuthMessage,
+  AuthSuccess,
   ConfirmResidentImportBody,
   Dashboard,
   DownloadResidentImportTemplateParams,
@@ -45,19 +49,23 @@ import type {
   ListPaymentsParams,
   ListResidentAssessmentsParams,
   ListResidentsParams,
+  LoginInput,
   MeetingAttendance,
   MeetingAttendanceInput,
   Payment,
   PaymentInput,
   PreviewResidentImportBody,
   ReadinessStatus,
+  RegistrationInput,
   Report,
   Resident,
   ResidentImportPreview,
   ResidentImportResult,
   ResidentInput,
   ResidentUpdate,
-  Session
+  Session,
+  SessionLogin,
+  UpdateAdminAccount200
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -243,6 +251,221 @@ export function useReadinessCheck<TData = Awaited<ReturnType<typeof readinessChe
 
 
 
+export const getRegisterAccountUrl = () => {
+
+
+
+
+  return `/api/auth/register`
+}
+
+/**
+ * Public registration creates an email-verification-required pending account. Role, status, organization, resident, and house scope are server-controlled.
+ * @summary Create a pending account
+ */
+export const registerAccount = async (registrationInput: RegistrationInput, options?: Parameters<typeof customFetch>[1]): Promise<AuthMessage> => {
+
+  return customFetch<AuthMessage>(getRegisterAccountUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(registrationInput)
+  }
+);}
+
+
+
+
+
+export const getRegisterAccountMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerAccount>>, TError,{data: BodyType<RegistrationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof registerAccount>>, TError,{data: BodyType<RegistrationInput>}, TContext> => {
+
+const mutationKey = ['registerAccount'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof registerAccount>>, {data: BodyType<RegistrationInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  registerAccount(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RegisterAccountMutationResult = NonNullable<Awaited<ReturnType<typeof registerAccount>>>
+    export type RegisterAccountMutationBody = BodyType<RegistrationInput>
+    export type RegisterAccountMutationError = ErrorType<void>
+
+    /**
+ * @summary Create a pending account
+ */
+export const useRegisterAccount = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerAccount>>, TError,{data: BodyType<RegistrationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof registerAccount>>,
+        TError,
+        {data: BodyType<RegistrationInput>},
+        TContext
+      > => {
+      return useMutation(getRegisterAccountMutationOptions(options));
+    }
+
+export const getLoginAccountUrl = () => {
+
+
+
+
+  return `/api/auth/login`
+}
+
+/**
+ * Verified pending accounts receive only minimal pending-session state. Suspended and disabled accounts are denied.
+ * @summary Establish a revocable browser session
+ */
+export const loginAccount = async (loginInput: LoginInput, options?: Parameters<typeof customFetch>[1]): Promise<SessionLogin> => {
+
+  return customFetch<SessionLogin>(getLoginAccountUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(loginInput)
+  }
+);}
+
+
+
+
+
+export const getLoginAccountMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof loginAccount>>, TError,{data: BodyType<LoginInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof loginAccount>>, TError,{data: BodyType<LoginInput>}, TContext> => {
+
+const mutationKey = ['loginAccount'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof loginAccount>>, {data: BodyType<LoginInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  loginAccount(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type LoginAccountMutationResult = NonNullable<Awaited<ReturnType<typeof loginAccount>>>
+    export type LoginAccountMutationBody = BodyType<LoginInput>
+    export type LoginAccountMutationError = ErrorType<void>
+
+    /**
+ * @summary Establish a revocable browser session
+ */
+export const useLoginAccount = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof loginAccount>>, TError,{data: BodyType<LoginInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof loginAccount>>,
+        TError,
+        {data: BodyType<LoginInput>},
+        TContext
+      > => {
+      return useMutation(getLoginAccountMutationOptions(options));
+    }
+
+export const getLogoutAccountUrl = () => {
+
+
+
+
+  return `/api/auth/logout`
+}
+
+/**
+ * @summary Revoke the current browser session
+ */
+export const logoutAccount = async ( options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getLogoutAccountUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getLogoutAccountMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof logoutAccount>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof logoutAccount>>, TError,void, TContext> => {
+
+const mutationKey = ['logoutAccount'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof logoutAccount>>, void> = () => {
+
+
+          return  logoutAccount(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type LogoutAccountMutationResult = NonNullable<Awaited<ReturnType<typeof logoutAccount>>>
+
+    export type LogoutAccountMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Revoke the current browser session
+ */
+export const useLogoutAccount = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof logoutAccount>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof logoutAccount>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getLogoutAccountMutationOptions(options));
+    }
+
 export const getGetSessionUrl = () => {
 
 
@@ -320,6 +543,228 @@ export function useGetSession<TData = Awaited<ReturnType<typeof getSession>>, TE
 
 
 
+
+export const getListAdminAccountsUrl = () => {
+
+
+
+
+  return `/api/auth/admin/accounts`
+}
+
+/**
+ * Owner administrators and program directors can review account identity and access state.
+ * @summary List accounts and assignment options
+ */
+export const listAdminAccounts = async ( options?: Parameters<typeof customFetch>[1]): Promise<AccountAdministration> => {
+
+  return customFetch<AccountAdministration>(getListAdminAccountsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAdminAccountsQueryKey = () => {
+    return [
+    `/api/auth/admin/accounts`
+    ] as const;
+    }
+
+
+export const getListAdminAccountsQueryOptions = <TData = Awaited<ReturnType<typeof listAdminAccounts>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAdminAccounts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAdminAccountsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAdminAccounts>>> = ({ signal }) => listAdminAccounts({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAdminAccounts>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAdminAccountsQueryResult = NonNullable<Awaited<ReturnType<typeof listAdminAccounts>>>
+export type ListAdminAccountsQueryError = ErrorType<void>
+
+
+/**
+ * @summary List accounts and assignment options
+ */
+
+export function useListAdminAccounts<TData = Awaited<ReturnType<typeof listAdminAccounts>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAdminAccounts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAdminAccountsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateAdminAccountUrl = (id: number,) => {
+
+
+
+
+  return `/api/auth/admin/accounts/${id}`
+}
+
+/**
+ * Validates server-managed access, revokes stale sessions, and writes before/after audit evidence.
+ * @summary Change account role, status, and scope
+ */
+export const updateAdminAccount = async (id: number,
+    accountAccessUpdate: AccountAccessUpdate, options?: Parameters<typeof customFetch>[1]): Promise<UpdateAdminAccount200> => {
+
+  return customFetch<UpdateAdminAccount200>(getUpdateAdminAccountUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(accountAccessUpdate)
+  }
+);}
+
+
+
+
+
+export const getUpdateAdminAccountMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAdminAccount>>, TError,{id: number;data: BodyType<AccountAccessUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateAdminAccount>>, TError,{id: number;data: BodyType<AccountAccessUpdate>}, TContext> => {
+
+const mutationKey = ['updateAdminAccount'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateAdminAccount>>, {id: number;data: BodyType<AccountAccessUpdate>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateAdminAccount(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateAdminAccountMutationResult = NonNullable<Awaited<ReturnType<typeof updateAdminAccount>>>
+    export type UpdateAdminAccountMutationBody = BodyType<AccountAccessUpdate>
+    export type UpdateAdminAccountMutationError = ErrorType<void>
+
+    /**
+ * @summary Change account role, status, and scope
+ */
+export const useUpdateAdminAccount = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAdminAccount>>, TError,{id: number;data: BodyType<AccountAccessUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateAdminAccount>>,
+        TError,
+        {id: number;data: BodyType<AccountAccessUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateAdminAccountMutationOptions(options));
+    }
+
+export const getRevokeAdminAccountSessionsUrl = (id: number,) => {
+
+
+
+
+  return `/api/auth/admin/accounts/${id}/sessions/revoke`
+}
+
+/**
+ * @summary Revoke every active session for an account
+ */
+export const revokeAdminAccountSessions = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<AuthSuccess> => {
+
+  return customFetch<AuthSuccess>(getRevokeAdminAccountSessionsUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRevokeAdminAccountSessionsMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokeAdminAccountSessions>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof revokeAdminAccountSessions>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['revokeAdminAccountSessions'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof revokeAdminAccountSessions>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  revokeAdminAccountSessions(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RevokeAdminAccountSessionsMutationResult = NonNullable<Awaited<ReturnType<typeof revokeAdminAccountSessions>>>
+
+    export type RevokeAdminAccountSessionsMutationError = ErrorType<void>
+
+    /**
+ * @summary Revoke every active session for an account
+ */
+export const useRevokeAdminAccountSessions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokeAdminAccountSessions>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof revokeAdminAccountSessions>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getRevokeAdminAccountSessionsMutationOptions(options));
+    }
 
 export const getGetDashboardUrl = (params?: GetDashboardParams,) => {
   const normalizedParams = new URLSearchParams();

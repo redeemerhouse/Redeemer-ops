@@ -16,23 +16,31 @@ import { housesTable } from "./operations";
 import { residentsTable } from "./residents";
 
 export const accountRoles = ["owner_admin", "program_director", "house_manager", "resident"] as const;
+export const accountStatuses = ["pending", "active", "suspended", "disabled"] as const;
 
 export const authAccountsTable = pgTable("auth_accounts", {
   id: serial("id").primaryKey(),
   email: text("email").notNull(),
+  firstName: text("first_name").notNull().default(""),
+  lastName: text("last_name").notNull().default(""),
   passwordHash: text("password_hash").notNull(),
   organizationId: text("organization_id").notNull().default("redeemer-house"),
-  role: text("role").notNull().default("resident"),
+  role: text("role"),
+  accountStatus: text("account_status").notNull().default("active"),
   residentId: integer("resident_id").references(() => residentsTable.id),
   emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
   approvedAt: timestamp("approved_at", { withTimezone: true }),
   deactivatedAt: timestamp("deactivated_at", { withTimezone: true }),
+  lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   uniqueIndex("auth_accounts_email_unique").on(table.email),
-  check("auth_accounts_role_allowed", sql`${table.role} IN ('owner_admin', 'program_director', 'house_manager', 'resident')`),
+  check("auth_accounts_role_allowed", sql`${table.role} IS NULL OR ${table.role} IN ('owner_admin', 'program_director', 'house_manager', 'resident')`),
+  check("auth_accounts_status_allowed", sql`${table.accountStatus} IN ('pending', 'active', 'suspended', 'disabled')`),
+  check("auth_accounts_pending_unassigned", sql`(${table.accountStatus} <> 'pending' OR (${table.role} IS NULL AND ${table.residentId} IS NULL))`),
   index("auth_accounts_resident_idx").on(table.residentId),
+  index("auth_accounts_status_idx").on(table.accountStatus),
 ]);
 
 export const authAccountHousesTable = pgTable("auth_account_houses", {

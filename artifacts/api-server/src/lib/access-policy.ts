@@ -2,9 +2,10 @@ export const ORGANIZATION_ID = "redeemer-house";
 
 export const roles = ["owner_admin", "program_director", "house_manager", "resident"] as const;
 export type Role = (typeof roles)[number];
+export type AccountStatus = "pending" | "active" | "suspended" | "disabled";
 
 export type PrincipalForPolicy = {
-  role: Role;
+  role: Role | null;
   organizationId: string;
   houseNames: string[];
   residentId?: number;

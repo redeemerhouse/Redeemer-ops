@@ -36,10 +36,104 @@ export const ReadinessCheckResponse = zod.object({
 
 
 /**
+ * Public registration creates an email-verification-required pending account. Role, status, organization, resident, and house scope are server-controlled.
+ * @summary Create a pending account
+ */
+export const registerAccountBodyFirstNameMax = 100;
+
+export const registerAccountBodyLastNameMax = 100;
+
+export const registerAccountBodyEmailMax = 254;
+
+export const registerAccountBodyPasswordMin = 12;
+export const registerAccountBodyPasswordMax = 200;
+
+export const registerAccountBodyPasswordConfirmationMin = 12;
+export const registerAccountBodyPasswordConfirmationMax = 200;
+
+
+
+export const RegisterAccountBody = zod.object({
+  "firstName": zod.string().min(1).max(registerAccountBodyFirstNameMax),
+  "lastName": zod.string().min(1).max(registerAccountBodyLastNameMax),
+  "email": zod.string().email().max(registerAccountBodyEmailMax),
+  "password": zod.string().min(registerAccountBodyPasswordMin).max(registerAccountBodyPasswordMax),
+  "passwordConfirmation": zod.string().min(registerAccountBodyPasswordConfirmationMin).max(registerAccountBodyPasswordConfirmationMax)
+})
+
+export const registerAccountResponseMessageMax = 500;
+
+
+
+export const RegisterAccountResponse = zod.object({
+  "message": zod.string().min(1).max(registerAccountResponseMessageMax)
+})
+
+
+/**
+ * Verified pending accounts receive only minimal pending-session state. Suspended and disabled accounts are denied.
+ * @summary Establish a revocable browser session
+ */
+export const loginAccountBodyEmailMax = 254;
+
+export const loginAccountBodyPasswordMax = 200;
+
+
+
+export const LoginAccountBody = zod.object({
+  "email": zod.string().email().max(loginAccountBodyEmailMax),
+  "password": zod.string().min(1).max(loginAccountBodyPasswordMax)
+})
+
+export const loginAccountResponseUserIdMax = 256;
+
+export const loginAccountResponseUserEmailMax = 254;
+
+export const loginAccountResponseUserFirstNameMax = 100;
+
+export const loginAccountResponseUserLastNameMax = 100;
+
+export const loginAccountResponseUserOrganizationIdMax = 256;
+
+export const loginAccountResponseUserHouseNamesItemMax = 256;
+
+export const loginAccountResponseUserResidentIdMultipleOf = 1;
+
+
+
+export const LoginAccountResponse = zod.object({
+  "user": zod.object({
+  "id": zod.string().min(1).max(loginAccountResponseUserIdMax),
+  "email": zod.string().email().max(loginAccountResponseUserEmailMax).optional(),
+  "firstName": zod.string().max(loginAccountResponseUserFirstNameMax).optional(),
+  "lastName": zod.string().max(loginAccountResponseUserLastNameMax).optional(),
+  "role": zod.union([zod.enum(['owner_admin', 'program_director', 'house_manager', 'resident']),zod.null()]),
+  "accountStatus": zod.enum(['pending', 'active', 'suspended', 'disabled']),
+  "organizationId": zod.string().min(1).max(loginAccountResponseUserOrganizationIdMax),
+  "houseNames": zod.array(zod.string().max(loginAccountResponseUserHouseNamesItemMax)),
+  "residentId": zod.number().min(1).multipleOf(loginAccountResponseUserResidentIdMultipleOf).optional()
+}),
+  "expiresAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Revoke the current browser session
+ */
+export const LogoutAccountResponse = zod.void()
+
+
+/**
  * Returns only the safe identity and scope needed to render the authenticated workspace. Session credentials remain in an HttpOnly cookie.
  * @summary Verify the current browser session
  */
 export const getSessionResponseUserIdMax = 256;
+
+export const getSessionResponseUserEmailMax = 254;
+
+export const getSessionResponseUserFirstNameMax = 100;
+
+export const getSessionResponseUserLastNameMax = 100;
 
 export const getSessionResponseUserOrganizationIdMax = 256;
 
@@ -53,12 +147,144 @@ export const GetSessionResponse = zod.object({
   "authenticated": zod.literal(true),
   "user": zod.object({
   "id": zod.string().min(1).max(getSessionResponseUserIdMax),
-  "role": zod.enum(['owner_admin', 'program_director', 'house_manager', 'resident']),
+  "email": zod.string().email().max(getSessionResponseUserEmailMax).optional(),
+  "firstName": zod.string().max(getSessionResponseUserFirstNameMax).optional(),
+  "lastName": zod.string().max(getSessionResponseUserLastNameMax).optional(),
+  "role": zod.union([zod.enum(['owner_admin', 'program_director', 'house_manager', 'resident']),zod.null()]),
+  "accountStatus": zod.enum(['pending', 'active', 'suspended', 'disabled']),
   "organizationId": zod.string().min(1).max(getSessionResponseUserOrganizationIdMax),
   "houseNames": zod.array(zod.string().max(getSessionResponseUserHouseNamesItemMax)),
   "residentId": zod.number().min(1).multipleOf(getSessionResponseUserResidentIdMultipleOf).optional()
 }),
-  "expiresAt": zod.string()
+  "expiresAt": zod.coerce.date()
+})
+
+
+/**
+ * Owner administrators and program directors can review account identity and access state.
+ * @summary List accounts and assignment options
+ */
+
+export const listAdminAccountsResponseAccountsItemFirstNameMax = 100;
+
+export const listAdminAccountsResponseAccountsItemLastNameMax = 100;
+
+export const listAdminAccountsResponseAccountsItemEmailMax = 254;
+
+
+
+export const listAdminAccountsResponseAccountsItemHousesItemNameMax = 256;
+
+
+export const listAdminAccountsResponseHousesItemNameMax = 256;
+
+
+export const listAdminAccountsResponseResidentsItemNameMax = 256;
+
+export const listAdminAccountsResponseResidentsItemHomeMax = 256;
+
+
+
+export const ListAdminAccountsResponse = zod.object({
+  "accounts": zod.array(zod.object({
+  "id": zod.number().int().min(1),
+  "firstName": zod.string().max(listAdminAccountsResponseAccountsItemFirstNameMax),
+  "lastName": zod.string().max(listAdminAccountsResponseAccountsItemLastNameMax),
+  "email": zod.string().email().max(listAdminAccountsResponseAccountsItemEmailMax),
+  "role": zod.union([zod.enum(['owner_admin', 'program_director', 'house_manager', 'resident']),zod.null()]),
+  "status": zod.enum(['pending', 'active', 'suspended', 'disabled']),
+  "residentId": zod.number().int().min(1).nullish(),
+  "emailVerified": zod.boolean(),
+  "createdAt": zod.coerce.date(),
+  "lastLoginAt": zod.coerce.date().nullish(),
+  "houses": zod.array(zod.object({
+  "id": zod.number().int().min(1),
+  "name": zod.string().min(1).max(listAdminAccountsResponseAccountsItemHousesItemNameMax)
+}))
+})),
+  "houses": zod.array(zod.object({
+  "id": zod.number().int().min(1),
+  "name": zod.string().min(1).max(listAdminAccountsResponseHousesItemNameMax)
+})),
+  "residents": zod.array(zod.object({
+  "id": zod.number().int().min(1),
+  "name": zod.string().min(1).max(listAdminAccountsResponseResidentsItemNameMax),
+  "home": zod.string().min(1).max(listAdminAccountsResponseResidentsItemHomeMax)
+}))
+})
+
+
+/**
+ * Validates server-managed access, revokes stale sessions, and writes before/after audit evidence.
+ * @summary Change account role, status, and scope
+ */
+export const updateAdminAccountPathIdMax = 2147483647;
+export const updateAdminAccountPathIdMultipleOf = 1;
+
+
+
+export const UpdateAdminAccountParams = zod.object({
+  "id": zod.coerce.number().min(1).max(updateAdminAccountPathIdMax).multipleOf(updateAdminAccountPathIdMultipleOf)
+})
+
+
+export const updateAdminAccountBodyHouseIdsMax = 100;
+
+
+
+
+export const UpdateAdminAccountBody = zod.object({
+  "role": zod.union([zod.enum(['owner_admin', 'program_director', 'house_manager', 'resident']),zod.null()]).optional(),
+  "status": zod.enum(['pending', 'active', 'suspended', 'disabled']).optional(),
+  "houseIds": zod.array(zod.number().int().min(1)).max(updateAdminAccountBodyHouseIdsMax).optional(),
+  "residentId": zod.number().int().min(1).nullish()
+})
+
+export const updateAdminAccountResponseAccountIdMax = 256;
+
+export const updateAdminAccountResponseAccountEmailMax = 254;
+
+export const updateAdminAccountResponseAccountFirstNameMax = 100;
+
+export const updateAdminAccountResponseAccountLastNameMax = 100;
+
+export const updateAdminAccountResponseAccountOrganizationIdMax = 256;
+
+export const updateAdminAccountResponseAccountHouseNamesItemMax = 256;
+
+export const updateAdminAccountResponseAccountResidentIdMultipleOf = 1;
+
+
+
+export const UpdateAdminAccountResponse = zod.object({
+  "account": zod.object({
+  "id": zod.string().min(1).max(updateAdminAccountResponseAccountIdMax),
+  "email": zod.string().email().max(updateAdminAccountResponseAccountEmailMax).optional(),
+  "firstName": zod.string().max(updateAdminAccountResponseAccountFirstNameMax).optional(),
+  "lastName": zod.string().max(updateAdminAccountResponseAccountLastNameMax).optional(),
+  "role": zod.union([zod.enum(['owner_admin', 'program_director', 'house_manager', 'resident']),zod.null()]),
+  "accountStatus": zod.enum(['pending', 'active', 'suspended', 'disabled']),
+  "organizationId": zod.string().min(1).max(updateAdminAccountResponseAccountOrganizationIdMax),
+  "houseNames": zod.array(zod.string().max(updateAdminAccountResponseAccountHouseNamesItemMax)),
+  "residentId": zod.number().min(1).multipleOf(updateAdminAccountResponseAccountResidentIdMultipleOf).optional()
+})
+})
+
+
+/**
+ * @summary Revoke every active session for an account
+ */
+export const revokeAdminAccountSessionsPathIdMax = 2147483647;
+export const revokeAdminAccountSessionsPathIdMultipleOf = 1;
+
+
+
+export const RevokeAdminAccountSessionsParams = zod.object({
+  "id": zod.coerce.number().min(1).max(revokeAdminAccountSessionsPathIdMax).multipleOf(revokeAdminAccountSessionsPathIdMultipleOf)
+})
+
+export const RevokeAdminAccountSessionsResponse = zod.object({
+  "success": zod.literal(true)
 })
 
 

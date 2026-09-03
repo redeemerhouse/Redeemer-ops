@@ -5,7 +5,7 @@ import storageRouter from "./storage";
 import assessmentsRouter from "./assessments";
 import sessionRouter from "./session";
 import authRouter from "./auth";
-import { authenticate, csrfProtection } from "../middlewares/auth";
+import { csrfProtection, requireActiveAccount } from "../middlewares/auth";
 
 const router: IRouter = Router();
 router.use(csrfProtection);
@@ -19,7 +19,7 @@ router.use(authRouter);
 // by their own route semantics.
 router.use(
   ["/activity", "/applications", "/assessment-templates", "/assessments", "/dashboard", "/documents", "/expenses", "/houses", "/income", "/meetings", "/operations", "/payments", "/reports", "/residents", "/storage"],
-  authenticate,
+  requireActiveAccount,
 );
 router.use(residentImportRouter);
 router.use(operationsRouter);

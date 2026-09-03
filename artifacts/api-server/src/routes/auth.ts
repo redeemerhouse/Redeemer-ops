@@ -1,12 +1,14 @@
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { Router, type Request, type Response } from "express";
 import { and, eq, gt, inArray, isNull, sql } from "drizzle-orm";
+import { LoginAccountBody, RegisterAccountBody, UpdateAdminAccountBody } from "@workspace/api-zod";
 import {
   auditEventsTable,
   authAccountsTable,
   authAccountHousesTable,
   authActionTokensTable,
   authSessionsTable,
+  accountStatuses,
   db,
   housesTable,
   residentsTable,
@@ -21,6 +23,7 @@ import {
   isAdministrator,
   roles,
   setSessionCookie,
+  type AccountStatus,
   type Role,
 } from "../middlewares/auth";
 import {
@@ -41,6 +44,7 @@ import { ensureRequestActive } from "../middlewares/security";
 const router = Router();
 const DUMMY_PASSWORD_HASH = "scrypt$cmVkZWVtZXItYXV0aC1kdW1teQ$B5ioDUzLuYirZubtantWbc7Dg7rYCv2kITy0zU6HesIk-yHNHjXaHGqxJVdNagllmobXJ68z_CaWisJbxg1v4A";
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const REGISTER_WINDOW_MS = 15 * 60 * 1000;
 const BOOTSTRAP_LOCK_ID = 821_734_091;
 
 router.use((_req, res, next) => {
@@ -56,6 +60,23 @@ function safeBody(req: Request): Record<string, unknown> {
 
 function failureKey(req: Request, email: string): string {
   return `auth-login:${createHash("sha256").update(`${req.socket.remoteAddress ?? "unknown"}:${email}`).digest("hex")}`;
+}
+
+function registrationKey(req: Request): string {
+  return `auth-register:${createHash("sha256").update(req.socket.remoteAddress ?? "unknown").digest("hex")}`;
+}
+
+function validName(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length >= 1 && value.trim().length <= 100;
+}
+
+function databaseErrorCode(error: unknown): string {
+  let current = error;
+  for (let depth = 0; depth < 4 && current && typeof current === "object"; depth += 1) {
+    if ("code" in current && typeof current.code === "string") return current.code;
+    current = "cause" in current ? current.cause : null;
+  }
+  return "";
 }
 
 async function audit(
@@ -140,10 +161,13 @@ function publicPrincipal(scope: NonNullable<Awaited<ReturnType<typeof loadAccoun
   return {
     id: String(scope.account.id),
     email: scope.account.email,
-    role: scope.account.role as Role,
+    firstName: scope.account.firstName,
+    lastName: scope.account.lastName,
+    role: scope.account.role as Role | null,
+    accountStatus: scope.account.accountStatus,
     organizationId: scope.account.organizationId,
     houseNames: scope.houses.map((house) => house.name),
-    residentId: scope.account.residentId,
+    ...(scope.account.residentId === null ? {} : { residentId: scope.account.residentId }),
   };
 }
 
@@ -231,9 +255,21 @@ router.post("/auth/bootstrap", async (req, res) => {
 });
 
 router.post("/auth/register", async (req, res) => {
-  const { email, password } = safeBody(req);
-  if (!validEmail(email) || !validPassword(password)) {
-    res.status(400).json({ error: "Use a valid email and a password with at least 12 characters, upper and lower case letters, and a number." });
+  const parsed = RegisterAccountBody.safeParse(safeBody(req));
+  const registerStore = await getConfiguredRateLimitStore();
+  const attempt = await registerStore.increment(registrationKey(req), REGISTER_WINDOW_MS, Date.now());
+  if (attempt.count > 10) {
+    res.setHeader("Retry-After", Math.max(1, Math.ceil((attempt.resetAt - Date.now()) / 1000)));
+    res.status(429).json({ error: "Too many registration attempts. Please try again later." });
+    return;
+  }
+  if (!parsed.success) {
+    res.status(400).json({ error: "Enter your first name, last name, a valid email, and a password that meets the requirements. Passwords must match." });
+    return;
+  }
+  const { firstName, lastName, email, password, passwordConfirmation } = parsed.data;
+  if (!validName(firstName) || !validName(lastName) || !validPassword(password) || password !== passwordConfirmation) {
+    res.status(400).json({ error: "Enter your first name, last name, a valid email, and a password that meets the requirements. Passwords must match." });
     return;
   }
   const normalized = normalizeEmail(email);
@@ -243,7 +279,14 @@ router.post("/auth/register", async (req, res) => {
     ensureRequestActive(req);
     delivery = await db.transaction(async (tx) => {
       const [account] = await tx.insert(authAccountsTable)
-        .values({ email: normalized, passwordHash })
+        .values({
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          email: normalized,
+          passwordHash,
+          role: null,
+          accountStatus: "pending",
+        })
         .returning({ id: authAccountsTable.id });
       const token = newActionToken();
       ensureRequestActive(req);
@@ -265,11 +308,12 @@ router.post("/auth/register", async (req, res) => {
       return { accountId: account.id, token };
     });
   } catch (error) {
-    const code = error && typeof error === "object" && "code" in error
-      ? String(error.code)
-      : "";
-    if (code !== "23505") throw unavailable("database", "Account registration is temporarily unavailable.");
-    await auditBestEffort(req, "auth.account_registered", null, "failure");
+    if (databaseErrorCode(error) === "23505") {
+      await auditBestEffort(req, "auth.account_registered", null, "failure");
+      res.status(409).json({ error: "An account with that email already exists. Sign in or use password recovery." });
+      return;
+    }
+    throw unavailable("database", "Account registration is temporarily unavailable.");
   }
   if (delivery) {
     try {
@@ -285,7 +329,7 @@ router.post("/auth/register", async (req, res) => {
     }
   }
   res.status(202).json({
-    message: "If the account can be created, verification and approval instructions will be sent.",
+    message: "Account created. Check your email to verify it, then an administrator will assign your access.",
   });
 });
 
@@ -344,11 +388,12 @@ router.post("/auth/verify-email", async (req, res) => {
     return;
   }
   await audit(req, "auth.email_verified", record.accountId, "success");
-  res.json({ message: "Email verified. An administrator must approve the account before sign-in." });
+  res.json({ message: "Email verified. You can sign in while an administrator assigns your access." });
 });
 
 router.post("/auth/login", async (req, res) => {
-  const { email, password } = safeBody(req);
+  const parsed = LoginAccountBody.safeParse(safeBody(req));
+  const { email, password } = parsed.success ? parsed.data : { email: "", password: "" };
   const normalized = validEmail(email) ? normalizeEmail(email) : "";
   const key = failureKey(req, normalized || "invalid");
   const loginStore = await getConfiguredRateLimitStore();
@@ -368,18 +413,28 @@ router.post("/auth/login", async (req, res) => {
   const allowed = Boolean(
     account
     && passwordMatches
-    && account.emailVerifiedAt
-    && account.approvedAt
-    && !account.deactivatedAt,
+    && account.emailVerifiedAt,
   );
   if (!allowed || !account) {
     await audit(req, "auth.login", account?.id ?? null, "failure");
     res.status(401).json({ error: "Unable to sign in with those credentials." });
     return;
   }
+  if (!(accountStatuses as readonly string[]).includes(account.accountStatus)) {
+    await audit(req, "auth.login", account.id, "failure");
+    res.status(401).json({ error: "Unable to sign in with those credentials." });
+    return;
+  }
+  const accountStatus = account.accountStatus as AccountStatus;
+
+  if (accountStatus === "suspended" || accountStatus === "disabled" || account.deactivatedAt) {
+    await audit(req, "auth.login", account.id, "failure");
+    res.status(403).json({ error: accountStatus === "suspended" ? "This account is suspended. Contact an administrator." : "This account is disabled. Contact an administrator." });
+    return;
+  }
 
   const scope = await loadAccountScope(account.id);
-  if (!scope || (account.role === "house_manager" && scope.houses.length === 0) || (account.role === "resident" && (!account.residentId || scope.houses.length === 0))) {
+  if (!scope || accountStatus !== "pending" && (!account.role || (account.role === "house_manager" && scope.houses.length === 0) || (account.role === "resident" && (!account.residentId || scope.houses.length === 0)))) {
     await audit(req, "auth.login", account.id, "failure");
     res.status(401).json({ error: "Unable to sign in with those credentials." });
     return;
@@ -390,7 +445,8 @@ router.post("/auth/login", async (req, res) => {
   const sessionId = randomUUID();
   const token = createAccessToken({
     sub: String(account.id),
-    role: account.role as Role,
+    role: account.role as Role | null,
+    accountStatus,
     houseNames: scope.houses.map((house) => house.name),
     ...(account.residentId === null ? {} : { residentId: account.residentId }),
     sessionId,
@@ -404,6 +460,7 @@ router.post("/auth/login", async (req, res) => {
     absoluteExpiresAt,
     userAgent: req.header("user-agent")?.slice(0, 400) ?? null,
   });
+  await db.update(authAccountsTable).set({ lastLoginAt: now, updatedAt: now }).where(eq(authAccountsTable.id, account.id));
   setSessionCookie(res, token);
   await loginStore.reset?.(key);
   await audit(req, "auth.login", account.id, "success", String(account.id));
@@ -488,50 +545,74 @@ router.post("/auth/password-reset/complete", async (req, res) => {
   res.json({ message: "Password updated. Sign in again on every device." });
 });
 
-router.get("/auth/admin/accounts", async (req, res) => {
-  if (!await requireAdmin(req, res)) return;
-  const accounts = await db.select().from(authAccountsTable);
-  const assignments = await db
-    .select({ accountId: authAccountHousesTable.accountId, id: housesTable.id, name: housesTable.name })
-    .from(authAccountHousesTable)
-    .innerJoin(housesTable, eq(authAccountHousesTable.houseId, housesTable.id));
-  res.json({
-    accounts: accounts.map((account) => ({
-      id: account.id,
-      email: account.email,
-      role: account.role,
-      residentId: account.residentId,
-      emailVerified: Boolean(account.emailVerifiedAt),
-      approved: Boolean(account.approvedAt),
-      active: !account.deactivatedAt,
-      houses: assignments.filter((item) => item.accountId === account.id).map(({ id, name }) => ({ id, name })),
-    })),
-  });
-});
+type AccountAccessInput = {
+  role?: unknown;
+  status?: unknown;
+  houseIds?: unknown;
+  residentId?: unknown;
+};
 
-router.post("/auth/admin/accounts/:id/approve", async (req, res) => {
-  if (!await requireAdmin(req, res)) return;
-  const accountId = parsePositiveIntegerParam(req.params.id);
-  const { role, houseIds, residentId } = safeBody(req);
-  if (accountId === null || !roles.includes(role as Role) || !Array.isArray(houseIds) || houseIds.some((id) => !Number.isInteger(id) || Number(id) <= 0)) {
-    res.status(400).json({ error: "Invalid account assignment." });
-    return;
+async function changeAccountAccess(
+  req: Request,
+  res: Response,
+  accountId: number,
+  input: AccountAccessInput,
+) {
+  const scope = await loadAccountScope(accountId);
+  if (!scope) {
+    res.status(404).json({ error: "Not found." });
+    return null;
   }
-  if (!await canManageAccount(res, accountId, role as Role)) return;
-  const uniqueHouseIds = [...new Set(houseIds as number[])];
-  if (role === "house_manager" && uniqueHouseIds.length === 0) {
-    res.status(400).json({ error: "House managers require at least one house assignment." });
-    return;
+  const requestedRole = input.role === undefined ? scope.account.role : input.role;
+  const requestedStatus = input.status === undefined ? scope.account.accountStatus : input.status;
+  if ((requestedRole !== null && !roles.includes(requestedRole as Role))
+    || typeof requestedStatus !== "string"
+    || !accountStatuses.includes(requestedStatus as AccountStatus)
+    || (input.houseIds !== undefined && (!Array.isArray(input.houseIds) || input.houseIds.some((id) => !Number.isInteger(id) || Number(id) <= 0)))
+    || (input.residentId !== undefined && input.residentId !== null && (!Number.isInteger(input.residentId) || Number(input.residentId) <= 0))) {
+    res.status(400).json({ error: "Invalid account access settings." });
+    return null;
   }
-  if (role === "resident" && (!Number.isInteger(residentId) || Number(residentId) <= 0 || uniqueHouseIds.length !== 1)) {
+  if (!await canManageAccount(res, accountId, requestedRole as Role | undefined)) return null;
+
+  let role = requestedRole as Role | null;
+  const status = requestedStatus as AccountStatus;
+  let houseIds = input.houseIds === undefined
+    ? scope.houses.map((house) => house.id)
+    : [...new Set(input.houseIds as number[])];
+  let residentId = input.residentId === undefined ? scope.account.residentId : input.residentId as number | null;
+  if (status === "pending") {
+    role = null;
+    residentId = null;
+    houseIds = [];
+  } else if (!role) {
+    res.status(400).json({ error: "Assign a role before activating, suspending, or disabling an account." });
+    return null;
+  }
+  if (status === "active" && !scope.account.emailVerifiedAt) {
+    res.status(400).json({ error: "Verify the account email before activation." });
+    return null;
+  }
+  if (role === "owner_admin" || role === "program_director") {
+    residentId = null;
+    houseIds = [];
+  }
+  if (role === "house_manager") {
+    residentId = null;
+    if (houseIds.length === 0) {
+      res.status(400).json({ error: "House managers require at least one house assignment." });
+      return null;
+    }
+  }
+  if (role === "resident" && (!residentId || houseIds.length !== 1)) {
     res.status(400).json({ error: "Residents require one resident record and one house assignment." });
-    return;
+    return null;
   }
-  if (uniqueHouseIds.length) {
-    const found = await db.select({ id: housesTable.id }).from(housesTable).where(inArray(housesTable.id, uniqueHouseIds));
-    if (found.length !== uniqueHouseIds.length) {
-      res.status(400).json({ error: "Invalid account assignment." });
-      return;
+  if (houseIds.length) {
+    const found = await db.select({ id: housesTable.id }).from(housesTable).where(inArray(housesTable.id, houseIds));
+    if (found.length !== houseIds.length) {
+      res.status(400).json({ error: "Invalid account access settings." });
+      return null;
     }
   }
   if (role === "resident") {
@@ -539,78 +620,128 @@ router.post("/auth/admin/accounts/:id/approve", async (req, res) => {
       .from(residentsTable)
       .where(eq(residentsTable.id, Number(residentId)))
       .limit(1);
-    const [house] = await db.select({ name: housesTable.name }).from(housesTable).where(eq(housesTable.id, uniqueHouseIds[0])).limit(1);
+    const [house] = await db.select({ name: housesTable.name }).from(housesTable).where(eq(housesTable.id, houseIds[0])).limit(1);
     if (!resident || !house || resident.home !== house.name) {
       res.status(400).json({ error: "Resident and house assignments must match." });
-      return;
+      return null;
     }
   }
+
   const now = new Date();
+  const previous = {
+    status: scope.account.accountStatus,
+    role: scope.account.role,
+    residentId: scope.account.residentId,
+    houseIds: scope.houses.map((house) => house.id),
+  };
+  const next = { status, role, residentId, houseIds };
   ensureRequestActive(req);
   await db.transaction(async (tx) => {
     await tx.update(authAccountsTable).set({
-      role: role as Role,
-      residentId: role === "resident" ? Number(residentId) : null,
-      approvedAt: now,
-      deactivatedAt: null,
+      role,
+      accountStatus: status,
+      residentId,
+      approvedAt: status === "pending" ? null : scope.account.approvedAt ?? now,
+      deactivatedAt: status === "disabled" ? scope.account.deactivatedAt ?? now : null,
       updatedAt: now,
     }).where(eq(authAccountsTable.id, accountId));
     ensureRequestActive(req);
     await tx.delete(authAccountHousesTable).where(eq(authAccountHousesTable.accountId, accountId));
-    if (uniqueHouseIds.length) {
+    if (houseIds.length) {
       ensureRequestActive(req);
-      await tx.insert(authAccountHousesTable).values(uniqueHouseIds.map((houseId) => ({ accountId, houseId })));
+      await tx.insert(authAccountHousesTable).values(houseIds.map((houseId) => ({ accountId, houseId })));
     }
     ensureRequestActive(req);
     await tx.update(authSessionsTable).set({ revokedAt: now }).where(and(
       eq(authSessionsTable.accountId, accountId),
       isNull(authSessionsTable.revokedAt),
     ));
-  });
-  await audit(req, "auth.account_approved_or_assigned", accountId, "success", getPrincipal(res).sub, { role, houseCount: uniqueHouseIds.length });
-  const scope = await loadAccountScope(accountId);
-  if (!scope) {
-    res.status(404).json({ error: "Not found." });
-    return;
-  }
-  res.json({ account: publicPrincipal(scope) });
-});
-
-router.post("/auth/admin/accounts/:id/deactivate", async (req, res) => {
-  if (!await requireAdmin(req, res)) return;
-  const accountId = parsePositiveIntegerParam(req.params.id);
-  if (accountId === null) {
-    res.status(400).json({ error: "Invalid account." });
-    return;
-  }
-  if (!await canManageAccount(res, accountId)) return;
-  const now = new Date();
-  ensureRequestActive(req);
-  await db.transaction(async (tx) => {
-    await tx.update(authAccountsTable).set({ deactivatedAt: now, updatedAt: now }).where(eq(authAccountsTable.id, accountId));
     ensureRequestActive(req);
-    await tx.update(authSessionsTable).set({ revokedAt: now }).where(and(
-      eq(authSessionsTable.accountId, accountId),
-      isNull(authSessionsTable.revokedAt),
-    ));
+    await tx.insert(auditEventsTable).values({
+      action: "auth.account_access_changed",
+      entityType: "auth_account",
+      entityId: accountId,
+      actor: getPrincipal(res).sub,
+      correlationId: res.locals.correlationId,
+      outcome: "success",
+      metadata: { previous, new: next },
+    });
   });
-  await audit(req, "auth.account_deactivated", accountId, "success", getPrincipal(res).sub);
-  res.json({ success: true });
+  return loadAccountScope(accountId);
+}
+
+router.get("/auth/admin/accounts", async (req, res) => {
+  if (!await requireAdmin(req, res)) return;
+  const [accounts, assignments, houses, residents] = await Promise.all([
+    db.select().from(authAccountsTable),
+    db.select({ accountId: authAccountHousesTable.accountId, id: housesTable.id, name: housesTable.name })
+      .from(authAccountHousesTable)
+      .innerJoin(housesTable, eq(authAccountHousesTable.houseId, housesTable.id)),
+    db.select({ id: housesTable.id, name: housesTable.name }).from(housesTable),
+    db.select({ id: residentsTable.id, name: residentsTable.name, home: residentsTable.home }).from(residentsTable),
+  ]);
+  res.json({
+    accounts: accounts.map((account) => ({
+      id: account.id,
+      firstName: account.firstName,
+      lastName: account.lastName,
+      email: account.email,
+      role: account.role,
+      status: account.accountStatus,
+      residentId: account.residentId,
+      emailVerified: Boolean(account.emailVerifiedAt),
+      createdAt: account.createdAt.toISOString(),
+      lastLoginAt: account.lastLoginAt?.toISOString() ?? null,
+      houses: assignments.filter((item) => item.accountId === account.id).map(({ id, name }) => ({ id, name })),
+    })),
+    houses,
+    residents,
+  });
 });
 
-router.post("/auth/admin/accounts/:id/reactivate", async (req, res) => {
+router.patch("/auth/admin/accounts/:id", async (req, res) => {
   if (!await requireAdmin(req, res)) return;
   const accountId = parsePositiveIntegerParam(req.params.id);
   if (accountId === null) {
     res.status(400).json({ error: "Invalid account." });
     return;
   }
-  if (!await canManageAccount(res, accountId)) return;
-  ensureRequestActive(req);
-  await db.update(authAccountsTable).set({ deactivatedAt: null, updatedAt: new Date() }).where(eq(authAccountsTable.id, accountId));
-  await audit(req, "auth.account_reactivated", accountId, "success", getPrincipal(res).sub);
-  res.json({ success: true });
+  const parsed = UpdateAdminAccountBody.safeParse(safeBody(req));
+  if (!parsed.success || Object.keys(parsed.data).length === 0) {
+    res.status(400).json({ error: "Invalid account access settings." });
+    return;
+  }
+  const updated = await changeAccountAccess(req, res, accountId, parsed.data);
+  if (updated) res.json({ account: publicPrincipal(updated) });
 });
+
+router.post("/auth/admin/accounts/:id/approve", async (req, res) => {
+  if (!await requireAdmin(req, res)) return;
+  const accountId = parsePositiveIntegerParam(req.params.id);
+  if (accountId === null) {
+    res.status(400).json({ error: "Invalid account assignment." });
+    return;
+  }
+  const updated = await changeAccountAccess(req, res, accountId, { ...safeBody(req), status: "active" });
+  if (updated) res.json({ account: publicPrincipal(updated) });
+});
+
+async function legacyStatusChange(req: Request, res: Response, status: AccountStatus) {
+  if (!await requireAdmin(req, res)) return;
+  const accountId = parsePositiveIntegerParam(req.params.id);
+  if (accountId === null) {
+    res.status(400).json({ error: "Invalid account." });
+    return;
+  }
+  const updated = await changeAccountAccess(req, res, accountId, { status });
+  if (updated) res.json({ success: true, account: publicPrincipal(updated) });
+}
+
+router.post("/auth/admin/accounts/:id/deactivate", (req, res) => legacyStatusChange(req, res, "disabled"));
+router.post("/auth/admin/accounts/:id/reactivate", (req, res) => legacyStatusChange(req, res, "active"));
+router.post("/auth/admin/accounts/:id/suspend", (req, res) => legacyStatusChange(req, res, "suspended"));
+router.post("/auth/admin/accounts/:id/disable", (req, res) => legacyStatusChange(req, res, "disabled"));
+router.post("/auth/admin/accounts/:id/restore", (req, res) => legacyStatusChange(req, res, "active"));
 
 router.post("/auth/admin/accounts/:id/sessions/revoke", async (req, res) => {
   if (!await requireAdmin(req, res)) return;

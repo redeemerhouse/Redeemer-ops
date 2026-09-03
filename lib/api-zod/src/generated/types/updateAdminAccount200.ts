@@ -7,8 +7,6 @@
  */
 import type { SessionUser } from './sessionUser';
 
-export interface Session {
-  authenticated: true;
-  user: SessionUser;
-  expiresAt: Date;
-}
+export type UpdateAdminAccount200 = {
+  account: SessionUser;
+};

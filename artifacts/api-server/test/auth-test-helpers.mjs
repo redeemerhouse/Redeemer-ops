@@ -5,6 +5,7 @@ const issuer = "recovery-housing-operations";
 export function authHeaders({
   sub = `authorization-test-${process.pid}`,
   role = "owner_admin",
+  accountStatus = "active",
   houseNames = [],
   residentId,
   now = Math.floor(Date.now() / 1000),
@@ -16,6 +17,7 @@ export function authHeaders({
     iss: issuer,
     sub,
     role,
+    accountStatus,
     organizationId: "redeemer-house",
     houseNames,
     active: true,

@@ -42,6 +42,7 @@ test("bootstraps a safe browser session and rejects non-revocable cookie credent
     user: {
       id: "session-bootstrap-user",
       role: "house_manager",
+      accountStatus: "active",
       organizationId: "redeemer-house",
       houseNames: ["Northside House"],
     },
@@ -97,6 +98,26 @@ test("bootstraps a safe browser session and rejects non-revocable cookie credent
   });
   assert.equal(expiredSession.status, 401);
   assert.equal(expiredSession.headers.get("www-authenticate"), "Bearer");
+});
+
+test("pending principals can inspect only their minimal session", { skip: !canRun }, async () => {
+  const pendingHeaders = authHeaders({
+    sub: "pending-session-user",
+    role: null,
+    accountStatus: "pending",
+    houseNames: [],
+  });
+  const session = await request("/auth/session", pendingHeaders);
+  assert.equal(session.status, 200);
+  const body = await session.json();
+  assert.equal(body.user.role, null);
+  assert.equal(body.user.accountStatus, "pending");
+  assert.deepEqual(body.user.houseNames, []);
+
+  for (const path of ["/dashboard", "/residents", "/payments", "/documents", "/auth/admin/accounts"]) {
+    const response = await request(path, pendingHeaders);
+    assert.equal(response.status, 403, path);
+  }
 });
 
 test("enforces house scope for resident and payment reads", { skip: !canRun }, async () => {

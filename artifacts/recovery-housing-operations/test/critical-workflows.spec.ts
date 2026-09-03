@@ -13,6 +13,56 @@ async function signIn(page: import("@playwright/test").Page) {
   await expect(page.getByTestId("text-page-title")).toBeVisible();
 }
 
+test("public account creation collects identity without access controls", async ({ page }, testInfo) => {
+  await page.goto("/");
+  await page.getByTestId("link-register").click();
+  await expect(page.getByTestId("view-register")).toBeVisible();
+  await page.getByTestId("input-register-first-name").fill("Public");
+  await page.getByTestId("input-register-last-name").fill("Registrant");
+  await page.getByTestId("input-register-email").fill(`public-${testInfo.project.name}-${Date.now()}@redeemer.invalid`);
+  await page.getByTestId("input-register-password").fill(password);
+  await page.getByTestId("input-register-password-confirmation").fill(password);
+  await expect(page.locator('[name="role"], [name="status"], [name="propertyId"], [name="houseIds"]')).toHaveCount(0);
+  await page.getByTestId("button-submit-register").click();
+  await expect(page.getByText("Account created", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("view-verify")).toBeVisible();
+});
+
+test("pending users stay isolated until an administrator assigns access", async ({ page }, testInfo) => {
+  const pendingEmail = `browser-pending-${testInfo.project.name}@redeemer.invalid`;
+  await page.goto("/");
+  await page.getByTestId("input-email").fill(pendingEmail);
+  await page.getByTestId("input-password").fill(password);
+  await page.getByTestId("button-submit-signin").click();
+  await expect(page.getByText("Awaiting Approval", { exact: true })).toBeVisible();
+  await page.goto("/residents");
+  await expect(page.getByText("Awaiting Approval", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("link-brand")).toHaveCount(0);
+  await expect(page.getByText("Synthetic North Resident")).toHaveCount(0);
+  await page.getByTestId("button-logout-pending").click();
+
+  await signIn(page);
+  await page.goto("/account-management");
+  const accountRow = page.locator("tr").filter({ hasText: pendingEmail });
+  await expect(accountRow).toBeVisible();
+  await accountRow.getByRole("button", { name: "Edit access" }).click();
+  await page.getByTestId("select-status").selectOption("active");
+  await page.getByTestId("select-role").selectOption("program_director");
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByTestId("button-submit-form").click();
+  await expect(page.getByTestId("status-account-management")).toContainText("access has been updated");
+  if (testInfo.project.name.includes("mobile")) {
+    await page.getByTestId("button-open-menu").click();
+  }
+  await page.getByTestId("button-logout").click();
+
+  await page.getByTestId("input-email").fill(pendingEmail);
+  await page.getByTestId("input-password").fill(password);
+  await page.getByTestId("button-submit-signin").click();
+  await expect(page.getByText("Your secure workspace is ready.", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("link-brand")).toBeVisible();
+});
+
 test("sign-in, resident create/load/edit, document API, payment, and assessment journey", async ({ page }, testInfo) => {
   await signIn(page);
 
