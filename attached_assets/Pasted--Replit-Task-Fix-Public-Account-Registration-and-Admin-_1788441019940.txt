@@ -1,0 +1,313 @@
+# Replit Task: Fix Public Account Registration and Admin Role Assignment
+
+Review the current authentication, registration, authorization, and role-management system for the Redeemer House application.
+
+## Problem
+
+The application is currently preventing users from creating an account and displaying a message indicating that they are "not allowed to request an account."
+
+This needs to be changed.
+
+The desired system is:
+
+**Anyone should be able to create an account through the public registration page, but users should NOT be able to choose or assign their own role or permissions.**
+
+All roles and permissions must be assigned by an authorized administrator after the account has been created.
+
+## Required Registration Flow
+
+Create or repair the authentication workflow so that:
+
+1. A public **Create Account / Sign Up** option is available from the login screen.
+
+2. No existing login, invitation, administrator approval, or special permission should be required simply to submit a registration.
+
+3. Registration should collect, at minimum:
+
+   * First name
+   * Last name
+   * Email address
+   * Password
+   * Confirm password
+
+4. Validate:
+
+   * Required fields
+   * Valid email format
+   * Duplicate email addresses
+   * Password requirements
+   * Password confirmation
+
+5. Passwords must be securely hashed and must never be stored as plain text.
+
+6. After successful registration, create the user's authentication account and corresponding user/profile database record.
+
+## IMPORTANT: Users Cannot Select Their Role
+
+Do NOT include a public registration field that allows someone to select roles such as:
+
+* Administrator
+* Program Manager
+* House Manager
+* Case Manager
+* Finance
+* Staff
+* Super Admin
+* or any other privileged role.
+
+A user must never be able to elevate their own permissions by manipulating the registration request, frontend code, API request, or database values.
+
+The backend must ignore/reject any attempt to submit a privileged role during registration.
+
+## Default Account Status
+
+When a new account is created, assign it a safe default status such as:
+
+**Role: Pending**
+
+and/or:
+
+**Account Status: Awaiting Role Assignment**
+
+The user should successfully have an account, but should not receive access to protected resident, payment, medication, UA, case note, recovery note, administrative, financial, or other sensitive information until an administrator assigns the appropriate role.
+
+## Pending User Experience
+
+After registration, provide the user with a professional message such as:
+
+"Your account has been created successfully. An administrator must assign your access level before you can access Redeemer House program features."
+
+The user should be able to log in, but if their account is still pending, direct them to an **Awaiting Access** page instead of returning an authentication error.
+
+Do not display confusing messages such as:
+
+* "You are not allowed to request an account."
+* "Unauthorized to register."
+* "Permission denied."
+
+Registration itself should be public.
+
+Application access should be controlled by authorization.
+
+## Administrator User Management
+
+Create or verify an admin-only user management area.
+
+Administrators should be able to see:
+
+* User name
+* Email
+* Account creation date
+* Current role
+* Account status
+* Last login, if available
+* Assigned location/property, if applicable
+
+Administrators should be able to:
+
+* Assign a role
+* Change a role
+* Activate an account
+* Deactivate an account
+* Suspend an account
+* Restore an account
+* Assign property/location access where applicable
+
+Only authorized administrators should have access to these controls.
+
+## Suggested Account Statuses
+
+Use a structured account status field such as:
+
+* `pending`
+* `active`
+* `suspended`
+* `disabled`
+
+Keep account status separate from user role whenever possible.
+
+Example:
+
+```text
+User:
+Name: Jane Doe
+Email: jane@example.com
+Status: pending
+Role: null
+```
+
+After administrator approval:
+
+```text
+User:
+Name: Jane Doe
+Email: jane@example.com
+Status: active
+Role: house_manager
+```
+
+## Authorization Architecture
+
+Use proper server-side Role-Based Access Control (RBAC).
+
+Do NOT rely exclusively on hiding buttons or pages in the frontend.
+
+Every protected backend/API route must verify:
+
+1. The user is authenticated.
+2. The user's account is active.
+3. The user has the required role/permission.
+4. The user has access to the requested property/program when applicable.
+
+The frontend can hide inaccessible features for usability, but the backend must enforce security.
+
+## Security Requirements
+
+Review the implementation for:
+
+* Secure password hashing
+* Session security
+* CSRF protection where applicable
+* Rate limiting on registration/login
+* Duplicate-account prevention
+* Input validation
+* Email normalization
+* Protection against role escalation
+* Protection against manipulating account status
+* Server-side authorization
+* Secure password reset
+* Secure logout/session invalidation
+* Appropriate audit logging
+
+Do not weaken security simply to make registration public.
+
+## Audit Logging
+
+Administrative changes to user access should be recorded.
+
+At minimum log:
+
+* User whose access changed
+* Previous role/status
+* New role/status
+* Administrator making the change
+* Date/time of change
+
+This is especially important because Redeemer House will contain sensitive resident information.
+
+## Existing Authentication System
+
+Do not unnecessarily replace the existing authentication framework.
+
+First inspect:
+
+* Current auth provider/framework
+* Registration route
+* Registration API
+* Middleware
+* Role guards
+* Database user schema
+* Environment configuration
+* Any invitation-only settings
+* Any configuration preventing public registration
+
+Determine exactly what is generating the current "not allowed to request an account" behavior and fix the root cause.
+
+Do not simply remove an error message while leaving the underlying registration restriction in place.
+
+## Preserve Existing Application Functionality
+
+Do not break:
+
+* Existing administrator accounts
+* Existing users
+* Existing roles
+* Resident profiles
+* Documents
+* Mobile check-in
+* Payments
+* UA logs
+* Medication records
+* Recovery notes
+* Recovery Capital Assessments
+* Case notes
+* Property management functionality
+* Other existing Redeemer House modules
+
+Create database migrations if schema changes are necessary rather than deleting or recreating production data.
+
+## Testing Requirements
+
+Before considering this task complete, test all of the following:
+
+### Test 1 — New User Registration
+
+A completely new user can create an account without being logged in.
+
+**Expected:** Registration succeeds.
+
+### Test 2 — Default Permissions
+
+New user registers and logs in.
+
+**Expected:** User is pending and cannot access protected Redeemer House information.
+
+### Test 3 — Role Manipulation
+
+Attempt to modify the registration request to submit:
+
+`role = super_admin`
+
+**Expected:** Server rejects or ignores the role and creates the account as pending/unassigned.
+
+### Test 4 — Admin Assignment
+
+Administrator assigns the new user an authorized role.
+
+**Expected:** User receives access appropriate to that role.
+
+### Test 5 — Unauthorized Admin Access
+
+Normal user attempts to access user administration endpoints.
+
+**Expected:** Access denied.
+
+### Test 6 — Existing Accounts
+
+Existing authorized users log in.
+
+**Expected:** Existing accounts and permissions continue functioning normally.
+
+### Test 7 — Duplicate Registration
+
+Attempt registration with an email already in use.
+
+**Expected:** Registration is safely rejected with a clear user-facing message.
+
+### Test 8 — Suspended Account
+
+Administrator suspends a user.
+
+**Expected:** User can no longer access protected application functionality.
+
+## Final Deliverable
+
+Do not stop after identifying the issue.
+
+Implement the required fixes and then provide a summary containing:
+
+1. Root cause of the registration problem
+2. Files/components/routes changed
+3. Database/schema changes made
+4. How public registration now works
+5. How pending accounts are handled
+6. How administrators assign roles
+7. Security protections added or verified
+8. Tests performed
+9. Any remaining authentication or authorization risks
+
+The final architecture should follow this principle:
+
+**Registration is open. Access is controlled.**
+
+Anyone may create a Redeemer House account, but only authorized administrators may determine what that account is permitted to access.
