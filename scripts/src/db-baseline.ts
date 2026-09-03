@@ -356,19 +356,103 @@ const fail = (message: string): never => {
 
 const usage = () => {
   console.log(`Usage:
-  pnpm run db:baseline -- --target <host:port/database> --through <migration-tag> --backup-confirmed --recovery-confirmed
+  pnpm run db:baseline -- --target <host:port/database> --through <migration-tag> --evidence-manifest <path>
 
 This one-time command records an exact checked-in migration prefix for an existing database only.
 If --through is omitted, it defaults to ${defaultBaselineTag}.
+The credential-free evidence manifest must describe a retained encrypted backup and successful restore drill.
 It never creates or changes application tables or data.`);
+};
+
+type RecoveryEvidenceManifest = {
+  version: 1;
+  backupCreatedAt: string;
+  target: string;
+  migrationBoundary: string;
+  backupSha256: string;
+  retainedArtifactId: string;
+  encryptedDestinationApproved: true;
+  restore: {
+    testedAt: string;
+    result: "succeeded";
+    procedure: string;
+  };
+  retainUntil: string;
+};
+
+const parseIsoDate = (value: unknown, field: string) => {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T/.test(value)) {
+    fail(`evidence manifest ${field} must be an ISO 8601 timestamp`);
+  }
+  const timestamp = Date.parse(value as string);
+  if (!Number.isFinite(timestamp)) {
+    fail(`evidence manifest ${field} must be an ISO 8601 timestamp`);
+  }
+  return timestamp;
+};
+
+const readRecoveryEvidence = async (
+  path: string,
+  target: string,
+  through: string,
+) => {
+  let manifest: RecoveryEvidenceManifest;
+  try {
+    manifest = JSON.parse(await readFile(resolve(path), "utf8")) as RecoveryEvidenceManifest;
+  } catch {
+    return fail("the evidence manifest could not be read as JSON");
+  }
+  const backupCreatedAt = parseIsoDate(manifest.backupCreatedAt, "backupCreatedAt");
+  const restoreTestedAt = parseIsoDate(manifest.restore?.testedAt, "restore.testedAt");
+  if (manifest.version !== 1) {
+    fail("evidence manifest version must be 1");
+  }
+  if (manifest.target !== target || manifest.target.includes("@")) {
+    fail("evidence manifest target must exactly match the credential-free --target identity");
+  }
+  if (manifest.migrationBoundary !== through) {
+    fail("evidence manifest migrationBoundary must exactly match --through");
+  }
+  if (!/^[a-f0-9]{64}$/.test(manifest.backupSha256 ?? "")) {
+    fail("evidence manifest backupSha256 must be a lowercase SHA-256 checksum");
+  }
+  if (
+    typeof manifest.retainedArtifactId !== "string" ||
+    manifest.retainedArtifactId.length < 1 ||
+    manifest.retainedArtifactId.length > 255 ||
+    /:\/\/|@/.test(manifest.retainedArtifactId)
+  ) {
+    fail("evidence manifest retainedArtifactId must be a credential-free destination identifier");
+  }
+  if (manifest.encryptedDestinationApproved !== true) {
+    fail("evidence manifest must confirm an approved encrypted destination");
+  }
+  if (
+    manifest.restore?.result !== "succeeded" ||
+    typeof manifest.restore.procedure !== "string" ||
+    manifest.restore.procedure.length < 1 ||
+    manifest.restore.procedure.length > 255
+  ) {
+    fail("evidence manifest must record a successful restore and procedure identifier");
+  }
+  if (restoreTestedAt < backupCreatedAt) {
+    fail("evidence manifest restore test cannot predate the backup");
+  }
+  if (
+    typeof manifest.retainUntil !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(manifest.retainUntil) ||
+    Date.parse(`${manifest.retainUntil}T23:59:59Z`) <= restoreTestedAt
+  ) {
+    fail("evidence manifest retainUntil must be a valid date after the restore drill");
+  }
+  return manifest;
 };
 
 const parseArguments = () => {
   const args = process.argv.slice(2);
   let target: string | undefined;
   let through = defaultBaselineTag;
-  let backupConfirmed = false;
-  let recoveryConfirmed = false;
+  let evidenceManifest: string | undefined;
 
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
@@ -389,15 +473,9 @@ const parseArguments = () => {
       index += 1;
       continue;
     }
-    if (argument === "--backup-confirmed" || argument === "--confirm-backup") {
-      backupConfirmed = true;
-      continue;
-    }
-    if (
-      argument === "--recovery-confirmed" ||
-      argument === "--confirm-recovery"
-    ) {
-      recoveryConfirmed = true;
+    if (argument === "--evidence-manifest") {
+      evidenceManifest = args[index + 1];
+      index += 1;
       continue;
     }
     fail(`unknown argument "${argument}". Use --help for usage.`);
@@ -413,21 +491,14 @@ const parseArguments = () => {
       "an explicit checked-in migration tag is required with --through",
     );
   }
-  if (!backupConfirmed) {
-    fail(
-      "a restorable backup must be confirmed with --backup-confirmed before connecting",
-    );
-  }
-  if (!recoveryConfirmed) {
-    fail(
-      "a tested recovery/PITR path must be confirmed with --recovery-confirmed before connecting",
-    );
+  if (!evidenceManifest) {
+    fail("a retained recovery evidence file is required with --evidence-manifest");
   }
   if (!process.env.DATABASE_URL) {
     fail("DATABASE_URL is required; it is never accepted as a command-line argument");
   }
 
-  return { target, through, backupConfirmed, recoveryConfirmed };
+  return { target, through, evidenceManifest };
 };
 
 const connectionIdentity = (databaseUrl: string) => {
@@ -1418,13 +1489,15 @@ const verifyLegacySchema = async (
 };
 
 const main = async () => {
-  const { target, through } = parseArguments();
+  const { target, through, evidenceManifest } = parseArguments();
+  const selectedTarget = target!;
   const targetFromUrl = connectionIdentity(process.env.DATABASE_URL!);
-  if (target !== targetFromUrl.display) {
+  if (selectedTarget !== targetFromUrl.display) {
     fail(
       `--target must exactly match the connected database identity "${targetFromUrl.display}"`,
     );
   }
+  await readRecoveryEvidence(evidenceManifest!, selectedTarget, through);
   const journal = JSON.parse(await readFile(journalPath, "utf8")) as {
     entries?: MigrationEntry[];
   };
@@ -1481,7 +1554,7 @@ const main = async () => {
 
   try {
     console.log(
-      `Verifying legacy schema for explicitly selected target "${target}" through ${through}...`,
+      `Verifying legacy schema for explicitly selected target "${selectedTarget}" through ${through}...`,
     );
     const databaseIdentity = await client.query<{ database_name: string }>(
       "SELECT current_database() AS database_name",
@@ -1524,7 +1597,7 @@ const main = async () => {
     }
     await client.query("COMMIT");
     console.log(
-      `Baseline recorded for "${target}": ${baselineEntries.length} migration(s) through ${through}.`,
+      `Baseline recorded for "${selectedTarget}": ${baselineEntries.length} migration(s) through ${through}.`,
     );
     console.log(
       "Run the normal checked-in migration command next to apply any later migrations.",

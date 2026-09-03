@@ -18,3 +18,4 @@
 - [Liveness and readiness boundaries](liveness-readiness-boundaries.md) — keep process probes dependency-free; bound readiness work while proving every privilege used by protected traffic.
 - [Playwright on Replit Nix](playwright-replit-nix.md) — browser tests need both the Playwright browser download and explicit Nix shared-library packages.
 - [Authentication lifecycle test limits](auth-lifecycle-test-limits.md) — isolate general mutation ceilings from credential-attempt limits in concentrated lifecycle suites.
+- [Baseline recovery evidence](baseline-recovery-evidence.md) — migration adoption requires retained encrypted backup proof bound to the exact target and migration boundary.

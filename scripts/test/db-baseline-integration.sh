@@ -32,6 +32,36 @@ create_legacy_database() {
     -f "$ROOT/lib/db/drizzle/0000_initial_schema.sql" >/dev/null
 }
 
+run_baseline() {
+  local database="$1"
+  local through="${2:-0000_initial_schema}"
+  local evidence="$TMP_ROOT/$database-evidence.json"
+  cat >"$evidence" <<EOF
+{
+  "version": 1,
+  "backupCreatedAt": "2026-09-03T14:30:00Z",
+  "target": "$TARGET/$database",
+  "migrationBoundary": "$through",
+  "backupSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "retainedArtifactId": "approved-vault/$database",
+  "encryptedDestinationApproved": true,
+  "restore": {
+    "testedAt": "2026-09-03T15:00:00Z",
+    "result": "succeeded",
+    "procedure": "docs/database-baseline.md#restore-drill"
+  },
+  "retainUntil": "2027-09-03"
+}
+EOF
+  (
+    cd "$ROOT"
+    DATABASE_URL="$BASE_URL/$database" pnpm run db:baseline -- \
+      --target "$TARGET/$database" \
+      --through "$through" \
+      --evidence-manifest "$evidence"
+  )
+}
+
 checked_in_migration_count="$(
   node -e 'console.log(require(process.argv[1]).entries.length)' \
     "$ROOT/lib/db/drizzle/meta/_journal.json"
@@ -51,13 +81,7 @@ assert_baseline_refused() {
     -c "$sql" >/dev/null
 
   set +e
-  (
-    cd "$ROOT"
-    DATABASE_URL="$BASE_URL/$database" pnpm run db:baseline -- \
-      --target "$TARGET/$database" \
-      --backup-confirmed \
-      --recovery-confirmed
-  ) >"$TMP_ROOT/$database.log" 2>&1
+  run_baseline "$database" >"$TMP_ROOT/$database.log" 2>&1
   local status=$?
   set -e
 
@@ -81,11 +105,7 @@ create_legacy_database valid_legacy
     ('Fixture', 'fixture@example.test', '555', 'House', '2026-01-01', '2026-01-08')
 " >/dev/null
 (
-  cd "$ROOT"
-  DATABASE_URL="$BASE_URL/valid_legacy" pnpm run db:baseline -- \
-    --target "$TARGET/valid_legacy" \
-    --backup-confirmed \
-    --recovery-confirmed
+  run_baseline valid_legacy
   DATABASE_URL="$BASE_URL/valid_legacy" DB_WRITES_FROZEN=true \
     pnpm run db:release-check
 ) >"$TMP_ROOT/valid-legacy.log"
@@ -93,6 +113,21 @@ test "$("$PG_BIN/psql" "$BASE_URL/valid_legacy" -Atc \
   "SELECT count(*) FROM residents")" = "1"
 test "$("$PG_BIN/psql" "$BASE_URL/valid_legacy" -Atc \
   "SELECT count(*) FROM drizzle.__drizzle_migrations")" = "$checked_in_migration_count"
+
+create_legacy_database mismatched_evidence
+set +e
+(
+  cd "$ROOT"
+  DATABASE_URL="$BASE_URL/mismatched_evidence" pnpm run db:baseline -- \
+    --target "$TARGET/mismatched_evidence" \
+    --evidence-manifest "$TMP_ROOT/valid_legacy-evidence.json"
+) >"$TMP_ROOT/mismatched-evidence.log" 2>&1
+status=$?
+set -e
+test "$status" -ne 0
+grep -q "target must exactly match" "$TMP_ROOT/mismatched-evidence.log"
+test "$("$PG_BIN/psql" "$BASE_URL/mismatched_evidence" -Atc \
+  "SELECT to_regclass('drizzle.__drizzle_migrations') IS NULL")" = "t"
 
 through_index=8
 through_tag="${migration_tags[$through_index]}"
@@ -112,12 +147,7 @@ done
   )
 ' >/dev/null
 (
-  cd "$ROOT"
-  DATABASE_URL="$BASE_URL/adopted_prefix" pnpm run db:baseline -- \
-    --target "$TARGET/adopted_prefix" \
-    --through "$through_tag" \
-    --backup-confirmed \
-    --recovery-confirmed
+  run_baseline adopted_prefix "$through_tag"
   DATABASE_URL="$BASE_URL/adopted_prefix" DB_WRITES_FROZEN=true \
     pnpm run db:release-check
 ) >"$TMP_ROOT/adopted-prefix.log"
@@ -186,14 +216,7 @@ for database in \
   ledger_sequence_owner
 do
   set +e
-  (
-    cd "$ROOT"
-    DATABASE_URL="$BASE_URL/$database" pnpm run db:baseline -- \
-      --target "$TARGET/$database" \
-      --through "$through_tag" \
-      --backup-confirmed \
-      --recovery-confirmed
-  ) >"$TMP_ROOT/$database.log" 2>&1
+  run_baseline "$database" "$through_tag" >"$TMP_ROOT/$database.log" 2>&1
   status=$?
   set -e
   if [[ "$status" -eq 0 ]]; then
@@ -218,14 +241,8 @@ done
   LANGUAGE sql AS $$ SELECT 1 $$
 ' >/dev/null
 set +e
-(
-  cd "$ROOT"
-  DATABASE_URL="$BASE_URL/hostile_drizzle_schema" pnpm run db:baseline -- \
-    --target "$TARGET/hostile_drizzle_schema" \
-    --through "$through_tag" \
-    --backup-confirmed \
-    --recovery-confirmed
-) >"$TMP_ROOT/hostile_drizzle_schema.log" 2>&1
+run_baseline hostile_drizzle_schema "$through_tag" \
+  >"$TMP_ROOT/hostile_drizzle_schema.log" 2>&1
 status=$?
 set -e
 if [[ "$status" -eq 0 ]]; then
@@ -262,14 +279,7 @@ done
 ' >/dev/null
 for database in later_not_valid_fk later_deferrable_fk; do
   set +e
-  (
-    cd "$ROOT"
-    DATABASE_URL="$BASE_URL/$database" pnpm run db:baseline -- \
-      --target "$TARGET/$database" \
-      --through "$through_tag" \
-      --backup-confirmed \
-      --recovery-confirmed
-  ) >"$TMP_ROOT/$database.log" 2>&1
+  run_baseline "$database" "$through_tag" >"$TMP_ROOT/$database.log" 2>&1
   status=$?
   set -e
   if [[ "$status" -eq 0 ]]; then
@@ -305,14 +315,7 @@ done
 ' >/dev/null
 for database in later_not_valid_check later_deferrable_primary_key; do
   set +e
-  (
-    cd "$ROOT"
-    DATABASE_URL="$BASE_URL/$database" pnpm run db:baseline -- \
-      --target "$TARGET/$database" \
-      --through "$through_tag" \
-      --backup-confirmed \
-      --recovery-confirmed
-  ) >"$TMP_ROOT/$database.log" 2>&1
+  run_baseline "$database" "$through_tag" >"$TMP_ROOT/$database.log" 2>&1
   status=$?
   set -e
   if [[ "$status" -eq 0 ]]; then
@@ -341,14 +344,7 @@ done
 ' >/dev/null
 for database in public_schema_grant default_table_privileges; do
   set +e
-  (
-    cd "$ROOT"
-    DATABASE_URL="$BASE_URL/$database" pnpm run db:baseline -- \
-      --target "$TARGET/$database" \
-      --through "$through_tag" \
-      --backup-confirmed \
-      --recovery-confirmed
-  ) >"$TMP_ROOT/$database.log" 2>&1
+  run_baseline "$database" "$through_tag" >"$TMP_ROOT/$database.log" 2>&1
   status=$?
   set -e
   if [[ "$status" -eq 0 ]]; then
