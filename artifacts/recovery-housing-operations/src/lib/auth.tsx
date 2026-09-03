@@ -39,7 +39,10 @@ type AuthContextValue = AuthState & {
   requestPasswordReset: (email: string) => Promise<string>;
   verifyEmail: (token: string) => Promise<string>;
   resetPassword: (token: string, password: string) => Promise<string>;
+  provisionInitialAdmin: (input: InitialAdminSetupInput) => Promise<string>;
 };
+
+export type InitialAdminSetupInput = RegistrationInput & { setupCode: string };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
@@ -167,8 +170,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearSession();
     return data.message || 'Password updated. Sign in again on every device.';
   }, [authRequest, clearSession]);
+  const provisionInitialAdmin = useCallback(async (input: InitialAdminSetupInput) => {
+    const { response, data } = await authRequest('/bootstrap', { ...input });
+    if (!response.ok) throw new Error(data.error || 'Initial administrator setup could not be completed.');
+    return data.message || 'Initial administrator created. Sign in to continue.';
+  }, [authRequest]);
 
-  const value = useMemo(() => ({ ...state, login, logout, register, requestPasswordReset, verifyEmail, resetPassword }), [login, logout, register, requestPasswordReset, resetPassword, state, verifyEmail]);
+  const value = useMemo(() => ({ ...state, login, logout, register, requestPasswordReset, verifyEmail, resetPassword, provisionInitialAdmin }), [login, logout, provisionInitialAdmin, register, requestPasswordReset, resetPassword, state, verifyEmail]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

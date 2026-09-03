@@ -71,6 +71,54 @@ export const RegisterAccountResponse = zod.object({
 
 
 /**
+ * Returns only whether the one-time first-owner setup remains available.
+ * @summary Check whether initial administrator setup is available
+ */
+export const GetInitialAdminSetupStatusResponse = zod.object({
+  "available": zod.boolean()
+})
+
+
+/**
+ * Uses a dedicated managed setup secret and an atomic empty-account check. Permanently closes after the first account is created.
+ * @summary Provision the first owner administrator
+ */
+export const provisionInitialAdminBodyFirstNameMax = 100;
+
+export const provisionInitialAdminBodyLastNameMax = 100;
+
+export const provisionInitialAdminBodyEmailMax = 254;
+
+export const provisionInitialAdminBodyPasswordMin = 12;
+export const provisionInitialAdminBodyPasswordMax = 200;
+
+export const provisionInitialAdminBodyPasswordConfirmationMin = 12;
+export const provisionInitialAdminBodyPasswordConfirmationMax = 200;
+
+export const provisionInitialAdminBodySetupCodeMin = 16;
+export const provisionInitialAdminBodySetupCodeMax = 200;
+
+
+
+export const ProvisionInitialAdminBody = zod.object({
+  "firstName": zod.string().min(1).max(provisionInitialAdminBodyFirstNameMax),
+  "lastName": zod.string().min(1).max(provisionInitialAdminBodyLastNameMax),
+  "email": zod.string().email().max(provisionInitialAdminBodyEmailMax),
+  "password": zod.string().min(provisionInitialAdminBodyPasswordMin).max(provisionInitialAdminBodyPasswordMax),
+  "passwordConfirmation": zod.string().min(provisionInitialAdminBodyPasswordConfirmationMin).max(provisionInitialAdminBodyPasswordConfirmationMax),
+  "setupCode": zod.string().min(provisionInitialAdminBodySetupCodeMin).max(provisionInitialAdminBodySetupCodeMax)
+})
+
+export const provisionInitialAdminResponseMessageMax = 500;
+
+
+
+export const ProvisionInitialAdminResponse = zod.object({
+  "message": zod.string().min(1).max(provisionInitialAdminResponseMessageMax)
+})
+
+
+/**
  * Verified pending accounts receive only minimal pending-session state. Suspended and disabled accounts are denied.
  * @summary Establish a revocable browser session
  */

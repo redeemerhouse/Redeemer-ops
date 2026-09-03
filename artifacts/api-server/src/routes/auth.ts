@@ -213,19 +213,30 @@ async function canManageAccount(
 }
 
 function validBootstrapToken(value: string | undefined): boolean {
-  const configured = process.env.SESSION_SECRET;
-  if (!configured || configured.length < 32 || !value) return false;
+  const configured = process.env.INITIAL_ADMIN_SETUP_TOKEN;
+  if (!configured || configured.length < 16 || !value) return false;
   const expected = Buffer.from(configured);
   const received = Buffer.from(value);
   return expected.length === received.length && timingSafeEqual(expected, received);
 }
 
+router.get("/auth/bootstrap", async (_req, res) => {
+  const [existing] = await db.select({ id: authAccountsTable.id }).from(authAccountsTable).limit(1);
+  res.json({ available: !existing && Boolean(process.env.INITIAL_ADMIN_SETUP_TOKEN?.trim()) });
+});
+
 router.post("/auth/bootstrap", async (req, res) => {
-  const { email, password } = safeBody(req);
-  if (!validBootstrapToken(req.header("x-initial-admin-token"))
-    || !validEmail(email)
-    || !validPassword(password)) {
+  const { firstName, lastName, email, password, passwordConfirmation, setupCode } = safeBody(req);
+  if (!validBootstrapToken(typeof setupCode === "string" ? setupCode : undefined)) {
     res.status(403).json({ error: "Initial administrator provisioning is not available." });
+    return;
+  }
+  if (!validName(firstName)
+    || !validName(lastName)
+    || !validEmail(email)
+    || !validPassword(password)
+    || password !== passwordConfirmation) {
+    res.status(400).json({ error: "Enter your name, a valid email, and matching password that meets the requirements." });
     return;
   }
   const normalized = normalizeEmail(email);
@@ -238,8 +249,11 @@ router.post("/auth/bootstrap", async (req, res) => {
     if (existing) return null;
     const [created] = await tx.insert(authAccountsTable).values({
       email: normalized,
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
       passwordHash,
       role: "owner_admin",
+      accountStatus: "active",
       emailVerifiedAt: now,
       approvedAt: now,
     }).returning({ id: authAccountsTable.id });

@@ -63,6 +63,40 @@ export interface RegistrationInput {
   passwordConfirmation: string;
 }
 
+export interface InitialAdminSetupStatus {
+  available: boolean;
+}
+
+export interface InitialAdminSetupInput {
+  /**
+     * @minLength 1
+     * @maxLength 100
+     */
+  firstName: string;
+  /**
+     * @minLength 1
+     * @maxLength 100
+     */
+  lastName: string;
+  /** @maxLength 254 */
+  email: string;
+  /**
+     * @minLength 12
+     * @maxLength 200
+     */
+  password: string;
+  /**
+     * @minLength 12
+     * @maxLength 200
+     */
+  passwordConfirmation: string;
+  /**
+     * @minLength 16
+     * @maxLength 200
+     */
+  setupCode: string;
+}
+
 export interface LoginInput {
   /** @maxLength 254 */
   email: string;

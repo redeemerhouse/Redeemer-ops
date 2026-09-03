@@ -43,6 +43,8 @@ import type {
   House,
   IncomeInput,
   IncomeRecord,
+  InitialAdminSetupInput,
+  InitialAdminSetupStatus,
   ListExpensesParams,
   ListIncomeParams,
   ListMeetingAttendanceParams,
@@ -321,6 +323,156 @@ export const useRegisterAccount = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getRegisterAccountMutationOptions(options));
+    }
+
+export const getGetInitialAdminSetupStatusUrl = () => {
+
+
+
+
+  return `/api/auth/bootstrap`
+}
+
+/**
+ * Returns only whether the one-time first-owner setup remains available.
+ * @summary Check whether initial administrator setup is available
+ */
+export const getInitialAdminSetupStatus = async ( options?: Parameters<typeof customFetch>[1]): Promise<InitialAdminSetupStatus> => {
+
+  return customFetch<InitialAdminSetupStatus>(getGetInitialAdminSetupStatusUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetInitialAdminSetupStatusQueryKey = () => {
+    return [
+    `/api/auth/bootstrap`
+    ] as const;
+    }
+
+
+export const getGetInitialAdminSetupStatusQueryOptions = <TData = Awaited<ReturnType<typeof getInitialAdminSetupStatus>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getInitialAdminSetupStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetInitialAdminSetupStatusQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getInitialAdminSetupStatus>>> = ({ signal }) => getInitialAdminSetupStatus({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getInitialAdminSetupStatus>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetInitialAdminSetupStatusQueryResult = NonNullable<Awaited<ReturnType<typeof getInitialAdminSetupStatus>>>
+export type GetInitialAdminSetupStatusQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Check whether initial administrator setup is available
+ */
+
+export function useGetInitialAdminSetupStatus<TData = Awaited<ReturnType<typeof getInitialAdminSetupStatus>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getInitialAdminSetupStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetInitialAdminSetupStatusQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getProvisionInitialAdminUrl = () => {
+
+
+
+
+  return `/api/auth/bootstrap`
+}
+
+/**
+ * Uses a dedicated managed setup secret and an atomic empty-account check. Permanently closes after the first account is created.
+ * @summary Provision the first owner administrator
+ */
+export const provisionInitialAdmin = async (initialAdminSetupInput: InitialAdminSetupInput, options?: Parameters<typeof customFetch>[1]): Promise<AuthMessage> => {
+
+  return customFetch<AuthMessage>(getProvisionInitialAdminUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(initialAdminSetupInput)
+  }
+);}
+
+
+
+
+
+export const getProvisionInitialAdminMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof provisionInitialAdmin>>, TError,{data: BodyType<InitialAdminSetupInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof provisionInitialAdmin>>, TError,{data: BodyType<InitialAdminSetupInput>}, TContext> => {
+
+const mutationKey = ['provisionInitialAdmin'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof provisionInitialAdmin>>, {data: BodyType<InitialAdminSetupInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  provisionInitialAdmin(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ProvisionInitialAdminMutationResult = NonNullable<Awaited<ReturnType<typeof provisionInitialAdmin>>>
+    export type ProvisionInitialAdminMutationBody = BodyType<InitialAdminSetupInput>
+    export type ProvisionInitialAdminMutationError = ErrorType<void>
+
+    /**
+ * @summary Provision the first owner administrator
+ */
+export const useProvisionInitialAdmin = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof provisionInitialAdmin>>, TError,{data: BodyType<InitialAdminSetupInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof provisionInitialAdmin>>,
+        TError,
+        {data: BodyType<InitialAdminSetupInput>},
+        TContext
+      > => {
+      return useMutation(getProvisionInitialAdminMutationOptions(options));
     }
 
 export const getLoginAccountUrl = () => {

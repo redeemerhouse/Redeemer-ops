@@ -17,7 +17,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, ShieldCheck, KeyRound, UserPlus } from 'lucide-react';
 import logoPath from '@assets/Logo_Redeemer_1787578091618.jpeg';
 
-type ViewState = 'signin' | 'register' | 'forgot' | 'verify' | 'reset';
+type ViewState = 'signin' | 'register' | 'setup' | 'forgot' | 'verify' | 'reset';
 
 export interface SignInProps {
   login: (email: string, password: string) => Promise<string>;
@@ -25,6 +25,7 @@ export interface SignInProps {
   requestPasswordReset: (email: string) => Promise<string>;
   verifyEmail: (token: string) => Promise<string>;
   resetPassword: (token: string, password: string) => Promise<string>;
+  provisionInitialAdmin: (input: z.infer<typeof setupSchema>) => Promise<string>;
 }
 
 const signinSchema = z.object({
@@ -45,6 +46,10 @@ const registerSchema = z.object({
   message: 'Passwords must match',
 });
 
+const setupSchema = registerSchema.and(z.object({
+  setupCode: z.string().min(16, 'Enter the complete setup code').max(200),
+}));
+
 const forgotSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
 });
@@ -63,6 +68,7 @@ export default function SignIn({
   requestPasswordReset,
   verifyEmail,
   resetPassword,
+  provisionInitialAdmin,
 }: SignInProps) {
   const [view, setView] = useState<ViewState>('signin');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -76,6 +82,10 @@ export default function SignIn({
   const registerForm = useForm<z.infer<typeof registerSchema>>({
     resolver: zodResolver(registerSchema),
     defaultValues: { firstName: '', lastName: '', email: '', password: '', passwordConfirmation: '' },
+  });
+  const setupForm = useForm<z.infer<typeof setupSchema>>({
+    resolver: zodResolver(setupSchema),
+    defaultValues: { firstName: '', lastName: '', email: '', password: '', passwordConfirmation: '', setupCode: '' },
   });
 
   const forgotForm = useForm<z.infer<typeof forgotSchema>>({
@@ -114,6 +124,19 @@ export default function SignIn({
         description: err.message || 'An error occurred.',
         variant: 'destructive',
       });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+  const onSetup = async (values: z.infer<typeof setupSchema>) => {
+    setIsSubmitting(true);
+    try {
+      const msg = await provisionInitialAdmin(values);
+      toast({ title: 'Administrator created', description: msg });
+      setupForm.reset();
+      setView('signin');
+    } catch (err: unknown) {
+      toast({ title: 'Administrator setup failed', description: err instanceof Error ? err.message : 'The setup could not be completed.', variant: 'destructive' });
     } finally {
       setIsSubmitting(false);
     }
@@ -315,7 +338,33 @@ export default function SignIn({
                       </button>
                     </p>
                     <button type="button" onClick={() => setView('verify')} className="mt-3 text-xs font-medium text-muted-foreground hover:text-primary" data-testid="link-enter-verification-code">Already have a verification code?</button>
+                    <button type="button" onClick={() => setView('setup')} className="mt-3 block w-full text-xs font-medium text-muted-foreground hover:text-primary" data-testid="link-initial-admin-setup">Setting up the first administrator?</button>
                   </div>
+                </motion.div>
+              )}
+
+              {view === 'setup' && (
+                <motion.div key="setup" variants={containerVariants} initial="hidden" animate="visible" exit="exit" data-testid="view-initial-admin-setup">
+                  <div className="mb-6">
+                    <h2 className="text-2xl font-semibold text-foreground display-serif">Initial Administrator Setup</h2>
+                    <p className="text-sm text-muted-foreground mt-1">Use the one-time setup code stored in Replit Secrets. This closes permanently after the first account is created.</p>
+                  </div>
+                  <Form {...setupForm}>
+                    <form onSubmit={setupForm.handleSubmit(onSetup)} className="space-y-4">
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <FormField control={setupForm.control} name="firstName" render={({ field }) => <FormItem><FormLabel>First name</FormLabel><FormControl><Input autoComplete="given-name" data-testid="input-setup-first-name" {...field} /></FormControl><FormMessage /></FormItem>} />
+                        <FormField control={setupForm.control} name="lastName" render={({ field }) => <FormItem><FormLabel>Last name</FormLabel><FormControl><Input autoComplete="family-name" data-testid="input-setup-last-name" {...field} /></FormControl><FormMessage /></FormItem>} />
+                      </div>
+                      <FormField control={setupForm.control} name="email" render={({ field }) => <FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" autoComplete="email" data-testid="input-setup-email" {...field} /></FormControl><FormMessage /></FormItem>} />
+                      <FormField control={setupForm.control} name="password" render={({ field }) => <FormItem><FormLabel>Password</FormLabel><FormControl><Input type="password" autoComplete="new-password" data-testid="input-setup-password" {...field} /></FormControl><FormMessage /></FormItem>} />
+                      <FormField control={setupForm.control} name="passwordConfirmation" render={({ field }) => <FormItem><FormLabel>Confirm password</FormLabel><FormControl><Input type="password" autoComplete="new-password" data-testid="input-setup-password-confirmation" {...field} /></FormControl><FormMessage /></FormItem>} />
+                      <FormField control={setupForm.control} name="setupCode" render={({ field }) => <FormItem><FormLabel>One-time setup code</FormLabel><FormControl><Input type="password" autoComplete="off" data-testid="input-setup-code" {...field} /></FormControl><FormMessage /></FormItem>} />
+                      <Button type="submit" className="w-full h-11" disabled={isSubmitting} data-testid="button-submit-initial-admin">
+                        {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Creating administrator...</> : 'Create Administrator'}
+                      </Button>
+                    </form>
+                  </Form>
+                  <button type="button" onClick={() => setView('signin')} className="mt-8 w-full text-sm font-medium text-muted-foreground hover:text-foreground" data-testid="link-setup-back">Back to sign in</button>
                 </motion.div>
               )}
 

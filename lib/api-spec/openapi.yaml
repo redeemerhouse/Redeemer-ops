@@ -90,6 +90,42 @@ paths:
         "400": { description: Registration fields are invalid }
         "409": { description: Email is already registered }
         "429": { description: Registration rate limit exceeded }
+  /auth/bootstrap:
+    get:
+      operationId: getInitialAdminSetupStatus
+      tags: [auth]
+      summary: Check whether initial administrator setup is available
+      description: Returns only whether the one-time first-owner setup remains available.
+      security: []
+      responses:
+        "200":
+          description: Initial setup availability
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InitialAdminSetupStatus"
+    post:
+      operationId: provisionInitialAdmin
+      tags: [auth]
+      summary: Provision the first owner administrator
+      description: Uses a dedicated managed setup secret and an atomic empty-account check. Permanently closes after the first account is created.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InitialAdminSetupInput"
+      responses:
+        "201":
+          description: First owner administrator created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthMessage"
+        "400": { description: Setup fields are invalid }
+        "403": { description: Setup code is invalid or setup is not configured }
+        "409": { description: An account already exists }
   /auth/login:
     post:
       operationId: loginAccount
@@ -965,6 +1001,23 @@ components:
         email: { type: string, format: email, maxLength: 254 }
         password: { type: string, minLength: 12, maxLength: 200 }
         passwordConfirmation: { type: string, minLength: 12, maxLength: 200 }
+    InitialAdminSetupStatus:
+      type: object
+      additionalProperties: false
+      required: [available]
+      properties:
+        available: { type: boolean }
+    InitialAdminSetupInput:
+      type: object
+      additionalProperties: false
+      required: [firstName, lastName, email, password, passwordConfirmation, setupCode]
+      properties:
+        firstName: { type: string, minLength: 1, maxLength: 100 }
+        lastName: { type: string, minLength: 1, maxLength: 100 }
+        email: { type: string, format: email, maxLength: 254 }
+        password: { type: string, minLength: 12, maxLength: 200 }
+        passwordConfirmation: { type: string, minLength: 12, maxLength: 200 }
+        setupCode: { type: string, minLength: 16, maxLength: 200 }
     LoginInput:
       type: object
       additionalProperties: false
