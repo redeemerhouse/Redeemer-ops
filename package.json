@@ -16,7 +16,7 @@
     "db:release-check": "pnpm --filter @workspace/scripts run db:release-check",
     "test:db-release-check": "pnpm --filter @workspace/scripts run test:db-release-check",
     "test:deployment": "bash scripts/test/deployment-check.sh",
-    "release:verify": "pnpm run codegen:check && pnpm run build && pnpm run db:release-check && pnpm run security:release-gate && pnpm run test:deployment",
+    "release:verify": "pnpm run codegen:check && pnpm run build && pnpm --filter @workspace/scripts run test:environment-contract && RELEASE_PROMOTION=production pnpm run db:release-check && pnpm run security:release-gate && pnpm run test:deployment",
     "security:release-gate": "pnpm --filter @workspace/scripts exec tsx src/security-release-gate.ts"
   },
   "private": true,

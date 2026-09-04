@@ -5,7 +5,12 @@ This suite is risk-based: confidentiality and authorization failures come first,
 ## Safety and prerequisites
 
 - Never set `TEST_DATABASE_ADMIN_URL` to a production database or production cluster.
-- The harness refuses `NODE_ENV=production` and Replit deployment runtimes, rejects production-like URL names, creates a database named `critical_workflow_test_*`, and only runs after the exact confirmation `CRITICAL_TEST_DB_CONFIRM=create-and-drop-disposable-database`.
+- The harness refuses `NODE_ENV=production` and Replit deployment runtimes, rejects production- and
+  shared-development-like URL names, creates a database named `critical_workflow_test_*`, and
+  only runs after the exact confirmation
+  `CRITICAL_TEST_DB_CONFIRM=create-and-drop-disposable-database`. It launches the API with
+  `APP_ENVIRONMENT=test`, `DATABASE_TARGET=disposable-test`, and
+  `PAYMENT_PROVIDER_MODE=disabled`; those declarations are required by the API itself.
 - Required local/CI tools: Node, pnpm, PostgreSQL client tools (`createdb`, `dropdb`, `psql`), and a Playwright Chromium installation.
 - Run the full gate:
 

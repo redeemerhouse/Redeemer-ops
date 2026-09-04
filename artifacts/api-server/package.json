@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "export NODE_ENV=development && pnpm run build && pnpm run start",
+    "dev": "export NODE_ENV=development APP_ENVIRONMENT=development DATABASE_TARGET=shared-development PAYMENT_PROVIDER_MODE=disabled STORAGE_MODE=synthetic EMAIL_MODE=disabled && pnpm run build && pnpm run start",
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "test:rate-limit": "node --experimental-strip-types --test test/security-rate-limit.test.ts",

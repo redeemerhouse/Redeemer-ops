@@ -2,6 +2,13 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+export APP_ENVIRONMENT=test
+export DATABASE_TARGET=disposable-test
+export DISPOSABLE_DATABASE_CONFIRMATION=create-and-drop-disposable-database
+export PAYMENT_PROVIDER_MODE=disabled
+export STORAGE_MODE=synthetic
+export EMAIL_MODE=disabled
+export RELEASE_PROMOTION=test
 PG_BIN="$(dirname "$(command -v postgres)")"
 TMP_ROOT="$(mktemp -d /tmp/db-baseline-integration.XXXXXX)"
 PGDATA="$TMP_ROOT/data"

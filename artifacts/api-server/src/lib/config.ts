@@ -1,3 +1,13 @@
+import {
+  assertEnvironmentContract,
+  type AppEnvironment,
+  type DatabaseTarget,
+  type EmailMode,
+  type PaymentProviderMode,
+  type StorageMode,
+} from "./environment";
+
+export const environment = assertEnvironmentContract();
 const isProduction = process.env.NODE_ENV === "production";
 
 function requiredProductionEnv(name: string): string {
@@ -74,6 +84,11 @@ if (isProduction) {
 
 export const serverConfig = {
   isProduction,
+  appEnvironment: environment.appEnvironment as AppEnvironment,
+  databaseTarget: environment.databaseTarget as DatabaseTarget,
+  paymentProviderMode: environment.paymentProviderMode as PaymentProviderMode,
+  storageMode: environment.storageMode as StorageMode,
+  emailMode: environment.emailMode as EmailMode,
   bodyLimit: process.env.API_BODY_LIMIT ?? "1mb",
   maxParameters: Number(process.env.API_PARAMETER_LIMIT ?? 100),
   maxQueryBytes: Number(process.env.API_QUERY_LIMIT_BYTES ?? 8_192),

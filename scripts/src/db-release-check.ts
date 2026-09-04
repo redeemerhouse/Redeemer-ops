@@ -13,6 +13,7 @@ import {
   formatIntegrityViolations,
   runIntegrityPreflight,
 } from "./db-integrity-preflight.js";
+import { assertEnvironmentContract } from "./environment-contract.js";
 
 const root = resolve(import.meta.dirname, "../..");
 const migrationDirectory = resolve(root, "lib/db/drizzle");
@@ -101,6 +102,18 @@ if (!process.env.DATABASE_URL) {
   );
 }
 
+const promotion = process.env.RELEASE_PROMOTION;
+if (promotion !== "test" && promotion !== "recovery" && promotion !== "production") {
+  fail(
+    "RELEASE_PROMOTION must be explicitly set to test, recovery, or production",
+  );
+}
+const promotionMode = promotion as "test" | "recovery" | "production";
+const environmentContract = assertEnvironmentContract(process.env, promotionMode);
+console.log(
+  `Environment evidence: promotion=${promotion} app=${environmentContract.appEnvironment} database_target=${environmentContract.databaseTarget} payment_mode=${environmentContract.paymentProviderMode} storage_mode=${environmentContract.storageMode} email_mode=${environmentContract.emailMode}`,
+);
+
 const require = createRequire(import.meta.url);
 const { Pool } = require(resolve(root, "lib/db/node_modules/pg")) as {
   Pool: DatabasePoolConstructor;
@@ -125,8 +138,10 @@ const verifyTargetMigrationState = async () => {
       configured_ledger: string | null;
       public_ledger: string | null;
       public_table_count: string;
+      current_database: string;
     }>(`
       SELECT
+        current_database() AS current_database,
         to_regclass('drizzle.__drizzle_migrations')::text AS configured_ledger,
         to_regclass('public.__drizzle_migrations')::text AS public_ledger,
         (
@@ -138,6 +153,9 @@ const verifyTargetMigrationState = async () => {
     const state = result.rows[0];
     if (!state) {
       fail("could not inspect the target migration state");
+    }
+    if (state.current_database !== environmentContract.databaseName) {
+      fail("connected database does not match the declared DATABASE_URL identity");
     }
     if (state.configured_ledger) {
       const ledger = await pool.query<{

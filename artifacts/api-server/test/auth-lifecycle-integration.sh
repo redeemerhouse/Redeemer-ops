@@ -10,6 +10,12 @@ fi
 DB_NAME="auth_lifecycle_validation_$$"
 LEGACY_DB_NAME="auth_legacy_migration_validation_$$"
 ROOT_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
+export APP_ENVIRONMENT=test
+export DATABASE_TARGET=disposable-test
+export DISPOSABLE_DATABASE_CONFIRMATION=create-and-drop-disposable-database
+export PAYMENT_PROVIDER_MODE=disabled
+export STORAGE_MODE=synthetic
+export EMAIL_MODE=disabled
 PORT_NUMBER=5098
 BASE_URL="http://127.0.0.1:${PORT_NUMBER}/api"
 ORIGIN="https://pilot.redeemer.invalid"
@@ -73,6 +79,7 @@ TEMP_DATABASE_URL="$(
 
 DATABASE_URL="$TEMP_DATABASE_URL" pnpm --filter @workspace/db run migrate >"$TEMP_DIR/migrate.log"
 DATABASE_URL="$TEMP_DATABASE_URL" PORT="$PORT_NUMBER" NODE_ENV=production \
+  APP_ENVIRONMENT=test DATABASE_TARGET=disposable-test \
   CORS_ORIGINS="$ORIGIN" API_RATE_LIMIT_STORE=postgres API_MUTATION_RATE_LIMIT=200 TRUST_PROXY=false DB_SSL=true \
   INITIAL_ADMIN_SETUP_TOKEN="$SETUP_CODE" \
   node "$ROOT_DIR/artifacts/api-server/dist/index.mjs" >"$TEMP_DIR/server.log" 2>&1 &

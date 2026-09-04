@@ -8,7 +8,29 @@ import { createServer } from "node:net";
 import test from "node:test";
 
 const root = resolve(import.meta.dirname, "../..");
-const configuredDatabaseUrl = process.env.DATABASE_URL;
+const configuredDatabaseUrl = process.env.RECOVERY_DRILL_DATABASE_URL;
+if (configuredDatabaseUrl) {
+  if (
+    process.env.RECOVERY_DRILL_DATABASE_CONFIRMATION !==
+    "use-non-client-disposable-server"
+  ) {
+    throw new Error(
+      "Recovery drills require RECOVERY_DRILL_DATABASE_CONFIRMATION=use-non-client-disposable-server.",
+    );
+  }
+  const configuredUrl = new URL(configuredDatabaseUrl);
+  const configuredIdentity =
+    `${configuredUrl.hostname}/${configuredUrl.pathname}`.toLowerCase();
+  if (
+    /(^|[-_.\/])(prod|production|live|client|dev|development|shared)([-_.\/]|$)/.test(
+      configuredIdentity,
+    )
+  ) {
+    throw new Error(
+      "Recovery and release integration tests refuse production or shared-development database targets.",
+    );
+  }
+}
 const migrationJournalPath = resolve(
   root,
   "lib/db/drizzle/meta/_journal.json",
@@ -84,6 +106,13 @@ const runReleaseCheck = async (
   runCommand("pnpm", ["run", "db:release-check"], {
     ...process.env,
     DATABASE_URL: databaseUrl,
+    APP_ENVIRONMENT: "test",
+    DATABASE_TARGET: "disposable-test",
+    DISPOSABLE_DATABASE_CONFIRMATION: "create-and-drop-disposable-database",
+    PAYMENT_PROVIDER_MODE: "disabled",
+    STORAGE_MODE: "synthetic",
+    EMAIL_MODE: "disabled",
+    RELEASE_PROMOTION: "test",
     DB_WRITES_FROZEN: "true",
     FORCE_COLOR: "0",
   });
@@ -180,6 +209,13 @@ const runApplicationAndShutdown = async (
         ...process.env,
         DATABASE_URL: databaseUrl,
         NODE_ENV: "production",
+        APP_ENVIRONMENT: "recovery",
+        DATABASE_TARGET: "disposable-recovery",
+        DISPOSABLE_DATABASE_CONFIRMATION:
+          "create-and-drop-disposable-database",
+        PAYMENT_PROVIDER_MODE: "disabled",
+        STORAGE_MODE: "synthetic",
+        EMAIL_MODE: "disabled",
         PORT: String(port),
         DB_SSL: "true",
         API_RATE_LIMIT_STORE: "postgres",

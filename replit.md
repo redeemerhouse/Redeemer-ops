@@ -11,8 +11,18 @@ ONEsource gives Redeemer House teams a dependable workspace for resident intake,
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run generate` — generate a reviewed SQL migration after schema changes
 - `pnpm --filter @workspace/db run migrate` — apply checked-in migrations non-interactively
-- `pnpm run db:baseline -- --target <host:port/database> --backup-confirmed --recovery-confirmed` — one-time, verified baseline for a legacy schema-push database; never use for a fresh database
-- `pnpm run db:release-check` — validate the development migration journal and catalog before publishing (requires `DATABASE_URL`)
+- `pnpm run db:baseline -- --target <host:port/database> --evidence-manifest <path>` — one-time, verified baseline for a legacy schema-push database; never use for a fresh database; run it with the matching explicit environment contract
+- `pnpm run db:release-check` — validate the checked-in migration journal and catalog for an explicitly selected promotion target (requires `DATABASE_URL` and `RELEASE_PROMOTION`)
+- Environment and data targets are explicit: development uses `APP_ENVIRONMENT=development` with
+  `DATABASE_TARGET=shared-development`; automated tests use `APP_ENVIRONMENT=test` with a
+  confirmed `DATABASE_TARGET=disposable-test`; recovery uses `APP_ENVIRONMENT=recovery` with a
+  confirmed `DATABASE_TARGET=disposable-recovery`; production uses both `APP_ENVIRONMENT=production`
+  and `DATABASE_TARGET=production`.
+- Disposable test and recovery targets require
+  `DISPOSABLE_DATABASE_CONFIRMATION=create-and-drop-disposable-database`. Set
+  `PAYMENT_PROVIDER_MODE=disabled` or `sandbox` for non-production and never set `live` outside
+  production. Use `STORAGE_MODE=synthetic` and `EMAIL_MODE=disabled` (or `sandbox`) outside
+  production; production uses `STORAGE_MODE=production` and rejects sandbox email/provider modes.
 - Replit Publish owns production schema application. API startup only starts the server and never migrates or seeds data.
 - Required production configuration: `DATABASE_URL` and `SESSION_SECRET` are managed secrets; `DB_SSL=true`, `CORS_ORIGINS`, and `API_RATE_LIMIT_STORE=postgres` are ordinary deployment settings.
 - Production startup rejects missing/unsafe configuration with a non-sensitive message. `CORS_ORIGINS` must be an HTTPS origin for the same private-pilot web app.

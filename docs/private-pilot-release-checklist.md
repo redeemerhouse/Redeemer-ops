@@ -14,11 +14,54 @@ client data until every required step is complete and the final smoke test is su
    The current development target is intentionally in this legacy state, so it is not a
    production-publish target until that operator-confirmed baseline is complete.
 
-## 2. Configuration
+## 2. Environment contract
+
+Every process must declare both its runtime identity and its database identity. The API and
+database scripts fail before writes or external provider activity when these values are missing,
+contradictory, or unsafe:
+
+| Runtime | `APP_ENVIRONMENT` | `DATABASE_TARGET` | `NODE_ENV` | Payment mode |
+| --- | --- | --- | --- | --- |
+| Development | `development` | `shared-development` | `development` | `disabled` or `sandbox` |
+| Isolated automated test | `test` | `disposable-test` | `test` (or production-equivalent test server) | `disabled` or `sandbox` |
+| Recovery drill | `recovery` | `disposable-recovery` | `test` or production-equivalent | `disabled` |
+| Production | `production` | `production` | `production` | `disabled` or `live` |
+
+Storage and email are declared separately: non-production uses `STORAGE_MODE=synthetic` and
+`EMAIL_MODE=disabled` (or `sandbox` for email); production uses
+`STORAGE_MODE=production` and `EMAIL_MODE=disabled` or `live`. Production storage cannot be
+synthetic, and sandbox/live email settings are rejected when incompatible with the selected
+environment.
+
+Disposable targets additionally require
+`DISPOSABLE_DATABASE_CONFIRMATION=create-and-drop-disposable-database`. Test and recovery
+database names must visibly identify themselves as disposable (for example `critical_workflow`,
+`recovery_drill`, or `recovery_restore`); production and client-looking identities are refused.
+`PAYMENT_PROVIDER_MODE=live` is refused outside production, while sandbox/test QuickBooks
+settings are refused during a production promotion. Never use a shared development database for
+automated tests or recovery drills.
+
+Pilot seed execution requires all of the following in addition to the isolated test contract:
+
+```sh
+ALLOW_PILOT_SEED=true
+PILOT_SEED_CONFIRMATION=synthetic-only-disposable-target
+```
+
+The seed also requires every business table to be empty and writes only synthetic names,
+`.invalid` email identities, and `555` test phone numbers. It cannot run against production,
+shared development, a non-empty database, or an unconfirmed target.
+
+## 3. Configuration
 
 Configure ordinary environment values in the deployment settings:
 
 - `NODE_ENV=production`
+- `APP_ENVIRONMENT=production`
+- `DATABASE_TARGET=production`
+- `PAYMENT_PROVIDER_MODE=disabled` until the live payment integration is approved
+- `STORAGE_MODE=production`
+- `EMAIL_MODE=disabled` until live delivery is approved
 - `PORT` (the artifact supplies the service port)
 - `DB_SSL=true` (requires certificate verification through the runtime's trusted CA store)
 - `CORS_ORIGINS=https://<the-private-pilot-web-origin>`
@@ -30,17 +73,18 @@ Configure these as managed secrets, without putting their values in source contr
 - `DATABASE_URL`
 - `SESSION_SECRET` (at least 32 characters)
 
-The API refuses to start if the database URL, TLS posture, session secret, rate-limit store,
-or HTTPS CORS origin is missing or unsafe. Startup messages name the missing setting but never
-include its value. `TRUST_PROXY=true` is required by the approved one-proxy deployment topology;
-an unset value does not stop startup, so the release audit must reject it explicitly.
+The API refuses to start if the environment contract, database URL, TLS posture, session secret,
+rate-limit store, or HTTPS CORS origin is missing or unsafe. Startup messages name the missing
+setting but never include its value. `TRUST_PROXY=true` is required by the approved one-proxy
+deployment topology; an unset value does not stop startup, so the release audit must reject it
+explicitly.
 
 
 ### Component environment matrix
 
 | Component | Setting | Classification | Failure behavior |
 | --- | --- | --- | --- |
-| API | `PORT`, `NODE_ENV`, `DB_SSL`, `CORS_ORIGINS`, `API_RATE_LIMIT_STORE`, `DATABASE_URL`, `SESSION_SECRET` | Required | Startup fails closed before listening when absent or unsafe. |
+| API | `APP_ENVIRONMENT`, `DATABASE_TARGET`, `PAYMENT_PROVIDER_MODE`, `STORAGE_MODE`, `EMAIL_MODE`, `PORT`, `NODE_ENV`, `DB_SSL`, `CORS_ORIGINS`, `API_RATE_LIMIT_STORE`, `DATABASE_URL`, `SESSION_SECRET` | Required | Startup fails closed before listening when absent, contradictory, or unsafe. |
 | API | `TRUST_PROXY` | Required for the reviewed Replit topology | Secure origin and client-address handling no longer matches the production proxy when omitted. |
 | API | `DB_POOL_*`, `DB_*_TIMEOUT_MS`, `API_*_LIMIT*`, `API_REQUEST_TIMEOUT_MS` | Optional tuning | Reviewed bounded defaults apply. |
 | Web build | `PORT`, `BASE_PATH` | Required by the artifact; build defaults are `24336` and `/` | Development/preview startup fails clearly if omitted; the production artifact supplies both. |
@@ -49,9 +93,10 @@ an unset value does not stop startup, so the release audit must reject it explic
 | QuickBooks | `QUICKBOOKS_API_KEY` | Optional, feature not launched | No startup dependency in the current private-pilot API. |
 | Connector-backed services | `CONNECTORS_HOSTNAME` / `REPLIT_CONNECTORS_HOSTNAME` | Degraded service where used | Core database/auth startup remains independent; connector calls fail explicitly. |
 
-## 3. Release and migration
+## 4. Release and migration
 
-1. Run `pnpm run release:verify` after configuring `DATABASE_URL`. This is the complete
+1. Run `pnpm run release:verify` after configuring `DATABASE_URL`, `APP_ENVIRONMENT=production`,
+   `DATABASE_TARGET=production`, and the approved `PAYMENT_PROVIDER_MODE`. This is the complete
    pre-publish gate: it runs `codegen:check`, the deployable production builds, the database
    release check, and the security release gate.
 2. If a phase needs to be isolated, use the same commands used by the root build:
@@ -85,7 +130,7 @@ Preserve the first API process line before the repeated router health errors:
 
 See `docs/api-publish-health-debugging-report.md` for the captured failure and correction.
 
-## 4. Health and smoke test
+## 5. Health and smoke test
 
 Before publish, run the production-equivalent API acceptance path from the repository root:
 
@@ -93,6 +138,11 @@ Before publish, run the production-equivalent API acceptance path from the repos
 pnpm install --frozen-lockfile
 NODE_ENV=production pnpm --filter @workspace/api-server run build
 NODE_ENV=production \
+  APP_ENVIRONMENT=production \
+  DATABASE_TARGET=production \
+  PAYMENT_PROVIDER_MODE=disabled \
+  STORAGE_MODE=production \
+  EMAIL_MODE=disabled \
   PORT=8080 \
   DB_SSL=true \
   CORS_ORIGINS=https://redeemerhouse.replit.app,https://app.redeemerhouse.com \
@@ -142,6 +192,7 @@ Record the date, commit, environment, and pass/fail result without secret values
 | Check | Required result | Recorded result |
 | --- | --- | --- |
 | `pnpm install --frozen-lockfile` | Exact lockfile install succeeds | PASS — 2026-09-01 |
+| Environment contract and provider mode checks | Declared runtime/target pair is accepted; contradictory or unsafe payment/database settings fail closed | PASS — automated contract suite |
 | API production build | Deployable bundle succeeds | PASS — 2026-09-01 |
 | Web production build | Static production build succeeds | PASS — 2026-09-01 |
 | Bind supplied port on `0.0.0.0` | Listener opens and remains up | PASS — 2026-09-01 |
@@ -161,7 +212,7 @@ or manual migration-ledger edits as a shortcut.
 Use synthetic IDs and non-client test data for smoke tests. Never paste secrets, tokens, raw
 responses, resident notes, payment values, or document contents into the operator log.
 
-## 5. Shutdown and rollback
+## 6. Shutdown and rollback
 
 1. Stop the release candidate with `SIGTERM` and confirm the API closes its listener and
    PostgreSQL pool before the ten-second shutdown deadline.
@@ -171,18 +222,27 @@ responses, resident notes, payment values, or document contents into the operato
    forward migration after reconciling writes. Do not drop tables or delete operational data.
 
 
-## 6. Disposable recovery drill
+## 7. Disposable recovery drill
 
 Run the recovery drill before the private pilot and after changing the migration, backup, restore,
 or shutdown procedure:
 
 ```sh
+RECOVERY_DRILL_DATABASE_URL="$RECOVERY_DRILL_DATABASE_URL" \
+RECOVERY_DRILL_DATABASE_CONFIRMATION=use-non-client-disposable-server \
+APP_ENVIRONMENT=recovery \
+DATABASE_TARGET=disposable-recovery \
+DISPOSABLE_DATABASE_CONFIRMATION=create-and-drop-disposable-database \
+PAYMENT_PROVIDER_MODE=disabled \
+RELEASE_PROMOTION=recovery \
 pnpm run test:db-release-check
 ```
 
-`DATABASE_URL` must point to a non-client PostgreSQL server where the test role may create and
-drop databases. PostgreSQL `pg_dump` and `pg_restore` must be available. The drill never restores
-over the configured database. It creates uniquely named disposable source and restore databases,
+`RECOVERY_DRILL_DATABASE_URL` must point to a non-client PostgreSQL server where the test role may
+create and drop databases, and the exact confirmation above is required. Do not reuse the
+application's shared-development `DATABASE_URL`. PostgreSQL `pg_dump` and `pg_restore` must be
+available. The drill never restores over the configured server's database. It creates uniquely
+named disposable source and restore databases,
 uses synthetic `.invalid` fixture data only, and removes the databases and temporary custom-format
 backup afterward.
 
@@ -209,13 +269,15 @@ The drill:
    and PostgreSQL rate-limit settings; confirms health; sends `SIGTERM`; proves all business-table
    counts are unchanged; and proves the migration ledger was not reversed.
 
-Passing output records only the recovery point, migration counts, synthetic row count, restore and
-verification status, candidate and compatible revision IDs, shutdown result, and the fact that no
-reverse migration was attempted. It must not print database URLs, credentials, fixture values,
-resident data, or backup contents. Treat a skipped test as no evidence: provision a disposable
+Passing output records only the declared environment/target labels, recovery point, migration
+counts, synthetic row count, restore and verification status, candidate and compatible revision
+IDs, shutdown result, and the fact that no reverse migration was attempted. It must not print
+database URLs, credentials, fixture values, resident data, payment payloads, provider
+credentials, or backup contents. Failure output is count-only for database contents and must not
+include SQL values or row payloads. Treat a skipped test as no evidence: provision a disposable
 PostgreSQL target and rerun it.
 
-## 7. Incident response
+## 8. Incident response
 
 For unauthorized access, cross-house disclosure, payment tampering, malware bypass, export
 leakage, or unsafe notifications: contain access, preserve correlation IDs and audit evidence,

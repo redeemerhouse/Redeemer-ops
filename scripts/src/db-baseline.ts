@@ -8,6 +8,7 @@ import {
   inspectDatabaseSchema,
   type DrizzleSnapshot,
 } from "./db-schema-drift.js";
+import { assertEnvironmentContract } from "./environment-contract.js";
 
 const { Pool } = pg;
 
@@ -1492,6 +1493,17 @@ const main = async () => {
   const { target, through, evidenceManifest } = parseArguments();
   const selectedTarget = target!;
   const targetFromUrl = connectionIdentity(process.env.DATABASE_URL!);
+  const promotion = process.env.RELEASE_PROMOTION;
+  if (promotion !== "test" && promotion !== "recovery" && promotion !== "production") {
+    fail(
+      "RELEASE_PROMOTION must be explicitly set to test, recovery, or production",
+    );
+  }
+  const promotionMode = promotion as "test" | "recovery" | "production";
+  const environmentContract = assertEnvironmentContract(process.env, promotionMode);
+  if (environmentContract.databaseName !== targetFromUrl.databaseName) {
+    fail("the environment contract database identity does not match DATABASE_URL");
+  }
   if (selectedTarget !== targetFromUrl.display) {
     fail(
       `--target must exactly match the connected database identity "${targetFromUrl.display}"`,

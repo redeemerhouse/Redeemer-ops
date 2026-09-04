@@ -3,6 +3,12 @@ set -Eeuo pipefail
 export PGSSLROOTCERT="${PGSSLROOTCERT:-system}"
 
 ROOT_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
+export APP_ENVIRONMENT=test
+export DATABASE_TARGET=disposable-test
+export DISPOSABLE_DATABASE_CONFIRMATION=create-and-drop-disposable-database
+export PAYMENT_PROVIDER_MODE=disabled
+export STORAGE_MODE=synthetic
+export EMAIL_MODE=disabled
 ADMIN_URL="${TEST_DATABASE_ADMIN_URL:-}"
 CONFIRMATION="${INITIAL_ADMIN_TEST_DB_CONFIRM:-}"
 DB_NAME="initial_admin_bootstrap_test_${USER:-runner}_$$_${RANDOM}"
@@ -46,7 +52,7 @@ node - "$ADMIN_URL" <<'NODE' || fail "Database URL is not safe for disposable te
 const url = new URL(process.argv[2]);
 if (!["postgres:", "postgresql:"].includes(url.protocol)) process.exit(1);
 const identity = `${url.hostname}/${url.pathname}`.toLowerCase();
-if (/(^|[-_.\/])(prod|production|live)([-_.\/]|$)/.test(identity)) process.exit(1);
+if (/(^|[-_.\/])(prod|production|live|dev|development|shared)([-_.\/]|$)/.test(identity)) process.exit(1);
 NODE
 
 command -v createdb >/dev/null || fail "createdb is required."
@@ -65,7 +71,7 @@ start_server() {
   local log_name="$2"
   DATABASE_URL="$TEST_DATABASE_URL" SESSION_SECRET="bootstrap-session-secret-0000000000000000" \
     INITIAL_ADMIN_SETUP_TOKEN="$setup_code" NODE_ENV=test PORT="$PORT_NUMBER" \
-    API_RATE_LIMIT_STORE=memory \
+    API_RATE_LIMIT_STORE=memory CORS_ORIGINS="https://pilot.redeemer.invalid" \
     node "$ROOT_DIR/artifacts/api-server/dist/index.mjs" >"$TEMP_DIR/$log_name" 2>&1 &
   SERVER_PID=$!
 
