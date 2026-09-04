@@ -17,14 +17,25 @@ import { useQueryClient } from '@tanstack/react-query';
 import { AppShell } from '@/components/app-shell';
 import { QueryState, StatusBadge, useDisclosure, Modal, Field, SelectField, SubmitButton } from '@/components/ui-primitives';
 const money = (value: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value);
-const date = (value: string) => new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(value));
+const date = (value: string | Date | null | undefined, fallback = 'Date unavailable') => {
+  if (!value) return fallback;
+  const parsed = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(parsed.getTime())) return fallback;
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(parsed);
+};
 
 const weekRange = (startsOn: string, endsOn: string) => {
   const lastDay = new Date(`${endsOn}T00:00:00Z`);
+  if (Number.isNaN(lastDay.getTime())) return date(startsOn);
   lastDay.setUTCDate(lastDay.getUTCDate() - 1);
-  return `${date(startsOn)} – ${date(lastDay.toISOString())}`;
+  return `${date(startsOn)} – ${date(lastDay)}`;
 };
-const calendarDate = (value: string) => new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(new Date(value));
+const calendarDate = (value: string | null | undefined) => {
+  if (!value) return 'Date unavailable';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return 'Date unavailable';
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(parsed);
+};
 
 export default function Dashboard() {
   const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
@@ -264,7 +275,7 @@ export default function Dashboard() {
                               </div>
                               <div className="min-w-0 flex-1">
                                 <div className="truncate text-sm font-extrabold">{resident.name}</div>
-                                <div className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">{resident.status === 'pending' ? 'Move-in preparation' : resident.notes || `Next payment ${date(resident.nextPaymentDate)}`}</div>
+                                <div className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">{resident.status === 'pending' ? 'Move-in preparation' : resident.notes || (resident.nextPaymentDate ? `Next payment ${date(resident.nextPaymentDate)}` : 'No payment scheduled')}</div>
                               </div>
                               <StatusBadge status={resident.status} />
                               <ArrowUpRight size={15} className="text-[hsl(var(--muted-foreground))]" />

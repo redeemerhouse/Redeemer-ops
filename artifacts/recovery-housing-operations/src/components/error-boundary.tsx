@@ -63,9 +63,13 @@ export class ErrorBoundary extends Component<
   }
 
   componentDidCatch(error: unknown, info: ErrorInfo): void {
-    void error;
-    void info;
-    console.error('UI error captured');
+    const captured = toError(error);
+    console.error('UI error captured', {
+      name: captured.name,
+      message: captured.message,
+      stack: captured.stack,
+      componentStack: info.componentStack,
+    });
   }
 
   componentDidUpdate(prevProps: ErrorBoundaryProps): void {
