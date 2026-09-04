@@ -48,6 +48,10 @@ const migrationJournal = JSON.parse(
 };
 const checkedInMigrations = migrationJournal.entries ?? [];
 const checkedInMigrationCount = checkedInMigrations.length;
+const documentOwnershipConstraintMigrationIndex = checkedInMigrations.findIndex(
+  (entry) => entry.tag === "0008_tired_anita_blake",
+);
+assert.ok(documentOwnershipConstraintMigrationIndex > 0);
 const migrationDirectory = resolve(root, "lib/db/drizzle");
 const compatibleApplicationRevision =
   process.env.RECOVERY_DRILL_COMPATIBLE_REVISION ??
@@ -531,7 +535,10 @@ test(
     try {
       await adminPool.query(`CREATE DATABASE ${quoteIdentifier(databaseName)}`);
       databaseCreated = true;
-      await applyMigrationPrefix(testUrl, checkedInMigrationCount - 1);
+      await applyMigrationPrefix(
+        testUrl,
+        documentOwnershipConstraintMigrationIndex,
+      );
       await queryDatabase(testUrl, `
         INSERT INTO documents (title, category, visibility, status)
         VALUES ('INVALID_FIXTURE_VALUE', 'fixture', 'staff', 'requested')
@@ -558,7 +565,7 @@ test(
           testUrl,
           `SELECT count(*)::text AS count FROM "drizzle"."__drizzle_migrations"`,
         ),
-        [{ count: String(checkedInMigrationCount - 1) }],
+        [{ count: String(documentOwnershipConstraintMigrationIndex) }],
       );
     } finally {
       if (databaseCreated) {
