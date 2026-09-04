@@ -228,7 +228,7 @@ const runApplicationAndShutdown = async (
       env: {
         ...process.env,
         DATABASE_URL: databaseUrl,
-        NODE_ENV: "production",
+        NODE_ENV: "test",
         APP_ENVIRONMENT: "recovery",
         DATABASE_TARGET: "disposable-recovery",
         DISPOSABLE_DATABASE_CONFIRMATION:
