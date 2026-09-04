@@ -23,6 +23,7 @@ export interface SignInProps {
   login: (email: string, password: string) => Promise<string>;
   register: (input: z.infer<typeof registerSchema>) => Promise<string>;
   requestPasswordReset: (email: string) => Promise<string>;
+  requestEmailVerification: (email: string) => Promise<string>;
   verifyEmail: (token: string) => Promise<string>;
   resetPassword: (token: string, password: string) => Promise<string>;
   provisionInitialAdmin: (input: z.infer<typeof setupSchema>) => Promise<string>;
@@ -66,6 +67,7 @@ export default function SignIn({
   login,
   register,
   requestPasswordReset,
+  requestEmailVerification,
   verifyEmail,
   resetPassword,
   provisionInitialAdmin,
@@ -93,6 +95,7 @@ export default function SignIn({
     defaultValues: { email: '' },
   });
   const verifyForm = useForm<z.infer<typeof codeSchema>>({ resolver: zodResolver(codeSchema), defaultValues: { token: '' } });
+  const resendVerificationForm = useForm<z.infer<typeof forgotSchema>>({ resolver: zodResolver(forgotSchema), defaultValues: { email: '' } });
   const resetForm = useForm<z.infer<typeof resetSchema>>({ resolver: zodResolver(resetSchema), defaultValues: { token: '', password: '' } });
 
   const onSignIn = async (values: z.infer<typeof signinSchema>) => {
@@ -169,6 +172,18 @@ export default function SignIn({
       setView('signin');
     } catch (err: unknown) {
       toast({ title: 'Verification failed', description: err instanceof Error ? err.message : 'The code is invalid or expired.', variant: 'destructive' });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+  const onResendVerification = async (values: z.infer<typeof forgotSchema>) => {
+    setIsSubmitting(true);
+    try {
+      const msg = await requestEmailVerification(values.email);
+      toast({ title: 'Verification requested', description: msg });
+      resendVerificationForm.reset();
+    } catch (err: unknown) {
+      toast({ title: 'Verification request failed', description: err instanceof Error ? err.message : 'The verification email could not be requested.', variant: 'destructive' });
     } finally {
       setIsSubmitting(false);
     }
@@ -565,6 +580,12 @@ export default function SignIn({
                   <Form {...verifyForm}><form onSubmit={verifyForm.handleSubmit(onVerify)} className="space-y-4">
                     <FormField control={verifyForm.control} name="token" render={({ field }) => <FormItem><FormLabel>Verification code</FormLabel><FormControl><Input autoComplete="one-time-code" data-testid="input-verification-code" {...field} /></FormControl><FormMessage /></FormItem>} />
                     <Button type="submit" className="h-11 w-full" disabled={isSubmitting} data-testid="button-submit-verification">{isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Verifying...</> : 'Verify Email'}</Button>
+                  </form></Form>
+                  <div className="my-6 border-t border-border/60" />
+                  <p className="mb-3 text-sm text-muted-foreground">Didn’t receive the email? Request a new one for the account you already created.</p>
+                  <Form {...resendVerificationForm}><form onSubmit={resendVerificationForm.handleSubmit(onResendVerification)} className="space-y-3">
+                    <FormField control={resendVerificationForm.control} name="email" render={({ field }) => <FormItem><FormLabel>Account email</FormLabel><FormControl><Input type="email" autoComplete="email" data-testid="input-resend-verification-email" {...field} /></FormControl><FormMessage /></FormItem>} />
+                    <Button type="submit" variant="outline" className="h-11 w-full" disabled={isSubmitting} data-testid="button-resend-verification">{isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Requesting...</> : 'Resend Verification Email'}</Button>
                   </form></Form>
                   <button type="button" onClick={() => setView('signin')} className="mt-8 w-full text-sm font-medium text-muted-foreground hover:text-foreground" data-testid="link-verification-back">Back to sign in</button>
                 </motion.div>

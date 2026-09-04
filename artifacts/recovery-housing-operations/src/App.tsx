@@ -105,10 +105,10 @@ function App() {
 }
 
 function AuthenticatedApp() {
-  const { status, login, register, requestPasswordReset, verifyEmail, resetPassword, provisionInitialAdmin, user, logout } = useAuth();
+  const { status, login, register, requestPasswordReset, requestEmailVerification, verifyEmail, resetPassword, provisionInitialAdmin, user, logout } = useAuth();
 
   if (status === 'checking') return <AuthLoading />;
-  if (status === 'unauthenticated') return <TooltipProvider><SignIn login={login} register={register} requestPasswordReset={requestPasswordReset} verifyEmail={verifyEmail} resetPassword={resetPassword} provisionInitialAdmin={provisionInitialAdmin} /><Toaster /></TooltipProvider>;
+  if (status === 'unauthenticated') return <TooltipProvider><SignIn login={login} register={register} requestPasswordReset={requestPasswordReset} requestEmailVerification={requestEmailVerification} verifyEmail={verifyEmail} resetPassword={resetPassword} provisionInitialAdmin={provisionInitialAdmin} /><Toaster /></TooltipProvider>;
   if (status === 'error') return <SessionError onRetry={() => window.location.reload()} />;
 
   if (user?.accountStatus === 'pending') {

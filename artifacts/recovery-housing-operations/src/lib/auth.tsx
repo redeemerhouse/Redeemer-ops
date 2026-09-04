@@ -37,6 +37,7 @@ type AuthContextValue = AuthState & {
   logout: () => Promise<void>;
   register: (input: RegistrationInput) => Promise<string>;
   requestPasswordReset: (email: string) => Promise<string>;
+  requestEmailVerification: (email: string) => Promise<string>;
   verifyEmail: (token: string) => Promise<string>;
   resetPassword: (token: string, password: string) => Promise<string>;
   provisionInitialAdmin: (input: InitialAdminSetupInput) => Promise<string>;
@@ -159,6 +160,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!response.ok) throw new Error('The recovery request could not be submitted.');
     return data.message || 'If an eligible account exists, password reset instructions will be sent.';
   }, [authRequest]);
+  const requestEmailVerification = useCallback(async (email: string) => {
+    const { response, data } = await authRequest('/verification/request', { email });
+    if (!response.ok) throw new Error(data.error || 'The verification email could not be requested.');
+    return data.message || 'If an eligible account exists, verification instructions will be sent.';
+  }, [authRequest]);
   const verifyEmail = useCallback(async (token: string) => {
     const { response, data } = await authRequest('/verify-email', { token });
     if (!response.ok) throw new Error(data.error || 'The verification code is invalid or expired.');
@@ -176,7 +182,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return data.message || 'Initial administrator created. Sign in to continue.';
   }, [authRequest]);
 
-  const value = useMemo(() => ({ ...state, login, logout, register, requestPasswordReset, verifyEmail, resetPassword, provisionInitialAdmin }), [login, logout, provisionInitialAdmin, register, requestPasswordReset, resetPassword, state, verifyEmail]);
+  const value = useMemo(() => ({ ...state, login, logout, register, requestPasswordReset, requestEmailVerification, verifyEmail, resetPassword, provisionInitialAdmin }), [login, logout, provisionInitialAdmin, register, requestEmailVerification, requestPasswordReset, resetPassword, state, verifyEmail]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
