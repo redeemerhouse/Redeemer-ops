@@ -19,3 +19,4 @@
 - [Playwright on Replit Nix](playwright-replit-nix.md) — browser tests need both the Playwright browser download and explicit Nix shared-library packages.
 - [Authentication lifecycle test limits](auth-lifecycle-test-limits.md) — isolate general mutation ceilings from credential-attempt limits in concentrated lifecycle suites.
 - [Baseline recovery evidence](baseline-recovery-evidence.md) — migration adoption requires retained encrypted backup proof bound to the exact target and migration boundary.
+- [Bootstrap availability invariant](bootstrap-availability-invariant.md) — first-owner setup status and provisioning must use the same secret-usability rule.

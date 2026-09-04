@@ -8,6 +8,7 @@
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "test:rate-limit": "node --experimental-strip-types --test test/security-rate-limit.test.ts",
+    "test:initial-admin-bootstrap": "pnpm run build && bash test/initial-admin-bootstrap-integration.sh",
     "test:auth-lifecycle": "pnpm run build && bash test/auth-lifecycle-integration.sh",
     "test:authorization": "node --test test/authorization.test.mjs",
     "test:reports": "node --test test/report-exports.test.mjs",

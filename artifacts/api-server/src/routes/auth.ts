@@ -212,9 +212,14 @@ async function canManageAccount(
   return true;
 }
 
+function bootstrapTokenConfigured(): boolean {
+  const configured = process.env.INITIAL_ADMIN_SETUP_TOKEN;
+  return Boolean(configured && configured.length >= 16);
+}
+
 function validBootstrapToken(value: string | undefined): boolean {
   const configured = process.env.INITIAL_ADMIN_SETUP_TOKEN;
-  if (!configured || configured.length < 16 || !value) return false;
+  if (!bootstrapTokenConfigured() || !configured || !value) return false;
   const expected = Buffer.from(configured);
   const received = Buffer.from(value);
   return expected.length === received.length && timingSafeEqual(expected, received);
@@ -222,7 +227,7 @@ function validBootstrapToken(value: string | undefined): boolean {
 
 router.get("/auth/bootstrap", async (_req, res) => {
   const [existing] = await db.select({ id: authAccountsTable.id }).from(authAccountsTable).limit(1);
-  res.json({ available: !existing && Boolean(process.env.INITIAL_ADMIN_SETUP_TOKEN?.trim()) });
+  res.json({ available: !existing && bootstrapTokenConfigured() });
 });
 
 router.post("/auth/bootstrap", async (req, res) => {
