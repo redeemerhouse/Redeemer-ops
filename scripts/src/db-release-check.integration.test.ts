@@ -237,7 +237,7 @@ const runApplicationAndShutdown = async (
         STORAGE_MODE: "synthetic",
         EMAIL_MODE: "disabled",
         PORT: String(port),
-        DB_SSL: "true",
+        DB_SSL: "false",
         API_RATE_LIMIT_STORE: "postgres",
         CORS_ORIGINS: "https://recovery-drill.example.invalid",
         SESSION_SECRET:

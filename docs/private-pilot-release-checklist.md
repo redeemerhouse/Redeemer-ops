@@ -269,12 +269,12 @@ The drill:
 5. runs `db:release-check` on the restored prefix to reconcile it forward;
 6. compares only synthetic row counts and a one-way fingerprint, then verifies the complete
    migration ledger and committed catalog snapshot;
-7. builds and starts the current release-candidate revision, sends `SIGTERM`, and confirms a clean
-   exit; and
+7. builds and starts the current release-candidate revision against the isolated loopback
+   PostgreSQL service with database TLS disabled, sends `SIGTERM`, and confirms a clean exit; and
 8. separately checks out, installs, builds, and starts the selected compatible revision against
-   the same forward-migrated schema with production-equivalent TLS, HTTPS CORS, session-secret,
-   and PostgreSQL rate-limit settings; confirms health; sends `SIGTERM`; proves all business-table
-   counts are unchanged; and proves the migration ledger was not reversed.
+   the same forward-migrated schema with the same isolated database transport, HTTPS CORS,
+   session-secret, and PostgreSQL rate-limit settings; confirms health; sends `SIGTERM`; proves all
+   business-table counts are unchanged; and proves the migration ledger was not reversed.
 
 Passing output records only the declared environment/target labels, migration counts, synthetic
 row count, restore and verification status, shutdown status, and a zero reverse-migration count.
