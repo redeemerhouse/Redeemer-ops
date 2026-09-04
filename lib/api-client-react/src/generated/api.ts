@@ -412,7 +412,7 @@ export const getProvisionInitialAdminUrl = () => {
 }
 
 /**
- * Uses a dedicated managed setup secret and an atomic empty-account check. Permanently closes after the first account is created.
+ * Uses a dedicated managed setup secret and an atomic account-state check. It can create the first owner or recover exactly one unverified, unassigned pending account when the same email and password are supplied, then closes permanently.
  * @summary Provision the first owner administrator
  */
 export const provisionInitialAdmin = async (initialAdminSetupInput: InitialAdminSetupInput, options?: Parameters<typeof customFetch>[1]): Promise<AuthMessage> => {

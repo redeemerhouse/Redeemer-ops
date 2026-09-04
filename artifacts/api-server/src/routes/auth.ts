@@ -225,9 +225,19 @@ function validBootstrapToken(value: string | undefined): boolean {
   return expected.length === received.length && timingSafeEqual(expected, received);
 }
 
+function isRecoverableInitialAccount(account: typeof authAccountsTable.$inferSelect): boolean {
+  return account.accountStatus === "pending"
+    && account.role === null
+    && account.emailVerifiedAt === null
+    && account.approvedAt === null
+    && account.deactivatedAt === null;
+}
+
 router.get("/auth/bootstrap", async (_req, res) => {
-  const [existing] = await db.select({ id: authAccountsTable.id }).from(authAccountsTable).limit(1);
-  res.json({ available: !existing && bootstrapTokenConfigured() });
+  const accounts = await db.select().from(authAccountsTable).limit(2);
+  const recoverable = accounts.length === 0
+    || (accounts.length === 1 && isRecoverableInitialAccount(accounts[0]));
+  res.json({ available: recoverable && bootstrapTokenConfigured() });
 });
 
 router.post("/auth/bootstrap", async (req, res) => {
@@ -248,10 +258,45 @@ router.post("/auth/bootstrap", async (req, res) => {
   const passwordHash = await hashPassword(password);
   const now = new Date();
   ensureRequestActive(req);
-  const accountId = await db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(${BOOTSTRAP_LOCK_ID})`);
-    const [existing] = await tx.select({ id: authAccountsTable.id }).from(authAccountsTable).limit(1);
-    if (existing) return null;
+    const accounts = await tx.select().from(authAccountsTable).limit(2);
+    if (accounts.length === 1) {
+      const existing = accounts[0];
+      const passwordMatches = await verifyPassword(password, existing.passwordHash);
+      if (!isRecoverableInitialAccount(existing)
+        || existing.email !== normalized
+        || !passwordMatches) return null;
+      const [adopted] = await tx.update(authAccountsTable)
+        .set({
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          role: "owner_admin",
+          accountStatus: "active",
+          emailVerifiedAt: now,
+          approvedAt: now,
+          updatedAt: now,
+        })
+        .where(and(
+          eq(authAccountsTable.id, existing.id),
+          eq(authAccountsTable.accountStatus, "pending"),
+          isNull(authAccountsTable.role),
+          isNull(authAccountsTable.emailVerifiedAt),
+          isNull(authAccountsTable.approvedAt),
+          isNull(authAccountsTable.deactivatedAt),
+        ))
+        .returning({ id: authAccountsTable.id });
+      if (!adopted) return null;
+      await tx.update(authActionTokensTable)
+        .set({ usedAt: now })
+        .where(and(
+          eq(authActionTokensTable.accountId, adopted.id),
+          eq(authActionTokensTable.type, "email_verification"),
+          isNull(authActionTokensTable.usedAt),
+        ));
+      return { accountId: adopted.id, adopted: true };
+    }
+    if (accounts.length > 1) return null;
     const [created] = await tx.insert(authAccountsTable).values({
       email: normalized,
       firstName: firstName.trim(),
@@ -263,14 +308,18 @@ router.post("/auth/bootstrap", async (req, res) => {
       approvedAt: now,
     }).returning({ id: authAccountsTable.id });
     ensureRequestActive(req);
-    return created.id;
+    return { accountId: created.id, adopted: false };
   });
-  if (!accountId) {
+  if (!result) {
     res.status(409).json({ error: "Initial administrator provisioning is not available." });
     return;
   }
-  await audit(req, "auth.initial_owner_provisioned", accountId, "success", String(accountId));
-  res.status(201).json({ message: "Initial owner administrator provisioned. Sign in to continue." });
+  await audit(req, result.adopted ? "auth.initial_owner_recovered" : "auth.initial_owner_provisioned", result.accountId, "success", String(result.accountId));
+  res.status(201).json({
+    message: result.adopted
+      ? "Your pending account is now the owner administrator. Sign in to continue."
+      : "Initial owner administrator provisioned. Sign in to continue.",
+  });
 });
 
 router.post("/auth/register", async (req, res) => {
@@ -334,9 +383,11 @@ router.post("/auth/register", async (req, res) => {
     }
     throw unavailable("database", "Account registration is temporarily unavailable.");
   }
+  let emailDelivered = false;
   if (delivery) {
     try {
       await sendVerificationEmail(normalized, delivery.token);
+      emailDelivered = true;
       req.log.info({ accountId: delivery.accountId, actionTokenType: "email_verification" }, "Account verification delivered");
     } catch (error) {
       req.log.error({
@@ -348,7 +399,9 @@ router.post("/auth/register", async (req, res) => {
     }
   }
   res.status(202).json({
-    message: "Account created. Check your email to verify it, then an administrator will assign your access.",
+    message: emailDelivered
+      ? "Account created. Check your email to verify it, then an administrator will assign your access."
+      : "Account created, but the verification email could not be sent. Use Resend Verification Email after email delivery is restored.",
   });
 });
 
@@ -429,6 +482,15 @@ router.post("/auth/login", async (req, res) => {
   const passwordMatches = typeof password === "string"
     ? await verifyPassword(password, account?.passwordHash ?? DUMMY_PASSWORD_HASH)
     : await verifyPassword("", DUMMY_PASSWORD_HASH);
+  if (account && passwordMatches && !account.emailVerifiedAt) {
+    await audit(req, "auth.login", account.id, "failure");
+    res.status(403).json({
+      error: account.role === null && account.accountStatus === "pending"
+        ? "This account is awaiting email verification. If this is the first administrator account, use Initial Administrator Setup with the same email and password."
+        : "This account is awaiting email verification. Request a new verification email before signing in.",
+    });
+    return;
+  }
   const allowed = Boolean(
     account
     && passwordMatches

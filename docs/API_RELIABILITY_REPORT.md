@@ -31,6 +31,7 @@ Legend: **P** public, **A** authenticated, **Admin** administrator only, **HM** 
 | GET `/healthz` | P | Generated response | 200 JSON | No dependency; no write | reliability + resilience |
 | GET `/readyz` | P | Generated response | 200 or 503 JSON; no-store/retry hint | Coalesced cached DB/rate-store probes; no write | reliability + resilience |
 | GET `/auth/session` | A | Generated response | 401 Problem; 200 no-store/private | Session lookup/touch; only one effective declaration | reliability + authorization |
+| GET `/auth/bootstrap` | P | Generated response | 200 no-store/private | Reports only whether guarded initial-owner setup or sole-pending-account recovery is available | reliability + initial-admin bootstrap |
 | POST `/auth/bootstrap` | P + bootstrap secret | Hand validation; bounded message | 403/409 Problem, 201 | Advisory lock prevents duplicate owner bootstrap | reliability + auth lifecycle |
 | POST `/auth/register` | P | Generated shape + password/name rules; bounded message | 400/409 Problem, 202 | Transactional pending account/token/audit; duplicate email is explicit; retry may conflict | reliability + auth lifecycle |
 | POST `/auth/verification/request` | P | Safe body; bounded message | Always 202 anti-enumeration | Token replacement/email/audit; delivery failure concealed | reliability + auth lifecycle |
@@ -93,7 +94,7 @@ Legend: **P** public, **A** authenticated, **Admin** administrator only, **HM** 
 
 ## Mounted versus supported contract surface
 
-The baseline found 58 effective route declarations and no shadowed duplicate declaration. `/auth/session` exists once and is self-authenticated before the protected-prefix mount.
+The baseline found 63 effective route declarations and no shadowed duplicate declaration. `/auth/session` exists once and is self-authenticated before the protected-prefix mount.
 
 OpenAPI currently describes the supported generated-client surface: health/readiness/session, dashboard, residents, assessments, resident import, payments, activity, houses, expenses, income, meetings, and reports. The following mounted operational/admin routes are intentionally not generated-client operations and must not be mistaken for anonymous or unsupported routes: account bootstrap/register/login/recovery/admin management, applications, document metadata/history, generic operations, report summary, and object-storage URL/stream endpoints. The reliability harness inventories both sets and fails when the expected distinction changes without this report and its allowlist changing together.
 

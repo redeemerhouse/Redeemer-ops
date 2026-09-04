@@ -362,7 +362,7 @@ export default function SignIn({
                 <motion.div key="setup" variants={containerVariants} initial="hidden" animate="visible" exit="exit" data-testid="view-initial-admin-setup">
                   <div className="mb-6">
                     <h2 className="text-2xl font-semibold text-foreground display-serif">Initial Administrator Setup</h2>
-                    <p className="text-sm text-muted-foreground mt-1">Use the one-time setup code stored in Replit Secrets. This closes permanently after the first account is created.</p>
+                    <p className="text-sm text-muted-foreground mt-1">Use the one-time setup code stored in Replit Secrets. If your first registration is stuck awaiting verification, enter that same email and password here to recover it as the owner administrator.</p>
                   </div>
                   <Form {...setupForm}>
                     <form onSubmit={setupForm.handleSubmit(onSetup)} className="space-y-4">

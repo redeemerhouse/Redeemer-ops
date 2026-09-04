@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
+export PGSSLROOTCERT="${PGSSLROOTCERT:-system}"
 
 ROOT_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
 ADMIN_URL="${TEST_DATABASE_ADMIN_URL:-}"
@@ -98,6 +99,40 @@ status="$(
 [[ "$status" == "403" ]] || fail "Incorrect setup code was not rejected."
 [[ "$(psql "$TEST_DATABASE_URL" -qAtc 'select count(*) from auth_accounts;')" == "0" ]] ||
   fail "Incorrect setup code created an account."
+
+status="$(
+  curl -sS -o "$TEMP_DIR/register-stranded.json" -w '%{http_code}' \
+    -H 'content-type: application/json' \
+    -d "{\"firstName\":\"Pending\",\"lastName\":\"Owner\",\"email\":\"pending-owner@redeemer.invalid\",\"password\":\"$PASSWORD\",\"passwordConfirmation\":\"$PASSWORD\"}" \
+    "$BASE_URL/auth/register"
+)"
+[[ "$status" == "202" ]] || fail "Could not create the pending account recovery fixture."
+curl -fsS "$BASE_URL/auth/bootstrap" >"$TEMP_DIR/bootstrap-recovery-available.json"
+node -e 'const body=require(process.argv[1]); if (body.available !== true) process.exit(1)' \
+  "$TEMP_DIR/bootstrap-recovery-available.json" || fail "Setup was not available for exactly one recoverable pending account."
+
+status="$(
+  curl -sS -o "$TEMP_DIR/bootstrap-recovery-wrong-password.json" -w '%{http_code}' \
+    -H 'content-type: application/json' \
+    -d "{\"firstName\":\"Pending\",\"lastName\":\"Owner\",\"email\":\"pending-owner@redeemer.invalid\",\"password\":\"WrongPassword123\",\"passwordConfirmation\":\"WrongPassword123\",\"setupCode\":\"$SETUP_CODE\"}" \
+    "$BASE_URL/auth/bootstrap"
+)"
+[[ "$status" == "409" ]] || fail "Pending-account recovery accepted the wrong password."
+[[ "$(psql "$TEST_DATABASE_URL" -qAtc "select account_status || ':' || coalesce(role, 'unassigned') from auth_accounts where email='pending-owner@redeemer.invalid';")" == "pending:unassigned" ]] ||
+  fail "A failed recovery attempt changed the pending account."
+
+status="$(
+  curl -sS -o "$TEMP_DIR/bootstrap-recovery.json" -w '%{http_code}' \
+    -H 'content-type: application/json' \
+    -d "{\"firstName\":\"Recovered\",\"lastName\":\"Owner\",\"email\":\"pending-owner@redeemer.invalid\",\"password\":\"$PASSWORD\",\"passwordConfirmation\":\"$PASSWORD\",\"setupCode\":\"$SETUP_CODE\"}" \
+    "$BASE_URL/auth/bootstrap"
+)"
+[[ "$status" == "201" ]] || fail "Valid pending-account recovery was rejected."
+[[ "$(psql "$TEST_DATABASE_URL" -qAtc "select account_status || ':' || role || ':' || (email_verified_at is not null)::text from auth_accounts where email='pending-owner@redeemer.invalid';")" == "active:owner_admin:true" ]] ||
+  fail "Pending-account recovery did not create an active verified owner."
+
+psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -q \
+  -c 'TRUNCATE auth_action_tokens, auth_sessions, auth_account_houses, auth_accounts RESTART IDENTITY CASCADE;'
 
 bootstrap_attempt() {
   local suffix="$1"

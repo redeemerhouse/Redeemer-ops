@@ -193,15 +193,25 @@ function correlationId(response: Response, data: unknown): string | undefined {
 }
 
 function buildErrorMessage(response: Response, data: unknown): string {
-  const statusMessage = safeErrorMessages[response.status] ?? "The request could not be completed.";
+  const supplied = response.status >= 400 && response.status < 500
+    ? getStringField(data, "error")
+    : undefined;
+  const statusMessage = supplied && supplied.length <= 500 && !/[\r\n]/.test(supplied)
+    ? supplied
+    : safeErrorMessages[response.status] ?? "The request could not be completed.";
   const id = correlationId(response, data);
   return id ? `${statusMessage} Reference: ${id}` : statusMessage;
 }
 
 function safeErrorData(response: Response, data: unknown): { error: string; correlationId?: string } {
   const id = correlationId(response, data);
+  const supplied = response.status >= 400 && response.status < 500
+    ? getStringField(data, "error")
+    : undefined;
   return {
-    error: safeErrorMessages[response.status] ?? "The request could not be completed.",
+    error: supplied && supplied.length <= 500 && !/[\r\n]/.test(supplied)
+      ? supplied
+      : safeErrorMessages[response.status] ?? "The request could not be completed.",
     ...(id ? { correlationId: id } : {}),
   };
 }

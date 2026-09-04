@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+export PGSSLROOTCERT="${PGSSLROOTCERT:-system}"
 
 if [[ -z "${DATABASE_URL:-}" || -z "${SESSION_SECRET:-}" ]]; then
   echo "DATABASE_URL and SESSION_SECRET are required" >&2
@@ -16,6 +17,7 @@ ADMIN_EMAIL="initial-owner@redeemer.invalid"
 TARGET_EMAIL="lifecycle-user@redeemer.invalid"
 PASSWORD="ValidPassword123"
 NEW_PASSWORD="UpdatedPassword456"
+SETUP_CODE="auth-lifecycle-initial-setup-code"
 SERVER_PID=""
 TEMP_DIR="$(mktemp -d)"
 
@@ -72,6 +74,7 @@ TEMP_DATABASE_URL="$(
 DATABASE_URL="$TEMP_DATABASE_URL" pnpm --filter @workspace/db run migrate >"$TEMP_DIR/migrate.log"
 DATABASE_URL="$TEMP_DATABASE_URL" PORT="$PORT_NUMBER" NODE_ENV=production \
   CORS_ORIGINS="$ORIGIN" API_RATE_LIMIT_STORE=postgres API_MUTATION_RATE_LIMIT=200 TRUST_PROXY=false DB_SSL=true \
+  INITIAL_ADMIN_SETUP_TOKEN="$SETUP_CODE" \
   node "$ROOT_DIR/artifacts/api-server/dist/index.mjs" >"$TEMP_DIR/server.log" 2>&1 &
 SERVER_PID=$!
 
@@ -85,18 +88,16 @@ curl -fsS "$BASE_URL/healthz" >/dev/null
 
 status="$(
   curl -sS -o "$TEMP_DIR/bootstrap.json" -w '%{http_code}' \
-    -H "x-initial-admin-token: $SESSION_SECRET" \
     -H 'content-type: application/json' \
-    -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$PASSWORD\"}" \
+    -d "{\"firstName\":\"Initial\",\"lastName\":\"Owner\",\"email\":\"$ADMIN_EMAIL\",\"password\":\"$PASSWORD\",\"passwordConfirmation\":\"$PASSWORD\",\"setupCode\":\"$SETUP_CODE\"}" \
     "$BASE_URL/auth/bootstrap"
 )"
 [[ "$status" == "201" ]]
 
 status="$(
   curl -sS -o "$TEMP_DIR/bootstrap-repeat.json" -w '%{http_code}' \
-    -H "x-initial-admin-token: $SESSION_SECRET" \
     -H 'content-type: application/json' \
-    -d "{\"email\":\"other-owner@redeemer.invalid\",\"password\":\"$PASSWORD\"}" \
+    -d "{\"firstName\":\"Other\",\"lastName\":\"Owner\",\"email\":\"other-owner@redeemer.invalid\",\"password\":\"$PASSWORD\",\"passwordConfirmation\":\"$PASSWORD\",\"setupCode\":\"$SETUP_CODE\"}" \
     "$BASE_URL/auth/bootstrap"
 )"
 [[ "$status" == "409" ]]

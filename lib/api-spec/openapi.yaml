@@ -108,7 +108,7 @@ paths:
       operationId: provisionInitialAdmin
       tags: [auth]
       summary: Provision the first owner administrator
-      description: Uses a dedicated managed setup secret and an atomic empty-account check. Permanently closes after the first account is created.
+      description: Uses a dedicated managed setup secret and an atomic account-state check. It can create the first owner or recover exactly one unverified, unassigned pending account when the same email and password are supplied, then closes permanently.
       security: []
       requestBody:
         required: true
