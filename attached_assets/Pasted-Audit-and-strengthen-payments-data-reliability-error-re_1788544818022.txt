@@ -1,0 +1,47 @@
+Audit and strengthen payments, data reliability, error recovery, and deployment safety for the standalone Redeemer House recovery housing application.
+
+Review the existing application before modifying it. Do not replace working systems unnecessarily, delete production data, or expose financial credentials.
+
+For the payment workflow, support:
+
+* Monthly resident charges
+* Prorated move-in and move-out charges
+* Payments made by the resident
+* Payments made by a sponsor or third party
+* Cash, check, card, ACH, and other approved payment methods
+* Scholarships or rental assistance
+* Credits and adjustments
+* Partial payments
+* Failed or reversed payments
+* Refunds
+* Waived fees
+* Past-due balances
+* Payment plans
+* Receipts
+* QuickBooks synchronization and reconciliation
+
+Use an immutable financial ledger or equivalent accounting-safe structure. Do not overwrite the history of a completed payment. Corrections should create linked reversal, refund, credit, or adjustment records.
+
+Make all payment and QuickBooks operations idempotent so retries cannot create duplicate charges, payments, customers, invoices, or receipts. Store integration IDs and synchronization status. Add a review queue for failed or mismatched transactions.
+
+Then evaluate the entire application for reliability:
+
+1. Detect duplicate residents, payments, documents, and assessments.
+2. Add database constraints for critical relationships.
+3. Validate required information on both the frontend and backend.
+4. Prevent concurrent edits from silently overwriting newer information.
+5. Add user-friendly error handling without exposing sensitive technical details.
+6. Add structured server-side logging with correlation IDs.
+7. Create health checks for the application, database, file storage, and integrations.
+8. Add automated backups and document a tested restoration procedure.
+9. Add a safe migration process with rollback instructions.
+10. Separate development, testing, and production configurations.
+11. Ensure test data cannot be confused with production data.
+12. Add automated tests for critical resident, payment, document, and authentication workflows.
+13. Add a predeployment checklist and smoke test that must pass before publishing.
+14. Confirm that scheduled jobs and webhooks handle retries safely.
+15. Create an administrator view for failed jobs, integration errors, and unresolved data conflicts.
+
+Create a sandbox or test mode for all payment integration testing. Never initiate real charges during development or automated testing.
+
+Begin with a written assessment of the current system and a prioritized implementation plan. Implement fixes in small stages and run regression tests after each stage. At completion, provide test results, unresolved risks, backup restoration instructions, deployment instructions, and a manual verification checklist.

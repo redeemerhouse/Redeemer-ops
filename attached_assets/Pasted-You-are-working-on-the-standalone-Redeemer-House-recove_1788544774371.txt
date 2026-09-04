@@ -1,0 +1,52 @@
+You are working on the standalone Redeemer House recovery housing application. This application is completely separate from Corazon Connect.
+
+Conduct a full audit and improvement of the resident lifecycle and staff workflow. Review the existing application and database before making changes. Preserve working functionality and follow the current architecture and design patterns.
+
+Evaluate and improve the following workflows:
+
+1. Inquiry or referral received
+2. Application started
+3. Application completed
+4. Eligibility and document review
+5. Waitlist placement and prioritization
+6. Interview and approval or denial
+7. Bed assignment and move-in
+8. Resident orientation and agreement completion
+9. Active residency and service participation
+10. Temporary absence, hospitalization, incarceration, or treatment placement
+11. Internal transfer between houses or beds
+12. Planned graduation
+13. Administrative or emergency discharge
+14. Alumni follow-up
+15. Reapplication or return to the program
+
+Create clearly defined statuses and permitted status transitions. Prevent residents from accidentally appearing in two active beds or houses at the same time. Require a reason, staff member, date, and supporting notes for denials, transfers, discharges, and status changes.
+
+Ensure the resident profile includes coordinated access to:
+
+* Uploaded documents
+* Mobile check-ins
+* Payments
+* Drug screening/UA log
+* Medications
+* Recovery notes
+* Recovery capital assessments
+* Case notes
+* Assigned staff
+* House and bed assignment
+* Program milestones
+* Alerts and outstanding action items
+
+Add a staff task system that supports assignments, due dates, priorities, status, resident association, reminders, and supervisor review. Include a dashboard showing overdue tasks, missing documents, upcoming assessments, unpaid balances, medication follow-ups, and residents requiring attention.
+
+Add safeguards for incomplete and duplicate applications. Preserve partially completed work through autosave or drafts. Create useful empty states and clear validation messages.
+
+Before implementing changes, produce:
+
+* A map of the current workflow
+* Identified gaps and risks
+* Recommended statuses and transitions
+* Database changes required
+* Pages and components affected
+
+Then implement the improvements in small, testable stages. Do not delete or rename existing database fields without verifying all dependencies and providing a safe migration. Add tests for every major status transition and provide a final report describing completed work, remaining risks, and manual testing instructions.

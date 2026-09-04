@@ -1,0 +1,47 @@
+Perform a comprehensive security, privacy, permissions, and audit review of the standalone Redeemer House recovery housing application.
+
+The application contains sensitive resident information, including recovery information, medications, drug screening results, case notes, documents, housing history, family information, and payments. Treat all resident data as confidential.
+
+Review the complete application stack, including authentication, API routes, database queries, file storage, frontend visibility, administrative tools, logs, exports, and integrations.
+
+Build and enforce role-based access control for roles such as:
+
+* Super Administrator
+* Program Administrator
+* House Manager
+* Case Manager
+* Recovery Peer or Coach
+* Finance Staff
+* Volunteer or Intern
+* Read-Only Auditor
+
+Do not rely only on hiding buttons in the interface. Enforce permissions on the server and database access layer. Define which roles may view, create, edit, export, archive, or delete each category of information.
+
+Complete the following:
+
+1. Create a permission matrix for every role and major feature.
+2. Identify API routes or database operations without adequate authorization.
+3. Prevent users from modifying their own role or increasing their permissions.
+4. Require administrator approval before a newly registered user receives application access.
+5. Add secure password, session expiration, logout, account lockout, and optional MFA controls.
+6. Add an audit log for logins, failed login attempts, record access, record creation, edits, exports, role changes, document access, financial adjustments, and archived records.
+7. Record the user, timestamp, action, affected record, and changed fields without exposing passwords, tokens, or unnecessary sensitive content.
+8. Protect uploaded documents with authenticated access and nonpublic file URLs.
+9. Review secrets and API credentials to ensure none are exposed in source code, browser bundles, logs, or error messages.
+10. Add staff-deactivation procedures that immediately terminate access and active sessions.
+11. Replace permanent deletion of resident information with restricted archival or soft deletion wherever appropriate.
+12. Add confirmation safeguards for sensitive actions.
+13. Review exports and reports to prevent unauthorized bulk access to resident data.
+
+Do not display confidential resident information in notification emails, browser logs, analytics tools, or generic error reports.
+
+Start by documenting findings and ranking them as critical, high, medium, or low risk. Fix critical and high-risk findings first. Preserve existing user accounts and records through safe migrations. Add automated authorization tests proving that each role can access only permitted information.
+
+At completion, provide:
+
+* The final permission matrix
+* Security issues discovered
+* Changes implemented
+* Database migrations performed
+* Tests completed and their results
+* Remaining recommendations requiring administrative decisions
