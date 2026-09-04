@@ -801,7 +801,7 @@ test(
       assert.notEqual(resolvedCompatibleRevision, candidateRevision);
 
       const compatibleInstallResult = await runPnpm(
-        ["install", "--offline", "--frozen-lockfile", "--ignore-scripts"],
+        ["install", "--frozen-lockfile", "--ignore-scripts"],
         process.env,
         compatibleWorktree,
       );
