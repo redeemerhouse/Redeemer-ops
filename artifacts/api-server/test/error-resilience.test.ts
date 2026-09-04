@@ -10,6 +10,8 @@ import {
   customFetch,
 } from "../../../lib/api-client-react/src/custom-fetch.ts";
 import { classifyDependencyFailure } from "../src/lib/dependencyDiagnostics.ts";
+import { createAccountEmailSender } from "../src/lib/auth-email.ts";
+import type { EnvironmentContract } from "../src/lib/environment.ts";
 import { ObjectStorageService } from "../src/lib/objectStorage.ts";
 import { unavailable } from "../src/lib/serviceFailures.ts";
 import { errorHandler } from "../src/middlewares/errors.ts";
@@ -118,16 +120,26 @@ test("client errors stay bounded and replace raw response or network details", a
 });
 
 test("object-storage provider failures stay inside the affected workflow", async () => {
-  const originalFetch = globalThis.fetch;
   const originalDir = process.env.PRIVATE_OBJECT_DIR;
   process.env.PRIVATE_OBJECT_DIR = "/test-bucket/private";
+  const production = {
+    appEnvironment: "production",
+    databaseTarget: "production",
+    paymentProviderMode: "live",
+    storageMode: "production",
+    emailMode: "live",
+    databaseName: "client_production",
+  } satisfies EnvironmentContract;
   try {
-    globalThis.fetch = async () => new Response(JSON.stringify({ unexpected: true }), {
-      status: 200,
-      headers: { "content-type": "application/json" },
-    });
+    const invalidProvider = {
+      requestSignedUpload: async () => new Response(JSON.stringify({ unexpected: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+      file: () => { throw new Error("not used"); },
+    };
     await assert.rejects(
-      new ObjectStorageService().uploadUrl(),
+      new ObjectStorageService(production, invalidProvider).uploadUrl(),
       (error: unknown) => {
         assert(error instanceof Error);
         assert.equal(error.name, "ServiceFailure");
@@ -136,13 +148,59 @@ test("object-storage provider failures stay inside the affected workflow", async
       },
     );
 
-    globalThis.fetch = async () => new Response("provider details", { status: 503 });
+    const unavailableProvider = {
+      ...invalidProvider,
+      requestSignedUpload: async () => new Response("provider details", { status: 503 }),
+    };
     await assert.rejects(
-      new ObjectStorageService().uploadUrl(),
+      new ObjectStorageService(production, unavailableProvider).uploadUrl(),
       (error: unknown) => error instanceof Error && error.name === "ServiceFailure",
     );
   } finally {
-    globalThis.fetch = originalFetch;
+    if (originalDir === undefined) delete process.env.PRIVATE_OBJECT_DIR;
+    else process.env.PRIVATE_OBJECT_DIR = originalDir;
+  }
+});
+
+test("non-production storage and email never call real providers", async () => {
+  const originalDir = process.env.PRIVATE_OBJECT_DIR;
+  process.env.PRIVATE_OBJECT_DIR = "/synthetic-bucket/private";
+  const nonProduction = {
+    appEnvironment: "recovery",
+    databaseTarget: "disposable-recovery",
+    paymentProviderMode: "disabled",
+    storageMode: "synthetic",
+    emailMode: "disabled",
+    databaseName: "recovery_test",
+  } satisfies EnvironmentContract;
+  let storageCalls = 0;
+  let emailCalls = 0;
+
+  try {
+    const storage = new ObjectStorageService(nonProduction, {
+      requestSignedUpload: async () => {
+        storageCalls += 1;
+        throw new Error("real storage provider must not be called");
+      },
+      file: () => {
+        storageCalls += 1;
+        throw new Error("real storage provider must not be called");
+      },
+    });
+    const upload = await storage.uploadUrl();
+    assert.match(upload.uploadURL, /^data:/);
+    assert.match(upload.objectPath, /^\/objects\/uploads\//);
+    await assert.rejects(storage.file(upload.objectPath), /Object not found/);
+
+    const sendEmail = createAccountEmailSender(nonProduction, async () => {
+      emailCalls += 1;
+      throw new Error("real email provider must not be called");
+    });
+    await sendEmail("resident@example.test", "Synthetic message", "No delivery");
+
+    assert.equal(storageCalls, 0);
+    assert.equal(emailCalls, 0);
+  } finally {
     if (originalDir === undefined) delete process.env.PRIVATE_OBJECT_DIR;
     else process.env.PRIVATE_OBJECT_DIR = originalDir;
   }

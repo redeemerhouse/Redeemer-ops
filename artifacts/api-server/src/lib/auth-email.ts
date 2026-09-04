@@ -1,9 +1,23 @@
 import { ReplitConnectors } from "@replit/connectors-sdk";
+import {
+  assertEnvironmentContract,
+  type EnvironmentContract,
+} from "./environment";
 import { unavailable } from "./serviceFailures";
 
-const connectors = new ReplitConnectors();
 const from = process.env.AUTH_EMAIL_FROM ?? "Redeemer House <onboarding@resend.dev>";
 const EMAIL_TIMEOUT_MS = 10_000;
+type EmailProvider = (to: string, subject: string, text: string) => Promise<Response>;
+
+const liveEmailProvider: EmailProvider = (to, subject, text) =>
+  new ReplitConnectors().proxy("resend", "/emails", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ from, to: [to], subject, text }),
+  });
+
+const canDeliverLiveEmail = (contract: EnvironmentContract): boolean =>
+  contract.appEnvironment === "production" && contract.emailMode === "live";
 
 async function withEmailTimeout<T>(operation: Promise<T>): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -19,15 +33,14 @@ async function withEmailTimeout<T>(operation: Promise<T>): Promise<T> {
   }
 }
 
-async function sendAccountEmail(to: string, subject: string, text: string): Promise<void> {
+export function createAccountEmailSender(
+  contract: EnvironmentContract = assertEnvironmentContract(),
+  provider: EmailProvider = liveEmailProvider,
+): (to: string, subject: string, text: string) => Promise<void> {
+  if (!canDeliverLiveEmail(contract)) return async () => {};
+  return async (to, subject, text) => {
   try {
-    const response = await withEmailTimeout(
-      connectors.proxy("resend", "/emails", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ from, to: [to], subject, text }),
-      }),
-    );
+    const response = await withEmailTimeout(provider(to, subject, text));
     if (!response.ok) {
       throw unavailable("email", "Transactional email is temporarily unavailable.");
     }
@@ -35,10 +48,11 @@ async function sendAccountEmail(to: string, subject: string, text: string): Prom
     if (error instanceof Error && error.name === "ServiceFailure") throw error;
     throw unavailable("email", "Transactional email is temporarily unavailable.");
   }
+  };
 }
 
 export function sendVerificationEmail(email: string, token: string): Promise<void> {
-  return sendAccountEmail(
+  return createAccountEmailSender()(
     email,
     "Verify your Redeemer House ONEsource email",
     [
@@ -54,7 +68,7 @@ export function sendVerificationEmail(email: string, token: string): Promise<voi
 }
 
 export function sendPasswordResetEmail(email: string, token: string): Promise<void> {
-  return sendAccountEmail(
+  return createAccountEmailSender()(
     email,
     "Reset your Redeemer House ONEsource password",
     [
