@@ -110,6 +110,16 @@ const runCommand = async (
     });
   });
 
+const runPnpm = async (
+  args: string[],
+  env: NodeJS.ProcessEnv = process.env,
+  cwd: string = root,
+): Promise<CommandResult> => {
+  const pnpmScript = process.env.npm_execpath;
+  assert.ok(pnpmScript, "pnpm did not expose its executable path");
+  return runCommand(process.execPath, [pnpmScript, ...args], env, cwd);
+};
+
 const runReleaseCheck = async (
   databaseUrl: string,
 ): Promise<{ status: number; output: string }> =>
@@ -790,8 +800,7 @@ test(
       );
       assert.notEqual(resolvedCompatibleRevision, candidateRevision);
 
-      const compatibleInstallResult = await runCommand(
-        "pnpm",
+      const compatibleInstallResult = await runPnpm(
         ["install", "--offline", "--frozen-lockfile", "--ignore-scripts"],
         process.env,
         compatibleWorktree,
@@ -800,8 +809,7 @@ test(
         compatibleInstallResult,
         "could not install the compatible application revision",
       );
-      const compatibleBuildResult = await runCommand(
-        "pnpm",
+      const compatibleBuildResult = await runPnpm(
         ["--filter", "@workspace/api-server", "run", "build"],
         process.env,
         compatibleWorktree,
@@ -811,7 +819,7 @@ test(
         "could not build the compatible application revision",
       );
 
-      const candidateBuildResult = await runCommand("pnpm", [
+      const candidateBuildResult = await runPnpm([
         "--filter",
         "@workspace/api-server",
         "run",
