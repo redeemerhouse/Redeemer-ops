@@ -15,8 +15,6 @@ jobs:
     name: Non-skippable recovery drill
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    env:
-      RECOVERY_DRILL_COMPATIBLE_REVISION: HEAD^
     services:
       recovery-postgres:
         image: postgres:16

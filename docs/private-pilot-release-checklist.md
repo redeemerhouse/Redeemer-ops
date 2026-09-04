@@ -253,11 +253,12 @@ so an absent target fails during test startup instead of registering a skipped r
 Release evidence is valid only when this required job passes; a local `test:db-release-check` run
 without a configured drill target remains a convenience run and is not release evidence.
 
-The hosted workflow builds the compatible rollback artifact from `HEAD^`, the immediately
-preceding checked-in release candidate. Operators running the drill elsewhere may select a
-different reviewed replacement with `RECOVERY_DRILL_COMPATIBLE_REVISION`; the chosen revision
-must remain available in the repository and be known to be an approved fallback. The drill records
-both the current release-candidate revision and the separately built compatible revision.
+The compatible rollback artifact is built in a detached temporary worktree from the pinned
+revision `5d20712b9737ede530e00067a41181ee744bfe8e`. This is the reviewed non-seeding private-pilot
+release immediately before the current candidate. A reviewed replacement can be selected with
+`RECOVERY_DRILL_COMPATIBLE_REVISION`; the chosen revision must be a full commit ID that remains
+available in the repository and is known to be an approved fallback. The drill records both the
+current release-candidate revision and the separately built compatible revision.
 
 The drill:
 

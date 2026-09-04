@@ -22,3 +22,4 @@
 - [Bootstrap availability invariant](bootstrap-availability-invariant.md) — first-owner setup status and provisioning must use the same secret-usability rule.
 - [Resident lifecycle boundaries](resident-lifecycle-boundaries.md) — application stages, resident state, placement, absence, alumni, and reapplication remain distinct audited records.
 - [Environment data contracts](environment-contracts.md) — every runtime declares its data target and provider modes; disposable work requires explicit confirmation.
+- [GitHub workflow publishing](github-workflow-publishing.md) — the standard GitHub connector cannot publish Actions workflow files without a separately granted workflow scope.
