@@ -9,6 +9,12 @@ import test from "node:test";
 
 const root = resolve(import.meta.dirname, "../..");
 const configuredDatabaseUrl = process.env.RECOVERY_DRILL_DATABASE_URL;
+const recoveryDrillRequired = process.env.RECOVERY_DRILL_REQUIRED === "true";
+if (recoveryDrillRequired && !configuredDatabaseUrl) {
+  throw new Error(
+    "Required recovery drill evidence cannot run without RECOVERY_DRILL_DATABASE_URL.",
+  );
+}
 if (configuredDatabaseUrl) {
   if (
     process.env.RECOVERY_DRILL_DATABASE_CONFIRMATION !==
@@ -654,7 +660,7 @@ test(
       assert.equal(backupResult.status, 0, backupResult.output);
       assert.ok((await stat(backupPath)).size > 0);
       console.log(
-        `Recovery drill evidence: backup=created recovery_point=${recoveryPoint}`,
+        "Recovery drill evidence: backup=created recovery_points=1",
       );
 
       const migrationResult = await runReleaseCheck(sourceUrl);
@@ -824,7 +830,7 @@ test(
         restoredLedger,
       );
       console.log(
-        `Recovery drill evidence: shutdown=confirmed release_candidate=${candidateRevision.slice(0, 12)} stopped=true`,
+        "Recovery drill evidence: shutdown=confirmed release_candidates=1 stopped=1",
       );
 
       const countsBeforeRollback = await businessDataCounts(restoredUrl);
@@ -845,7 +851,7 @@ test(
         restoredLedger,
       );
       console.log(
-        `Recovery drill evidence: application=compatible-rollback revision=${resolvedCompatibleRevision.slice(0, 12)} shutdown=confirmed migration_reversal=not-attempted`,
+        "Recovery drill evidence: application=compatible-rollback shutdown=confirmed migration_reversals=0",
       );
     } finally {
       if (restoredCreated) {

@@ -21,6 +21,11 @@ This suite is risk-based: confidentiality and authorization failures come first,
   ```
 
 - Missing prerequisites are failures, not skipped green tests. The command prints per-layer results and ends with exactly `DEPLOYMENT CHECK PASS` or `DEPLOYMENT CHECK FAIL`.
+- Recovery evidence is enforced separately by `.github/workflows/recovery-drill-evidence.yml`. The
+  job provisions a dedicated PostgreSQL service, masks its assembled URL, and runs
+  `pnpm run test:db-release-evidence` with `RECOVERY_DRILL_REQUIRED=true`. Missing configuration
+  therefore fails before the recovery test can be registered as skipped. Its evidence lines are
+  limited to statuses and counts.
 
 ## API reliability and contract layer
 

@@ -230,12 +230,13 @@ or shutdown procedure:
 ```sh
 RECOVERY_DRILL_DATABASE_URL="$RECOVERY_DRILL_DATABASE_URL" \
 RECOVERY_DRILL_DATABASE_CONFIRMATION=use-non-client-disposable-server \
+RECOVERY_DRILL_REQUIRED=true \
 APP_ENVIRONMENT=recovery \
 DATABASE_TARGET=disposable-recovery \
 DISPOSABLE_DATABASE_CONFIRMATION=create-and-drop-disposable-database \
 PAYMENT_PROVIDER_MODE=disabled \
 RELEASE_PROMOTION=recovery \
-pnpm run test:db-release-check
+pnpm run test:db-release-evidence
 ```
 
 `RECOVERY_DRILL_DATABASE_URL` must point to a non-client PostgreSQL server where the test role may
@@ -245,6 +246,12 @@ available. The drill never restores over the configured server's database. It cr
 named disposable source and restore databases,
 uses synthetic `.invalid` fixture data only, and removes the databases and temporary custom-format
 backup afterward.
+
+The repository recovery-evidence CI job provisions its own PostgreSQL service and masks the
+assembled connection URL before exporting it to later steps. It sets `RECOVERY_DRILL_REQUIRED=true`,
+so an absent target fails during test startup instead of registering a skipped recovery test.
+Release evidence is valid only when this required job passes; a local `test:db-release-check` run
+without a configured drill target remains a convenience run and is not release evidence.
 
 The compatible rollback artifact is built in a detached temporary worktree from the pinned
 revision `5d20712b9737ede530e00067a41181ee744bfe8e`. This is the reviewed non-seeding private-pilot
@@ -269,13 +276,12 @@ The drill:
    and PostgreSQL rate-limit settings; confirms health; sends `SIGTERM`; proves all business-table
    counts are unchanged; and proves the migration ledger was not reversed.
 
-Passing output records only the declared environment/target labels, recovery point, migration
-counts, synthetic row count, restore and verification status, candidate and compatible revision
-IDs, shutdown result, and the fact that no reverse migration was attempted. It must not print
-database URLs, credentials, fixture values, resident data, payment payloads, provider
-credentials, or backup contents. Failure output is count-only for database contents and must not
-include SQL values or row payloads. Treat a skipped test as no evidence: provision a disposable
-PostgreSQL target and rerun it.
+Passing output records only the declared environment/target labels, migration counts, synthetic
+row count, restore and verification status, shutdown status, and a zero reverse-migration count.
+It must not print timestamps, revision identifiers, database URLs, credentials, fixture values,
+resident data, payment payloads, provider credentials, or backup contents. Failure output is
+count-only for database contents and must not include SQL values or row payloads. Treat a skipped
+test as no evidence: provision a disposable PostgreSQL target and rerun it.
 
 ## 8. Incident response
 

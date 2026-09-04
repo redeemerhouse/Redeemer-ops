@@ -1,0 +1,67 @@
+name: Recovery drill evidence
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  recovery-drill:
+    name: Non-skippable recovery drill
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      recovery-postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: recovery_drill
+          POSTGRES_DB: recovery_drill_admin
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432/tcp
+        options: >-
+          --health-cmd "pg_isready -U recovery_drill -d recovery_drill_admin"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Check out the full recovery history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install PostgreSQL client tools
+        run: sudo apt-get update && sudo apt-get install --yes postgresql-client
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Configure the isolated recovery target
+        env:
+          RECOVERY_POSTGRES_PORT: ${{ job.services.recovery-postgres.ports[5432] }}
+        run: |
+          recovery_url="postgresql://recovery_drill@127.0.0.1:${RECOVERY_POSTGRES_PORT}/recovery_drill_admin"
+          echo "::add-mask::$recovery_url"
+          {
+            echo "RECOVERY_DRILL_DATABASE_URL=$recovery_url"
+            echo "RECOVERY_DRILL_DATABASE_CONFIRMATION=use-non-client-disposable-server"
+            echo "RECOVERY_DRILL_REQUIRED=true"
+          } >> "$GITHUB_ENV"
+
+      - name: Produce required recovery evidence
+        run: pnpm run test:db-release-evidence
